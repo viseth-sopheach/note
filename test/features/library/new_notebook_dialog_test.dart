@@ -36,7 +36,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(result?.title, 'Untitled notebook');
-    expect(result?.template, PaperTemplate.lined);
+    expect(result?.template, PaperTemplate.blank);
     expect(result?.coverColorValue, CoverPalette.colors.first.toARGB32());
   });
 

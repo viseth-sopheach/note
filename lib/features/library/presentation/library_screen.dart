@@ -119,6 +119,7 @@ class LibraryScreen extends ConsumerWidget {
       if (!context.mounted) return;
       await context.push(AppRoutes.notebook(notebook.id));
     } catch (error, stack) {
+      if (!context.mounted) return;
       _logAndShowError(
         context,
         'Failed to create notebook',
@@ -138,6 +139,7 @@ class LibraryScreen extends ConsumerWidget {
           .read(libraryActionsProvider)
           .createFolder(name: name, parentId: folderId);
     } catch (error, stack) {
+      if (!context.mounted) return;
       _logAndShowError(
         context,
         'Failed to create folder',
@@ -246,6 +248,7 @@ class LibraryScreen extends ConsumerWidget {
     try {
       await action();
     } catch (error, stack) {
+      if (!context.mounted) return;
       _logAndShowError(context, userMessage, userMessage, error, stack);
     }
   }

@@ -37,7 +37,7 @@ class _NewNotebookDialogState extends State<NewNotebookDialog> {
   final _titleController = TextEditingController(text: _defaultTitle);
 
   Color _cover = CoverPalette.colors.first;
-  PaperTemplate _template = PaperTemplate.lined;
+  PaperTemplate _template = PaperTemplate.blank;
 
   @override
   void initState() {

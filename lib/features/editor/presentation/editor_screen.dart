@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../library/application/library_providers.dart';
-import 'paper/paper_painter.dart';
 import 'paper/paper_view.dart';
 
 /// Placeholder editor: shows the page only. Handwriting arrives in Phase 4.

@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.john" "\0"
-            VALUE "FileDescription", "note" "\0"
+            VALUE "CompanyName", "com.viset.visethnote" "\0"
+            VALUE "FileDescription", "VisethNote" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "note" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.john. All rights reserved." "\0"
-            VALUE "OriginalFilename", "note.exe" "\0"
-            VALUE "ProductName", "note" "\0"
+            VALUE "InternalName", "VisethNote" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.viset.visethnote. All rights reserved." "\0"
+            VALUE "OriginalFilename", "VisethNote.exe" "\0"
+            VALUE "ProductName", "VisethNote" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

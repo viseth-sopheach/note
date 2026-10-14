@@ -1,4 +1,4 @@
-package com.john.note
+package com.viset.visethnote
 
 import io.flutter.embedding.android.FlutterActivity
 
