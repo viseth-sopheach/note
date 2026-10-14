@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../library/application/library_providers.dart';
+import 'paper/paper_painter.dart';
+import 'paper/paper_view.dart';
 
-/// Placeholder until the handwriting engine arrives in Phase 4.
+/// Placeholder editor: shows the page only. Handwriting arrives in Phase 4.
 class EditorScreen extends ConsumerWidget {
   const EditorScreen({super.key, required this.notebookId});
 
@@ -16,14 +18,24 @@ class EditorScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: Text(notebook.value?.title ?? 'Notebook')),
       body: notebook.when(
-        data: (value) => Center(
-          child: Text(
-            value == null
-                ? 'Notebook not found'
-                : 'Paper: ${value.template.label}\nThe editor arrives in Phase 4.',
-            textAlign: TextAlign.center,
-          ),
-        ),
+        data: (value) {
+          if (value == null) {
+            return const Center(child: Text('Notebook not found'));
+          }
+          return ColoredBox(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            child: InteractiveViewer(
+              constrained: false,
+              minScale: 0.25,
+              maxScale: 4,
+              boundaryMargin: const EdgeInsets.all(48),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: PaperView(template: value.template),
+              ),
+            ),
+          );
+        },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) =>
             const Center(child: Text('Could not open this notebook.')),
