@@ -500,17 +500,13 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
     final colors = Theme.of(context).colorScheme;
 
-    final pages = Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerSignal: _onSignal,
-      child: Padding(
-        padding: const EdgeInsets.all(_pad),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: _gap,
-          children: [for (final s in _sessions) _buildPage(s)],
-        ),
+    final pages = Padding(
+      padding: const EdgeInsets.all(_pad),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: _gap,
+        children: [for (final s in _sessions) _buildPage(s)],
       ),
     );
 
@@ -549,23 +545,33 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                       }
                     });
                   }
-                  return ListenableBuilder(
-                    listenable: anyDrawing,
-                    child: pages,
-                    builder: (context, child) {
-                      final drawing =
-                          _sessions.any((s) => s.controller.isDrawing);
-                      return InteractiveViewer(
-                        transformationController: _transform,
-                        constrained: false,
-                        minScale: 0.25,
-                        maxScale: 4,
-                        boundaryMargin: const EdgeInsets.all(_margin),
-                        panEnabled: !drawing,
-                        scaleEnabled: !drawing,
-                        child: child!,
-                      );
-                    },
+                                    return Stack(
+                    children: [
+                      ListenableBuilder(
+                        listenable: anyDrawing,
+                        child: pages,
+                        builder: (context, child) {
+                          final drawing =
+                              _sessions.any((s) => s.controller.isDrawing);
+                          return InteractiveViewer(
+                            transformationController: _transform,
+                            constrained: false,
+                            minScale: 0.25,
+                            maxScale: 4,
+                            boundaryMargin: const EdgeInsets.all(_margin),
+                            panEnabled: !drawing,
+                            scaleEnabled: !drawing,
+                            child: child!,
+                          );
+                        },
+                      ),
+                      Positioned.fill(
+                        child: Listener(
+                          behavior: HitTestBehavior.translucent,
+                          onPointerSignal: _onSignal,
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),
