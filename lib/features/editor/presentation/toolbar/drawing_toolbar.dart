@@ -1,0 +1,203 @@
+import 'package:flutter/material.dart';
+
+import '../../application/drawing_controller.dart';
+import '../../domain/stroke_tool.dart';
+
+class _InkColor {
+  const _InkColor(this.name, this.value);
+
+  final String name;
+  final int value;
+}
+
+const List<_InkColor> _palette = [
+  _InkColor('Black', 0xFF1B1B1F),
+  _InkColor('Blue', 0xFF1E5AA8),
+  _InkColor('Red', 0xFFC62828),
+  _InkColor('Green', 0xFF2E7D32),
+  _InkColor('Orange', 0xFFEF6C00),
+  _InkColor('Yellow', 0xFFFFEB3B),
+];
+
+const List<double> _penWidths = [1, 2, 4, 6];
+const List<double> _highlighterWidths = [2, 3, 4];
+
+class DrawingToolbar extends StatelessWidget {
+  const DrawingToolbar({super.key, required this.controller});
+
+  final DrawingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Material(
+      color: colors.surface,
+      elevation: 1,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) {
+            final widths = controller.tool == StrokeTool.pen
+                ? _penWidths
+                : _highlighterWidths;
+            return Row(
+              children: [
+                IconButton(
+                  tooltip: 'Undo (Ctrl+Z)',
+                  icon: const Icon(Icons.undo),
+                  onPressed: controller.canUndo ? controller.undo : null,
+                ),
+                IconButton(
+                  tooltip: 'Redo (Ctrl+Y)',
+                  icon: const Icon(Icons.redo),
+                  onPressed: controller.canRedo ? controller.redo : null,
+                ),
+                const SizedBox(width: 8),
+                SegmentedButton<StrokeTool>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                      value: StrokeTool.pen,
+                      icon: Icon(Icons.edit_outlined),
+                      label: Text('Pen'),
+                    ),
+                    ButtonSegment(
+                      value: StrokeTool.highlighter,
+                      icon: Icon(Icons.highlight_outlined),
+                      label: Text('Highlighter'),
+                    ),
+                  ],
+                  selected: {controller.tool},
+                  onSelectionChanged: (s) => controller.selectTool(s.first),
+                ),
+                const SizedBox(width: 16),
+                for (final c in _palette)
+                  _ColorSwatch(
+                    color: c,
+                    selected: c.value == controller.colorValue,
+                    onTap: () => controller.selectColor(c.value),
+                  ),
+                const SizedBox(width: 16),
+                for (final w in widths)
+                  _WidthChip(
+                    width: w,
+                    selected: w == controller.width,
+                    color: Color(controller.colorValue),
+                    onTap: () => controller.selectWidth(w),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _ColorSwatch extends StatelessWidget {
+  const _ColorSwatch({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _InkColor color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fill = Color(color.value);
+    final onFill =
+        ThemeData.estimateBrightnessForColor(fill) == Brightness.dark
+            ? Colors.white
+            : Colors.black87;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Tooltip(
+        message: color.name,
+        child: Semantics(
+          button: true,
+          selected: selected,
+          label: '${color.name} ink',
+          child: InkResponse(
+            onTap: onTap,
+            radius: 20,
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: fill,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: selected ? Icon(Icons.check, size: 18, color: onFill) : null,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WidthChip extends StatelessWidget {
+  const _WidthChip({
+    required this.width,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+
+  final double width;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Tooltip(
+        message: 'Width ${width.toStringAsFixed(0)}',
+        child: Semantics(
+          button: true,
+          selected: selected,
+          label: 'Stroke width ${width.toStringAsFixed(0)}',
+          child: InkResponse(
+            onTap: onTap,
+            radius: 20,
+            child: Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: selected ? colors.secondaryContainer : null,
+                border: Border.all(
+                  color: selected ? colors.primary : colors.outlineVariant,
+                ),
+              ),
+              child: Container(
+                width: 6 + width * 2,
+                height: 6 + width * 2,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 1),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: colors.outlineVariant),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

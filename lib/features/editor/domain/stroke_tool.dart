@@ -1,0 +1,4 @@
+enum StrokeTool {
+  pen,
+  highlighter,
+}
