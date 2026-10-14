@@ -14,14 +14,17 @@ class AppDatabase extends _$AppDatabase {
       : super(executor ?? driftDatabase(name: 'quill_notes'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (migrator) => migrator.createAll(),
         onUpgrade: stepByStep(
           from1To2: (migrator, schema) async {
-              await migrator.createTable(schema.pages);
+            await migrator.createTable(schema.pages);
+          },
+          from2To3: (migrator, schema) async {
+            await migrator.addColumn(schema.pages, schema.pages.template);
           },
         ),
         beforeOpen: (details) async {

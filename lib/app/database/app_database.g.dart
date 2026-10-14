@@ -845,6 +845,15 @@ class $PageRowsTable extends PageRows with TableInfo<$PageRowsTable, PageRow> {
     requiredDuringInsert: true,
   );
   @override
+  late final GeneratedColumnWithTypeConverter<PaperTemplate?, String> template =
+      GeneratedColumn<String>(
+        'template',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      ).withConverter<PaperTemplate?>($PageRowsTable.$convertertemplaten);
+  @override
   late final GeneratedColumnWithTypeConverter<DateTime, int> updatedAt =
       GeneratedColumn<int>(
         'updated_at',
@@ -859,6 +868,7 @@ class $PageRowsTable extends PageRows with TableInfo<$PageRowsTable, PageRow> {
     notebookId,
     pageIndex,
     strokes,
+    template,
     updatedAt,
   ];
   @override
@@ -931,6 +941,12 @@ class $PageRowsTable extends PageRows with TableInfo<$PageRowsTable, PageRow> {
         DriftSqlType.blob,
         data['${effectivePrefix}strokes'],
       )!,
+      template: $PageRowsTable.$convertertemplaten.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}template'],
+        ),
+      ),
       updatedAt: $PageRowsTable.$converterupdatedAt.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -945,6 +961,10 @@ class $PageRowsTable extends PageRows with TableInfo<$PageRowsTable, PageRow> {
     return $PageRowsTable(attachedDatabase, alias);
   }
 
+  static JsonTypeConverter2<PaperTemplate, String, String> $convertertemplate =
+      const EnumNameConverter<PaperTemplate>(PaperTemplate.values);
+  static JsonTypeConverter2<PaperTemplate?, String?, String?>
+  $convertertemplaten = JsonTypeConverter2.asNullable($convertertemplate);
   static TypeConverter<DateTime, int> $converterupdatedAt =
       const EpochMicrosConverter();
 }
@@ -956,12 +976,16 @@ class PageRow extends DataClass implements Insertable<PageRow> {
 
   /// Binary stroke data, see StrokeCodec.
   final Uint8List strokes;
+
+  /// Paper template of this page. Null means "use the notebook's template".
+  final PaperTemplate? template;
   final DateTime updatedAt;
   const PageRow({
     required this.id,
     required this.notebookId,
     required this.pageIndex,
     required this.strokes,
+    this.template,
     required this.updatedAt,
   });
   @override
@@ -971,6 +995,11 @@ class PageRow extends DataClass implements Insertable<PageRow> {
     map['notebook_id'] = Variable<String>(notebookId);
     map['page_index'] = Variable<int>(pageIndex);
     map['strokes'] = Variable<Uint8List>(strokes);
+    if (!nullToAbsent || template != null) {
+      map['template'] = Variable<String>(
+        $PageRowsTable.$convertertemplaten.toSql(template),
+      );
+    }
     {
       map['updated_at'] = Variable<int>(
         $PageRowsTable.$converterupdatedAt.toSql(updatedAt),
@@ -985,6 +1014,9 @@ class PageRow extends DataClass implements Insertable<PageRow> {
       notebookId: Value(notebookId),
       pageIndex: Value(pageIndex),
       strokes: Value(strokes),
+      template: template == null && nullToAbsent
+          ? const Value.absent()
+          : Value(template),
       updatedAt: Value(updatedAt),
     );
   }
@@ -999,6 +1031,9 @@ class PageRow extends DataClass implements Insertable<PageRow> {
       notebookId: serializer.fromJson<String>(json['notebookId']),
       pageIndex: serializer.fromJson<int>(json['pageIndex']),
       strokes: serializer.fromJson<Uint8List>(json['strokes']),
+      template: $PageRowsTable.$convertertemplaten.fromJson(
+        serializer.fromJson<String?>(json['template']),
+      ),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -1010,6 +1045,9 @@ class PageRow extends DataClass implements Insertable<PageRow> {
       'notebookId': serializer.toJson<String>(notebookId),
       'pageIndex': serializer.toJson<int>(pageIndex),
       'strokes': serializer.toJson<Uint8List>(strokes),
+      'template': serializer.toJson<String?>(
+        $PageRowsTable.$convertertemplaten.toJson(template),
+      ),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -1019,12 +1057,14 @@ class PageRow extends DataClass implements Insertable<PageRow> {
     String? notebookId,
     int? pageIndex,
     Uint8List? strokes,
+    Value<PaperTemplate?> template = const Value.absent(),
     DateTime? updatedAt,
   }) => PageRow(
     id: id ?? this.id,
     notebookId: notebookId ?? this.notebookId,
     pageIndex: pageIndex ?? this.pageIndex,
     strokes: strokes ?? this.strokes,
+    template: template.present ? template.value : this.template,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   PageRow copyWithCompanion(PageRowsCompanion data) {
@@ -1035,6 +1075,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
           : this.notebookId,
       pageIndex: data.pageIndex.present ? data.pageIndex.value : this.pageIndex,
       strokes: data.strokes.present ? data.strokes.value : this.strokes,
+      template: data.template.present ? data.template.value : this.template,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -1046,6 +1087,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
           ..write('notebookId: $notebookId, ')
           ..write('pageIndex: $pageIndex, ')
           ..write('strokes: $strokes, ')
+          ..write('template: $template, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -1057,6 +1099,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
     notebookId,
     pageIndex,
     $driftBlobEquality.hash(strokes),
+    template,
     updatedAt,
   );
   @override
@@ -1067,6 +1110,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
           other.notebookId == this.notebookId &&
           other.pageIndex == this.pageIndex &&
           $driftBlobEquality.equals(other.strokes, this.strokes) &&
+          other.template == this.template &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -1075,6 +1119,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
   final Value<String> notebookId;
   final Value<int> pageIndex;
   final Value<Uint8List> strokes;
+  final Value<PaperTemplate?> template;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const PageRowsCompanion({
@@ -1082,6 +1127,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
     this.notebookId = const Value.absent(),
     this.pageIndex = const Value.absent(),
     this.strokes = const Value.absent(),
+    this.template = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1090,6 +1136,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
     required String notebookId,
     required int pageIndex,
     required Uint8List strokes,
+    this.template = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1102,6 +1149,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
     Expression<String>? notebookId,
     Expression<int>? pageIndex,
     Expression<Uint8List>? strokes,
+    Expression<String>? template,
     Expression<int>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -1110,6 +1158,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
       if (notebookId != null) 'notebook_id': notebookId,
       if (pageIndex != null) 'page_index': pageIndex,
       if (strokes != null) 'strokes': strokes,
+      if (template != null) 'template': template,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1120,6 +1169,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
     Value<String>? notebookId,
     Value<int>? pageIndex,
     Value<Uint8List>? strokes,
+    Value<PaperTemplate?>? template,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -1128,6 +1178,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
       notebookId: notebookId ?? this.notebookId,
       pageIndex: pageIndex ?? this.pageIndex,
       strokes: strokes ?? this.strokes,
+      template: template ?? this.template,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1148,6 +1199,11 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
     if (strokes.present) {
       map['strokes'] = Variable<Uint8List>(strokes.value);
     }
+    if (template.present) {
+      map['template'] = Variable<String>(
+        $PageRowsTable.$convertertemplaten.toSql(template.value),
+      );
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<int>(
         $PageRowsTable.$converterupdatedAt.toSql(updatedAt.value),
@@ -1166,6 +1222,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
           ..write('notebookId: $notebookId, ')
           ..write('pageIndex: $pageIndex, ')
           ..write('strokes: $strokes, ')
+          ..write('template: $template, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -2064,6 +2121,7 @@ typedef $$PageRowsTableCreateCompanionBuilder = PageRowsCompanion Function({
   required String notebookId,
   required int pageIndex,
   required Uint8List strokes,
+  Value<PaperTemplate?> template,
   required DateTime updatedAt,
   Value<int> rowid,
 });
@@ -2072,6 +2130,7 @@ typedef $$PageRowsTableUpdateCompanionBuilder = PageRowsCompanion Function({
   Value<String> notebookId,
   Value<int> pageIndex,
   Value<Uint8List> strokes,
+  Value<PaperTemplate?> template,
   Value<DateTime> updatedAt,
   Value<int> rowid,
 });
@@ -2120,6 +2179,12 @@ class $$PageRowsTableFilterComposer
   ColumnFilters<Uint8List> get strokes => $composableBuilder(
     column: $table.strokes,
     builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<PaperTemplate?, PaperTemplate, String>
+  get template => $composableBuilder(
+    column: $table.template,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
   ColumnWithTypeConverterFilters<DateTime, DateTime, int> get updatedAt =>
@@ -2176,6 +2241,11 @@ class $$PageRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get template => $composableBuilder(
+    column: $table.template,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -2222,6 +2292,9 @@ class $$PageRowsTableAnnotationComposer
 
   GeneratedColumn<Uint8List> get strokes =>
       $composableBuilder(column: $table.strokes, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<PaperTemplate?, String> get template =>
+      $composableBuilder(column: $table.template, builder: (column) => column);
 
   GeneratedColumnWithTypeConverter<DateTime, int> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
@@ -2282,6 +2355,7 @@ class $$PageRowsTableTableManager
                 Value<String> notebookId = const Value.absent(),
                 Value<int> pageIndex = const Value.absent(),
                 Value<Uint8List> strokes = const Value.absent(),
+                Value<PaperTemplate?> template = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PageRowsCompanion(
@@ -2289,6 +2363,7 @@ class $$PageRowsTableTableManager
                 notebookId: notebookId,
                 pageIndex: pageIndex,
                 strokes: strokes,
+                template: template,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -2298,6 +2373,7 @@ class $$PageRowsTableTableManager
                 required String notebookId,
                 required int pageIndex,
                 required Uint8List strokes,
+                Value<PaperTemplate?> template = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => PageRowsCompanion.insert(
@@ -2305,6 +2381,7 @@ class $$PageRowsTableTableManager
                 notebookId: notebookId,
                 pageIndex: pageIndex,
                 strokes: strokes,
+                template: template,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

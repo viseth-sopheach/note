@@ -1,26 +1,43 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../../library/domain/paper_template.dart';
 import '../domain/page_repository.dart';
 import '../domain/stroke.dart';
 import '../domain/stroke_codec.dart';
 
+class _StoredPage {
+  const _StoredPage(this.bytes, this.template);
+
+  final Uint8List bytes;
+  final PaperTemplate? template;
+}
+
 class InMemoryPageRepository implements PageRepository {
-  final Map<String, Uint8List> _pages = {};
+  final Map<String, Map<int, _StoredPage>> _notebooks = {};
 
   /// Number of completed saves. Useful in tests.
   int saveCount = 0;
 
-  String _key(String notebookId, int pageIndex) => '$notebookId#$pageIndex';
+  Map<int, _StoredPage> _pagesOf(String notebookId) =>
+      _notebooks.putIfAbsent(notebookId, () => {});
 
   @override
   Future<List<Stroke>> loadStrokes(
     String notebookId, {
     int pageIndex = 0,
   }) async {
-    final bytes = _pages[_key(notebookId, pageIndex)];
-    if (bytes == null || bytes.isEmpty) return const [];
-    return StrokeCodec.decode(bytes);
+    final page = _notebooks[notebookId]?[pageIndex];
+    if (page == null || page.bytes.isEmpty) return const [];
+    return StrokeCodec.decode(page.bytes);
   }
+
+  @override
+  Future<PaperTemplate?> loadTemplate(
+    String notebookId, {
+    int pageIndex = 0,
+  }) async =>
+      _notebooks[notebookId]?[pageIndex]?.template;
 
   @override
   Future<void> saveStrokes(
@@ -28,19 +45,49 @@ class InMemoryPageRepository implements PageRepository {
     List<Stroke> strokes, {
     int pageIndex = 0,
   }) async {
-    _pages[_key(notebookId, pageIndex)] = StrokeCodec.encode(strokes);
+    final pages = _pagesOf(notebookId);
+    pages[pageIndex] = _StoredPage(
+      StrokeCodec.encode(strokes),
+      pages[pageIndex]?.template,
+    );
     saveCount++;
   }
 
   @override
   Future<int> pageCount(String notebookId) async {
-    final prefix = '$notebookId#';
-    var max = -1;
-    for (final key in _pages.keys) {
-      if (!key.startsWith(prefix)) continue;
-      final index = int.parse(key.substring(prefix.length));
-      if (index > max) max = index;
+    final pages = _notebooks[notebookId];
+    if (pages == null || pages.isEmpty) return 0;
+    return pages.keys.reduce(math.max) + 1;
+  }
+
+  @override
+  Future<void> insertPage(
+    String notebookId, {
+    required int pageIndex,
+    required PaperTemplate template,
+    List<Stroke> strokes = const [],
+  }) async {
+    if (pageIndex < 0) {
+      throw ArgumentError.value(pageIndex, 'pageIndex', 'Must not be negative');
     }
-    return max + 1;
+    final blob = StrokeCodec.encode(strokes);
+    final pages = _pagesOf(notebookId);
+    final shifted = <int, _StoredPage>{
+      for (final e in pages.entries)
+        (e.key >= pageIndex ? e.key + 1 : e.key): e.value,
+    };
+    shifted[pageIndex] = _StoredPage(blob, template);
+    _notebooks[notebookId] = shifted;
+  }
+
+  @override
+  Future<void> deletePage(String notebookId, int pageIndex) async {
+    final pages = _notebooks[notebookId];
+    if (pages == null) return;
+    _notebooks[notebookId] = <int, _StoredPage>{
+      for (final e in pages.entries)
+        if (e.key != pageIndex)
+          (e.key > pageIndex ? e.key - 1 : e.key): e.value,
+    };
   }
 }
