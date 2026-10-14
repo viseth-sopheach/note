@@ -39,7 +39,7 @@ class LibraryScreen extends ConsumerWidget {
 
     final folders = ref.watch(foldersProvider(folderId));
     final notebooks = ref.watch(notebooksProvider(folderId));
-    final title = _isRoot ? 'Library' : (folderAsync?.value?.name ?? '');
+    final title = _isRoot ? 'Viseth\'s Library' : (folderAsync?.value?.name ?? '');
 
     return CallbackShortcuts(
       bindings: {

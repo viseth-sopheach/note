@@ -17,7 +17,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Library'), findsOneWidget);
+    expect(find.text('Viseth\'s Library'), findsOneWidget);
     expect(find.text('No notebooks yet'), findsOneWidget);
   });
 }
