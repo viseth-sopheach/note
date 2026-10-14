@@ -7,7 +7,7 @@ import '../domain/paper_template.dart';
 
 class InMemoryLibraryRepository implements LibraryRepository {
   InMemoryLibraryRepository({DateTime Function()? clock})
-      : _clock = clock ?? DateTime.now;
+    : _clock = clock ?? DateTime.now;
 
   static const Uuid _uuid = Uuid();
 
@@ -69,15 +69,15 @@ class InMemoryLibraryRepository implements LibraryRepository {
 
   @override
   Future<void> renameNotebook(String id, String title) async {
-    _notebooks[id] =
-        _requireNotebook(id).copyWith(title: title, updatedAt: _clock());
+    _notebooks[id] = _requireNotebook(id)
+        .copyWith(title: title, updatedAt: _clock());
   }
 
   @override
   Future<void> moveNotebook(String id, {String? toFolderId}) async {
     if (toFolderId != null) _requireFolder(toFolderId);
-    _notebooks[id] =
-        _requireNotebook(id).movedTo(toFolderId, updatedAt: _clock());
+    _notebooks[id] = _requireNotebook(id)
+        .movedTo(toFolderId, updatedAt: _clock());
   }
 
   @override
@@ -96,7 +96,9 @@ class InMemoryLibraryRepository implements LibraryRepository {
       grew = false;
       for (final folder in _folders.values) {
         final parent = folder.parentId;
-        if (parent != null && doomed.contains(parent) && doomed.add(folder.id)) {
+        if (parent != null &&
+            doomed.contains(parent) &&
+            doomed.add(folder.id)) {
           grew = true;
         }
       }
@@ -117,4 +119,9 @@ class InMemoryLibraryRepository implements LibraryRepository {
 
   @override
   Future<Notebook?> getNotebook(String id) async => _notebooks[id];
+
+  @override
+  Future<List<Folder>> getAllFolders() async =>
+      _folders.values.toList()
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 }

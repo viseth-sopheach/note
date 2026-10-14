@@ -32,17 +32,49 @@ class LibraryActions {
   }
 
   Future<Folder> createFolder({required String name, String? parentId}) async {
-    final folder =
-        await _repository.createFolder(name: name.trim(), parentId: parentId);
+    final folder = await _repository.createFolder(
+      name: name.trim(),
+      parentId: parentId,
+    );
     _refresh();
     return folder;
+  }
+
+  Future<void> renameFolder(String id, String name) async {
+    await _repository.renameFolder(id, name.trim());
+    _refresh();
+  }
+
+  Future<void> renameNotebook(String id, String title) async {
+    await _repository.renameNotebook(id, title.trim());
+    _refresh();
+  }
+
+  /// [toFolderId] `null` moves the notebook to the library root.
+  Future<void> moveNotebook(String id, {String? toFolderId}) async {
+    await _repository.moveNotebook(id, toFolderId: toFolderId);
+    _refresh();
+  }
+
+  Future<void> deleteNotebook(String id) async {
+    await _repository.deleteNotebook(id);
+    _refresh();
+  }
+
+  Future<void> deleteFolder(String id) async {
+    await _repository.deleteFolder(id);
+    _refresh();
   }
 
   void _refresh() {
     _ref.invalidate(foldersProvider);
     _ref.invalidate(notebooksProvider);
+    _ref.invalidate(folderProvider);
+    _ref.invalidate(notebookProvider);
+    _ref.invalidate(allFoldersProvider);
   }
 }
 
-final libraryActionsProvider =
-    Provider<LibraryActions>((ref) => LibraryActions(ref));
+final libraryActionsProvider = Provider<LibraryActions>(
+  (ref) => LibraryActions(ref),
+);

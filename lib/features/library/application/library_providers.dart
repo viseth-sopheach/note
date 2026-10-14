@@ -29,3 +29,8 @@ final folderProvider = FutureProvider.family<Folder?, String>(
 final notebookProvider = FutureProvider.family<Notebook?, String>(
   (ref, id) => ref.watch(libraryRepositoryProvider).getNotebook(id),
 );
+
+/// Every folder, used by the "Move to" picker.
+final allFoldersProvider = FutureProvider<List<Folder>>(
+  (ref) => ref.watch(libraryRepositoryProvider).getAllFolders(),
+);

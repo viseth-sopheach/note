@@ -33,4 +33,7 @@ abstract interface class LibraryRepository {
   Future<Folder?> getFolder(String id);
 
   Future<Notebook?> getNotebook(String id);
+
+  /// Every folder in the library, sorted by name.
+  Future<List<Folder>> getAllFolders();
 }

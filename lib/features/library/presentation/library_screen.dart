@@ -10,10 +10,14 @@ import '../application/library_actions.dart';
 import '../application/library_providers.dart';
 import '../domain/folder.dart';
 import '../domain/notebook.dart';
+import 'dialogs/confirm_delete_dialog.dart';
+import 'dialogs/move_notebook_dialog.dart';
 import 'dialogs/new_folder_dialog.dart';
 import 'dialogs/new_notebook_dialog.dart';
+import 'dialogs/rename_dialog.dart';
 import 'widgets/empty_library_view.dart';
 import 'widgets/folder_card.dart';
+import 'widgets/item_actions_menu.dart';
 import 'widgets/notebook_card.dart';
 
 class LibraryScreen extends ConsumerWidget {
@@ -26,11 +30,16 @@ class LibraryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final folderAsync = _isRoot ? null : ref.watch(folderProvider(folderId!));
+    if (folderAsync != null &&
+        folderAsync.hasValue &&
+        folderAsync.value == null) {
+      return const _FolderNotFoundView();
+    }
+
     final folders = ref.watch(foldersProvider(folderId));
     final notebooks = ref.watch(notebooksProvider(folderId));
-    final title = _isRoot
-        ? 'Library'
-        : (ref.watch(folderProvider(folderId!)).value?.name ?? '');
+    final title = _isRoot ? 'Library' : (folderAsync?.value?.name ?? '');
 
     return CallbackShortcuts(
       bindings: {
@@ -74,6 +83,10 @@ class LibraryScreen extends ConsumerWidget {
                 notebooks: notebookList,
                 onNewNotebook: () => _createNotebook(context, ref),
                 onNewFolder: () => _createFolder(context, ref),
+                onFolderAction: (folder, action) =>
+                    _onFolderAction(context, ref, folder, action),
+                onNotebookAction: (notebook, action) =>
+                    _onNotebookAction(context, ref, notebook, action),
               ),
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, stack) => _ErrorView(onRetry: () => _reload(ref)),
@@ -89,6 +102,7 @@ class LibraryScreen extends ConsumerWidget {
   void _reload(WidgetRef ref) {
     ref.invalidate(foldersProvider);
     ref.invalidate(notebooksProvider);
+    ref.invalidate(folderProvider);
   }
 
   Future<void> _createNotebook(BuildContext context, WidgetRef ref) async {
@@ -105,14 +119,13 @@ class LibraryScreen extends ConsumerWidget {
       if (!context.mounted) return;
       await context.push(AppRoutes.notebook(notebook.id));
     } catch (error, stack) {
-      developer.log(
+      _logAndShowError(
+        context,
         'Failed to create notebook',
-        name: 'library',
-        error: error,
-        stackTrace: stack,
+        'Could not create the notebook.',
+        error,
+        stack,
       );
-      if (!context.mounted) return;
-      _showError(context, 'Could not create the notebook.');
     }
   }
 
@@ -125,21 +138,135 @@ class LibraryScreen extends ConsumerWidget {
           .read(libraryActionsProvider)
           .createFolder(name: name, parentId: folderId);
     } catch (error, stack) {
-      developer.log(
+      _logAndShowError(
+        context,
         'Failed to create folder',
-        name: 'library',
-        error: error,
-        stackTrace: stack,
+        'Could not create the folder.',
+        error,
+        stack,
       );
-      if (!context.mounted) return;
-      _showError(context, 'Could not create the folder.');
     }
   }
 
-  void _showError(BuildContext context, String message) {
+  Future<void> _onFolderAction(
+    BuildContext context,
+    WidgetRef ref,
+    Folder folder,
+    ItemAction action,
+  ) async {
+    final actions = ref.read(libraryActionsProvider);
+
+    switch (action) {
+      case ItemAction.rename:
+        final name = await RenameDialog.show(
+          context,
+          title: 'Rename folder',
+          label: 'Folder name',
+          initialValue: folder.name,
+        );
+        if (name == null || name == folder.name || !context.mounted) return;
+        await _guard(
+          context,
+          'Could not rename the folder.',
+          () => actions.renameFolder(folder.id, name),
+        );
+      case ItemAction.delete:
+        final confirmed = await ConfirmDeleteDialog.show(
+          context,
+          title: 'Delete folder?',
+          message:
+              '"${folder.name}" and everything inside it will be deleted. This cannot be undone.',
+        );
+        if (!confirmed || !context.mounted) return;
+        await _guard(
+          context,
+          'Could not delete the folder.',
+          () => actions.deleteFolder(folder.id),
+        );
+      case ItemAction.move:
+        break; // Moving folders is not supported yet.
+    }
+  }
+
+  Future<void> _onNotebookAction(
+    BuildContext context,
+    WidgetRef ref,
+    Notebook notebook,
+    ItemAction action,
+  ) async {
+    final actions = ref.read(libraryActionsProvider);
+
+    switch (action) {
+      case ItemAction.rename:
+        final title = await RenameDialog.show(
+          context,
+          title: 'Rename notebook',
+          label: 'Title',
+          initialValue: notebook.title,
+        );
+        if (title == null || title == notebook.title || !context.mounted) {
+          return;
+        }
+        await _guard(
+          context,
+          'Could not rename the notebook.',
+          () => actions.renameNotebook(notebook.id, title),
+        );
+      case ItemAction.move:
+        final target = await MoveNotebookDialog.show(
+          context,
+          currentFolderId: notebook.folderId,
+        );
+        if (target == null || !context.mounted) return;
+        await _guard(
+          context,
+          'Could not move the notebook.',
+          () => actions.moveNotebook(notebook.id, toFolderId: target.folderId),
+        );
+      case ItemAction.delete:
+        final confirmed = await ConfirmDeleteDialog.show(
+          context,
+          title: 'Delete notebook?',
+          message: '"${notebook.title}" will be deleted. This cannot be undone.',
+        );
+        if (!confirmed || !context.mounted) return;
+        await _guard(
+          context,
+          'Could not delete the notebook.',
+          () => actions.deleteNotebook(notebook.id),
+        );
+    }
+  }
+
+  Future<void> _guard(
+    BuildContext context,
+    String userMessage,
+    Future<void> Function() action,
+  ) async {
+    try {
+      await action();
+    } catch (error, stack) {
+      _logAndShowError(context, userMessage, userMessage, error, stack);
+    }
+  }
+
+  void _logAndShowError(
+    BuildContext context,
+    String logMessage,
+    String userMessage,
+    Object error,
+    StackTrace stack,
+  ) {
+    developer.log(
+      logMessage,
+      name: 'library',
+      error: error,
+      stackTrace: stack,
+    );
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: Text(userMessage)));
   }
 }
 
@@ -150,6 +277,8 @@ class _LibraryContent extends StatelessWidget {
     required this.notebooks,
     required this.onNewNotebook,
     required this.onNewFolder,
+    required this.onFolderAction,
+    required this.onNotebookAction,
   });
 
   final bool isRoot;
@@ -157,6 +286,8 @@ class _LibraryContent extends StatelessWidget {
   final List<Notebook> notebooks;
   final VoidCallback onNewNotebook;
   final VoidCallback onNewFolder;
+  final void Function(Folder folder, ItemAction action) onFolderAction;
+  final void Function(Notebook notebook, ItemAction action) onNotebookAction;
 
   @override
   Widget build(BuildContext context) {
@@ -184,9 +315,12 @@ class _LibraryContent extends StatelessWidget {
               itemCount: folders.length,
               itemBuilder: (context, index) {
                 final folder = folders[index];
-                return FolderCard(
-                  folder: folder,
-                  onTap: () => context.push(AppRoutes.folder(folder.id)),
+                return ItemActionsMenu(
+                  onSelected: (action) => onFolderAction(folder, action),
+                  child: FolderCard(
+                    folder: folder,
+                    onTap: () => context.push(AppRoutes.folder(folder.id)),
+                  ),
                 );
               },
             ),
@@ -206,9 +340,13 @@ class _LibraryContent extends StatelessWidget {
               itemCount: notebooks.length,
               itemBuilder: (context, index) {
                 final notebook = notebooks[index];
-                return NotebookCard(
-                  notebook: notebook,
-                  onTap: () => context.push(AppRoutes.notebook(notebook.id)),
+                return ItemActionsMenu(
+                  canMove: true,
+                  onSelected: (action) => onNotebookAction(notebook, action),
+                  child: NotebookCard(
+                    notebook: notebook,
+                    onTap: () => context.push(AppRoutes.notebook(notebook.id)),
+                  ),
                 );
               },
             ),
@@ -250,6 +388,32 @@ class _ErrorView extends StatelessWidget {
           const SizedBox(height: 16),
           OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
         ],
+      ),
+    );
+  }
+}
+
+class _FolderNotFoundView extends StatelessWidget {
+  const _FolderNotFoundView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Folder')),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('This folder no longer exists.'),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () => context.canPop()
+                  ? context.pop()
+                  : context.go(AppRoutes.library),
+              child: const Text('Back to library'),
+            ),
+          ],
+        ),
       ),
     );
   }
