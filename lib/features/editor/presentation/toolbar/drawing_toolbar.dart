@@ -23,9 +23,16 @@ const List<double> _penWidths = [1, 2, 4, 6];
 const List<double> _highlighterWidths = [2, 3, 4];
 
 class DrawingToolbar extends StatelessWidget {
-  const DrawingToolbar({super.key, required this.controller});
+  const DrawingToolbar({
+    super.key,
+    required this.controller,
+    this.fingerDraws = false,
+    this.onFingerDrawsChanged,
+  });
 
   final DrawingController controller;
+  final bool fingerDraws;
+  final ValueChanged<bool>? onFingerDrawsChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -40,9 +47,11 @@ class DrawingToolbar extends StatelessWidget {
         child: ListenableBuilder(
           listenable: controller,
           builder: (context, _) {
-            final widths = controller.tool == StrokeTool.pen
-                ? _penWidths
-                : _highlighterWidths;
+            final tool = controller.tool;
+            final showInkOptions =
+                tool == StrokeTool.pen || tool == StrokeTool.highlighter;
+            final widths =
+                tool == StrokeTool.pen ? _penWidths : _highlighterWidths;
             return Row(
               children: [
                 IconButton(
@@ -54,6 +63,24 @@ class DrawingToolbar extends StatelessWidget {
                   tooltip: 'Redo (Ctrl+Y)',
                   icon: const Icon(Icons.redo),
                   onPressed: controller.canRedo ? controller.redo : null,
+                ),
+                IconButton(
+                  tooltip: 'Delete selection (Delete)',
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: controller.hasSelection
+                      ? controller.deleteSelection
+                      : null,
+                ),
+                IconButton(
+                  tooltip: fingerDraws
+                      ? 'Finger draws (tap to use finger for pan/zoom)'
+                      : 'Finger pans and zooms (tap to draw with finger)',
+                  isSelected: fingerDraws,
+                  icon: const Icon(Icons.touch_app_outlined),
+                  selectedIcon: const Icon(Icons.touch_app),
+                  onPressed: onFingerDrawsChanged == null
+                      ? null
+                      : () => onFingerDrawsChanged!(!fingerDraws),
                 ),
                 const SizedBox(width: 8),
                 SegmentedButton<StrokeTool>(
@@ -69,25 +96,37 @@ class DrawingToolbar extends StatelessWidget {
                       icon: Icon(Icons.highlight_outlined),
                       label: Text('Highlighter'),
                     ),
+                    ButtonSegment(
+                      value: StrokeTool.eraser,
+                      icon: Icon(Icons.cleaning_services_outlined),
+                      label: Text('Eraser'),
+                    ),
+                    ButtonSegment(
+                      value: StrokeTool.select,
+                      icon: Icon(Icons.gesture),
+                      label: Text('Select'),
+                    ),
                   ],
-                  selected: {controller.tool},
+                  selected: {tool},
                   onSelectionChanged: (s) => controller.selectTool(s.first),
                 ),
-                const SizedBox(width: 16),
-                for (final c in _palette)
-                  _ColorSwatch(
-                    color: c,
-                    selected: c.value == controller.colorValue,
-                    onTap: () => controller.selectColor(c.value),
-                  ),
-                const SizedBox(width: 16),
-                for (final w in widths)
-                  _WidthChip(
-                    width: w,
-                    selected: w == controller.width,
-                    color: Color(controller.colorValue),
-                    onTap: () => controller.selectWidth(w),
-                  ),
+                if (showInkOptions) ...[
+                  const SizedBox(width: 16),
+                  for (final c in _palette)
+                    _ColorSwatch(
+                      color: c,
+                      selected: c.value == controller.colorValue,
+                      onTap: () => controller.selectColor(c.value),
+                    ),
+                  const SizedBox(width: 16),
+                  for (final w in widths)
+                    _WidthChip(
+                      width: w,
+                      selected: w == controller.width,
+                      color: Color(controller.colorValue),
+                      onTap: () => controller.selectWidth(w),
+                    ),
+                ],
               ],
             );
           },

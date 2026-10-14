@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../application/drawing_controller.dart';
 import 'ink_renderer.dart';
 
-/// Finished strokes. Repaints only when a stroke is added or removed.
+/// Finished strokes. Repaints only when strokes or the selection change.
 class CommittedInkLayer extends StatelessWidget {
   const CommittedInkLayer({super.key, required this.controller});
 
@@ -49,7 +49,10 @@ class CommittedInkPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final moving = controller.isMovingSelection;
+    final selected = controller.selectedIds;
     for (final s in controller.strokes) {
+      if (moving && selected.contains(s.id)) continue;
       InkRenderer.paintStroke(
         canvas,
         points: s.points,

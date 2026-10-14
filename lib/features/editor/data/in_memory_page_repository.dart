@@ -31,4 +31,16 @@ class InMemoryPageRepository implements PageRepository {
     _pages[_key(notebookId, pageIndex)] = StrokeCodec.encode(strokes);
     saveCount++;
   }
+
+  @override
+  Future<int> pageCount(String notebookId) async {
+    final prefix = '$notebookId#';
+    var max = -1;
+    for (final key in _pages.keys) {
+      if (!key.startsWith(prefix)) continue;
+      final index = int.parse(key.substring(prefix.length));
+      if (index > max) max = index;
+    }
+    return max + 1;
+  }
 }

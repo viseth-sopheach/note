@@ -3,23 +3,40 @@ import 'package:flutter/widgets.dart';
 
 import '../../application/drawing_controller.dart';
 
-/// Captures mouse and stylus input on the page and sends it to [controller].
+/// Captures mouse, stylus and (optionally) finger input on the page and
+/// sends it to [controller].
 ///
 /// Place this INSIDE the zoomed and panned content. Pointer positions are
 /// then already in document coordinates, at any zoom level.
-/// Finger touch is ignored here so it can pan and zoom the page.
-class DrawingSurface extends StatelessWidget {
+/// When [allowTouch] is false, finger touch is ignored so it can pan and
+/// zoom the page. When it is true, one finger draws and a second finger
+/// cancels the stroke so pinch zoom still works.
+class DrawingSurface extends StatefulWidget {
   const DrawingSurface({
     super.key,
     required this.controller,
     required this.child,
+    this.allowTouch = false,
   });
 
   final DrawingController controller;
   final Widget child;
+  final bool allowTouch;
 
-  static bool _isDrawingDevice(PointerEvent e) =>
-      e.kind == PointerDeviceKind.mouse || e.kind == PointerDeviceKind.stylus;
+  @override
+  State<DrawingSurface> createState() => _DrawingSurfaceState();
+}
+
+class _DrawingSurfaceState extends State<DrawingSurface> {
+  final Set<int> _touches = {};
+  int? _drawingPointer;
+
+  DrawingController get _c => widget.controller;
+
+  bool _isDrawingDevice(PointerEvent e) =>
+      e.kind == PointerDeviceKind.mouse ||
+      e.kind == PointerDeviceKind.stylus ||
+      (widget.allowTouch && e.kind == PointerDeviceKind.touch);
 
   static double _pressure(PointerEvent e) {
     if (e.kind != PointerDeviceKind.stylus) return 1.0;
@@ -28,40 +45,68 @@ class DrawingSurface extends StatelessWidget {
     return ((e.pressure - e.pressureMin) / range).clamp(0.0, 1.0);
   }
 
+  void _down(PointerDownEvent e) {
+    if (e.kind == PointerDeviceKind.touch) {
+      _touches.add(e.pointer);
+      if (_touches.length > 1) {
+        final active = _drawingPointer;
+        if (active != null) {
+          _c.cancelStroke(active);
+          _drawingPointer = null;
+        }
+        return;
+      }
+    }
+    if (!_isDrawingDevice(e)) return;
+    if (e.kind == PointerDeviceKind.mouse &&
+        (e.buttons & kPrimaryButton) == 0) {
+      return;
+    }
+    final started = _c.beginStroke(
+      pointer: e.pointer,
+      x: e.localPosition.dx,
+      y: e.localPosition.dy,
+      pressure: _pressure(e),
+      timeMs: e.timeStamp.inMilliseconds,
+    );
+    if (started) _drawingPointer = e.pointer;
+  }
+
+  void _move(PointerMoveEvent e) => _c.extendStroke(
+        pointer: e.pointer,
+        x: e.localPosition.dx,
+        y: e.localPosition.dy,
+        pressure: _pressure(e),
+        timeMs: e.timeStamp.inMilliseconds,
+      );
+
+  void _up(PointerUpEvent e) {
+    _touches.remove(e.pointer);
+    if (e.pointer == _drawingPointer) _drawingPointer = null;
+    _c.endStroke(
+      pointer: e.pointer,
+      x: e.localPosition.dx,
+      y: e.localPosition.dy,
+      pressure: _pressure(e),
+      timeMs: e.timeStamp.inMilliseconds,
+    );
+  }
+
+  void _cancel(PointerCancelEvent e) {
+    _touches.remove(e.pointer);
+    if (e.pointer == _drawingPointer) _drawingPointer = null;
+    _c.cancelStroke(e.pointer);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Listener(
       behavior: HitTestBehavior.opaque,
-      onPointerDown: (e) {
-        if (!_isDrawingDevice(e)) return;
-        if (e.kind == PointerDeviceKind.mouse &&
-            (e.buttons & kPrimaryButton) == 0) {
-          return;
-        }
-        controller.beginStroke(
-          pointer: e.pointer,
-          x: e.localPosition.dx,
-          y: e.localPosition.dy,
-          pressure: _pressure(e),
-          timeMs: e.timeStamp.inMilliseconds,
-        );
-      },
-      onPointerMove: (e) => controller.extendStroke(
-        pointer: e.pointer,
-        x: e.localPosition.dx,
-        y: e.localPosition.dy,
-        pressure: _pressure(e),
-        timeMs: e.timeStamp.inMilliseconds,
-      ),
-      onPointerUp: (e) => controller.endStroke(
-        pointer: e.pointer,
-        x: e.localPosition.dx,
-        y: e.localPosition.dy,
-        pressure: _pressure(e),
-        timeMs: e.timeStamp.inMilliseconds,
-      ),
-      onPointerCancel: (e) => controller.cancelStroke(e.pointer),
-      child: child,
+      onPointerDown: _down,
+      onPointerMove: _move,
+      onPointerUp: _up,
+      onPointerCancel: _cancel,
+      child: widget.child,
     );
   }
 }

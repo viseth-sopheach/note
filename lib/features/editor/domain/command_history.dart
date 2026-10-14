@@ -17,6 +17,11 @@ final class CommandHistory {
 
   void execute(DrawingCommand command, List<Stroke> strokes) {
     command.apply(strokes);
+    record(command);
+  }
+
+  /// Adds a command whose effect was already applied.
+  void record(DrawingCommand command) {
     _undo.add(command);
     _redo.clear();
     if (_undo.length > limit) _undo.removeAt(0);

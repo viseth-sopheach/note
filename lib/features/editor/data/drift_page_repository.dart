@@ -63,4 +63,15 @@ class DriftPageRepository implements PageRepository {
           );
     });
   }
+
+  @override
+  Future<int> pageCount(String notebookId) async {
+    final maxIndex = _db.pageRows.pageIndex.max();
+    final row = await (_db.selectOnly(_db.pageRows)
+          ..addColumns([maxIndex])
+          ..where(_db.pageRows.notebookId.equals(notebookId)))
+        .getSingle();
+    final max = row.read(maxIndex);
+    return max == null ? 0 : max + 1;
+  }
 }

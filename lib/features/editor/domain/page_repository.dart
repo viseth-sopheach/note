@@ -12,4 +12,7 @@ abstract interface class PageRepository {
     List<Stroke> strokes, {
     int pageIndex = 0,
   });
+
+  /// Highest saved page index + 1, or 0 when nothing was saved yet.
+  Future<int> pageCount(String notebookId);
 }

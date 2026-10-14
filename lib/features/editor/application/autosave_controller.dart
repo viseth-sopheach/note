@@ -11,6 +11,7 @@ class AutosaveController {
     required this.controller,
     required this.repository,
     required this.notebookId,
+    this.pageIndex = 0,
     this.delay = const Duration(milliseconds: 800),
     this.retryDelay = const Duration(seconds: 5),
   }) : _savedRevision = controller.revision {
@@ -20,6 +21,7 @@ class AutosaveController {
   final DrawingController controller;
   final PageRepository repository;
   final String notebookId;
+  final int pageIndex;
   final Duration delay;
   final Duration retryDelay;
 
@@ -49,7 +51,11 @@ class AutosaveController {
 
   Future<void> _write(int revision, List<Stroke> snapshot) async {
     try {
-      await repository.saveStrokes(notebookId, snapshot);
+      await repository.saveStrokes(
+        notebookId,
+        snapshot,
+        pageIndex: pageIndex,
+      );
       if (revision > _savedRevision) _savedRevision = revision;
     } catch (error, stack) {
       developer.log(
