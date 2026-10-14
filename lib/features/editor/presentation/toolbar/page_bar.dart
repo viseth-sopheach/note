@@ -36,7 +36,7 @@ class PageBar extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
+          padding: EdgeInsets.zero,
           child: Center(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,

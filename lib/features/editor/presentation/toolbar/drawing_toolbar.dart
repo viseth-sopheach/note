@@ -43,7 +43,9 @@ class DrawingToolbar extends StatelessWidget {
       elevation: 1,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Theme(
+  data: Theme.of(context).copyWith(visualDensity: VisualDensity.compact),
         child: ListenableBuilder(
           listenable: controller,
           builder: (context, _) {
@@ -129,7 +131,8 @@ class DrawingToolbar extends StatelessWidget {
                 ],
               ],
             );
-          },
+            },
+          ),
         ),
       ),
     );
@@ -167,8 +170,8 @@ class _ColorSwatch extends StatelessWidget {
             onTap: onTap,
             radius: 20,
             child: Container(
-              width: 32,
-              height: 32,
+              width: 26,
+              height: 26,
               decoration: BoxDecoration(
                 color: fill,
                 shape: BoxShape.circle,
@@ -176,7 +179,7 @@ class _ColorSwatch extends StatelessWidget {
                   color: Theme.of(context).colorScheme.outlineVariant,
                 ),
               ),
-              child: selected ? Icon(Icons.check, size: 18, color: onFill) : null,
+              child: selected ? Icon(Icons.check, size: 16, color: onFill) : null,
             ),
           ),
         ),
@@ -214,7 +217,7 @@ class _WidthChip extends StatelessWidget {
             onTap: onTap,
             radius: 20,
             child: Container(
-              width: 36,
+              width: 26,
               height: 36,
               alignment: Alignment.center,
               decoration: BoxDecoration(
@@ -225,8 +228,8 @@ class _WidthChip extends StatelessWidget {
                 ),
               ),
               child: Container(
-                width: 6 + width * 2,
-                height: 6 + width * 2,
+                width: 4 + width * 2,
+                height: 4 + width * 2,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 1),
                   shape: BoxShape.circle,
