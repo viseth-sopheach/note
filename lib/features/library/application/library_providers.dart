@@ -1,13 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/in_memory_library_repository.dart';
+import '../../../app/database/app_database_provider.dart';
+import '../data/drift_library_repository.dart';
 import '../domain/folder.dart';
 import '../domain/library_repository.dart';
 import '../domain/notebook.dart';
 
-/// Phase 3 replaces the implementation here with a database-backed one.
 final libraryRepositoryProvider = Provider<LibraryRepository>(
-  (ref) => InMemoryLibraryRepository(),
+  (ref) => DriftLibraryRepository(ref.watch(appDatabaseProvider)),
 );
 
 /// Folders inside the given parent (`null` = root).
