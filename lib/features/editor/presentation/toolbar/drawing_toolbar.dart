@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../application/drawing_controller.dart';
 import '../../domain/stroke_tool.dart';
 import '../../domain/toolbar_layout.dart';
-import '../measure/measure_controller.dart';
+import '../../application/measure_controller.dart';
 import 'ink_palette.dart';
 
 const List<double> _penWidths = [1, 2, 4, 6];

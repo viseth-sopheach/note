@@ -21,7 +21,6 @@ import '../application/editor_providers.dart';
 import '../application/measure_controller.dart';
 import '../application/tool_settings.dart';
 import '../domain/page_repository.dart';
-import '../domain/toolbar_layout.dart';
 import 'dialogs/paper_template_dialog.dart';
 import 'drawing/drawing_surface.dart';
 import 'drawing/ink_layers.dart';

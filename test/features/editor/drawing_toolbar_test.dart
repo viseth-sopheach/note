@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quill_notes/features/editor/application/drawing_controller.dart';
@@ -11,7 +13,7 @@ void main() {
   tearDown(() => c.dispose());
 
   Future<void> pumpToolbar(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1600, 900);
+    tester.view.physicalSize = const Size(3200, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 

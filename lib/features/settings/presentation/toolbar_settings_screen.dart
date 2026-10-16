@@ -51,8 +51,7 @@ class ToolbarSettingsScreen extends ConsumerWidget {
             padding: EdgeInsets.symmetric(horizontal: side, vertical: 8),
             buildDefaultDragHandles: false,
             itemCount: order.length,
-            onReorder: (oldIndex, newIndex) {
-              if (newIndex > oldIndex) newIndex -= 1;
+            onReorderItem: (oldIndex, newIndex) {
               notifier.update((s) {
                 final list = [...s.toolbarOrder];
                 list.insert(newIndex, list.removeAt(oldIndex));

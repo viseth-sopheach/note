@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quill_notes/app/database/app_database.dart';
@@ -9,6 +10,8 @@ import 'package:quill_notes/features/library/domain/paper_template.dart';
 import 'library_repository_contract.dart';
 
 void main() {
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+
   runLibraryRepositoryContract('DriftLibraryRepository', () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
@@ -40,7 +43,7 @@ void main() {
     });
 
     test('trims names before saving', () async {
-      final folder = await repo.createFolder(name: '  Work  ');
+      final folder = await repo.createFolder(name: '   Work  ');
       expect(folder.name, 'Work');
       expect((await repo.getFolder(folder.id))?.name, 'Work');
     });

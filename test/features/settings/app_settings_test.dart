@@ -72,7 +72,16 @@ void main() {
       'pen_width': 3.5,
       'undo_limit': 7,
       'toolbar_order': ['pen', 'pen', 'bogus'],
-      'toolbar_hidden': ['pen', 'highlighter', 'eraser', 'select'],
+      'toolbar_hidden': [
+        'pen',
+        'highlighter',
+        'eraser',
+        'select',
+        'line',
+        'rectangle',
+        'ellipse',
+        'triangle',
+      ],
     })).load();
 
     expect(s.themeMode, AppThemeMode.system);

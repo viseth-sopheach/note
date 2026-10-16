@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../library/presentation/cover_palette.dart';
+import '../../../library/presentation/cover_palette.dart';
 
 class SettingsSection extends StatelessWidget {
   const SettingsSection({
