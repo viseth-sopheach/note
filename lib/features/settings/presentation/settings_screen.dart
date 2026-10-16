@@ -1,4 +1,6 @@
 import '../../sharing/application/drive_service.dart';
+
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,10 +13,10 @@ class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   static IconData _iconFor(AppThemeMode mode) => switch (mode) {
-        AppThemeMode.system => Icons.brightness_auto_outlined,
-        AppThemeMode.light => Icons.light_mode_outlined,
-        AppThemeMode.dark => Icons.dark_mode_outlined,
-      };
+    AppThemeMode.system => Icons.brightness_auto_outlined,
+    AppThemeMode.light => Icons.light_mode_outlined,
+    AppThemeMode.dark => Icons.dark_mode_outlined,
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -54,7 +56,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 24),
-                    const SizedBox(height: 24),
+          const SizedBox(height: 24),
           Text('Integrations', style: textTheme.titleMedium),
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -70,14 +72,14 @@ class SettingsScreen extends ConsumerWidget {
               onTap: () => ref.read(driveServiceProvider).signOut(),
             ),
           const Divider(),
-          Text('About', style: textTheme.titleMedium),
+          Text('Contact', style: textTheme.titleMedium),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.description_outlined),
-            title: const Text('Open-source licenses'),
-            onTap: () => showLicensePage(
-              context: context,
-              applicationName: 'VisethNote',
+            leading: const Icon(Icons.facebook),
+            title: const Text('Contact me via Facebook'),
+            onTap: () => launchUrl(
+              Uri.parse('https://www.facebook.com/visethsopheach'),
+              mode: LaunchMode.externalApplication,
             ),
           ),
         ],
