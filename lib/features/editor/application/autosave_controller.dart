@@ -51,11 +51,7 @@ class AutosaveController {
 
   Future<void> _write(int revision, List<Stroke> snapshot) async {
     try {
-      await repository.saveStrokes(
-        notebookId,
-        snapshot,
-        pageIndex: pageIndex,
-      );
+      await repository.saveStrokes(notebookId, snapshot, pageIndex: pageIndex);
       if (revision > _savedRevision) _savedRevision = revision;
     } catch (error, stack) {
       developer.log(

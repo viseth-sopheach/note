@@ -22,8 +22,9 @@ void main() {
     );
   }
 
-  testWidgets('selecting highlighter changes the tool and default width',
-      (tester) async {
+  testWidgets('selecting highlighter changes the tool and default width', (
+    tester,
+  ) async {
     await pumpToolbar(tester);
 
     await tester.tap(find.text('Highlighter'));

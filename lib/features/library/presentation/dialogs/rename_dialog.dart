@@ -20,15 +20,11 @@ class RenameDialog extends StatefulWidget {
     required String title,
     required String label,
     required String initialValue,
-  }) =>
-      showDialog<String>(
-        context: context,
-        builder: (_) => RenameDialog(
-          title: title,
-          label: label,
-          initialValue: initialValue,
-        ),
-      );
+  }) => showDialog<String>(
+    context: context,
+    builder: (_) =>
+        RenameDialog(title: title, label: label, initialValue: initialValue),
+  );
 
   @override
   State<RenameDialog> createState() => _RenameDialogState();

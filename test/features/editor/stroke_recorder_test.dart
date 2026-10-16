@@ -5,12 +5,12 @@ import 'package:quill_notes/features/editor/domain/stroke_tool.dart';
 
 void main() {
   void begin(StrokeRecorder r) => r.begin(
-        id: 's1',
-        tool: StrokeTool.pen,
-        colorValue: 0xFF000000,
-        width: 2,
-        first: const StrokePoint(x: 0, y: 0),
-      );
+    id: 's1',
+    tool: StrokeTool.pen,
+    colorValue: 0xFF000000,
+    width: 2,
+    first: const StrokePoint(x: 0, y: 0),
+  );
 
   test('records points and builds a stroke', () {
     final r = StrokeRecorder();

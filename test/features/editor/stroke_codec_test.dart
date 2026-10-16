@@ -12,17 +12,16 @@ void main() {
     StrokeTool tool = StrokeTool.pen,
     int color = 0xFFC62828,
     double width = 2,
-  }) =>
-      Stroke(
-        id: id,
-        tool: tool,
-        colorValue: color,
-        width: width,
-        points: const [
-          StrokePoint(x: 1.5, y: 2.25, pressure: 0.5, timestampMs: 0),
-          StrokePoint(x: 100, y: 200.5, pressure: 1, timestampMs: 16),
-        ],
-      );
+  }) => Stroke(
+    id: id,
+    tool: tool,
+    colorValue: color,
+    width: width,
+    points: const [
+      StrokePoint(x: 1.5, y: 2.25, pressure: 0.5, timestampMs: 0),
+      StrokePoint(x: 100, y: 200.5, pressure: 1, timestampMs: 16),
+    ],
+  );
 
   test('strokes survive a round trip', () {
     final strokes = [

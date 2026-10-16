@@ -9,8 +9,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          libraryRepositoryProvider
-              .overrideWithValue(InMemoryLibraryRepository()),
+          libraryRepositoryProvider.overrideWithValue(
+            InMemoryLibraryRepository(),
+          ),
         ],
         child: const NoteApp(),
       ),

@@ -22,15 +22,14 @@ class PaperTemplateDialog extends StatefulWidget {
     required String title,
     required String confirmLabel,
     required PaperTemplate initial,
-  }) =>
-      showDialog<PaperTemplate>(
-        context: context,
-        builder: (_) => PaperTemplateDialog(
-          title: title,
-          confirmLabel: confirmLabel,
-          initial: initial,
-        ),
-      );
+  }) => showDialog<PaperTemplate>(
+    context: context,
+    builder: (_) => PaperTemplateDialog(
+      title: title,
+      confirmLabel: confirmLabel,
+      initial: initial,
+    ),
+  );
 
   @override
   State<PaperTemplateDialog> createState() => _PaperTemplateDialogState();

@@ -22,8 +22,10 @@ void main() {
 
   test('renameFolder trims and refreshes cached lists', () async {
     final folder = await actions().createFolder(name: 'School');
-    expect((await container.read(foldersProvider(null).future)).single.name,
-        'School');
+    expect(
+      (await container.read(foldersProvider(null).future)).single.name,
+      'School',
+    );
 
     await actions().renameFolder(folder.id, '  Work  ');
 
@@ -41,8 +43,10 @@ void main() {
 
     await actions().moveNotebook(notebook.id, toFolderId: folder.id);
     expect(await container.read(notebooksProvider(null).future), isEmpty);
-    expect(await container.read(notebooksProvider(folder.id).future),
-        hasLength(1));
+    expect(
+      await container.read(notebooksProvider(folder.id).future),
+      hasLength(1),
+    );
 
     await actions().moveNotebook(notebook.id);
     expect(await container.read(notebooksProvider(null).future), hasLength(1));

@@ -9,8 +9,9 @@ class DriveService {
   static bool get isSupported =>
       Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
 
-  final GoogleSignIn _signIn =
-      GoogleSignIn(scopes: [drive.DriveApi.driveFileScope]);
+  final GoogleSignIn _signIn = GoogleSignIn(
+    scopes: [drive.DriveApi.driveFileScope],
+  );
 
   Future<void> upload(File file) async {
     final account = await _signIn.signInSilently() ?? await _signIn.signIn();

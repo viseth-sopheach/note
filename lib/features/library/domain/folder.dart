@@ -12,11 +12,11 @@ final class Folder {
   final DateTime createdAt;
 
   Folder copyWith({String? name}) => Folder(
-        id: id,
-        name: name ?? this.name,
-        parentId: parentId,
-        createdAt: createdAt,
-      );
+    id: id,
+    name: name ?? this.name,
+    parentId: parentId,
+    createdAt: createdAt,
+  );
 
   @override
   bool operator ==(Object other) =>

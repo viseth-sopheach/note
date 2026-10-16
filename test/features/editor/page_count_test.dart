@@ -11,12 +11,12 @@ import 'package:quill_notes/features/library/domain/paper_template.dart';
 
 void main() {
   Stroke stroke(String id) => Stroke(
-        id: id,
-        tool: StrokeTool.pen,
-        colorValue: 0xFF000000,
-        width: 2,
-        points: const [StrokePoint(x: 1, y: 1)],
-      );
+    id: id,
+    tool: StrokeTool.pen,
+    colorValue: 0xFF000000,
+    width: 2,
+    points: const [StrokePoint(x: 1, y: 1)],
+  );
 
   group('InMemoryPageRepository pages', () {
     late InMemoryPageRepository repo;
@@ -55,11 +55,10 @@ void main() {
     tearDown(() => db.close());
 
     Future<String> newId() async => (await library.createNotebook(
-          title: 'T',
-          coverColorValue: 0xFF000000,
-          template: PaperTemplate.blank,
-        ))
-            .id;
+      title: 'T',
+      coverColorValue: 0xFF000000,
+      template: PaperTemplate.blank,
+    )).id;
 
     test('count is 0, then highest saved index + 1', () async {
       final id = await newId();

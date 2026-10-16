@@ -1,19 +1,24 @@
 import 'package:flutter/material.dart';
 
 abstract final class AppTheme {
-  static const Color _seed = Colors.blueGrey;
+  static const Color defaultSeed = Colors.blueGrey;
 
-  static ThemeData get light => _build(Brightness.light);
-  static ThemeData get dark => _build(Brightness.dark);
+  static ThemeData get light => build(Brightness.light);
+  static ThemeData get dark => build(Brightness.dark);
 
-  static ThemeData _build(Brightness brightness) {
+  static ThemeData build(
+    Brightness brightness, {
+    Color seed = defaultSeed,
+    bool compact = false,
+  }) {
     final scheme = ColorScheme.fromSeed(
-      seedColor: _seed,
+      seedColor: seed,
       brightness: brightness,
     );
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
+      visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.surface,
         elevation: 0,

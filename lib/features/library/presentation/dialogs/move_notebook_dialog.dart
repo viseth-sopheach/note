@@ -20,11 +20,10 @@ class MoveNotebookDialog extends ConsumerWidget {
   static Future<MoveTarget?> show(
     BuildContext context, {
     required String? currentFolderId,
-  }) =>
-      showDialog<MoveTarget>(
-        context: context,
-        builder: (_) => MoveNotebookDialog(currentFolderId: currentFolderId),
-      );
+  }) => showDialog<MoveTarget>(
+    context: context,
+    builder: (_) => MoveNotebookDialog(currentFolderId: currentFolderId),
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -35,10 +34,8 @@ class MoveNotebookDialog extends ConsumerWidget {
       content: SizedBox(
         width: 360,
         child: folders.when(
-          data: (list) => _TargetList(
-            folders: list,
-            currentFolderId: currentFolderId,
-          ),
+          data: (list) =>
+              _TargetList(folders: list, currentFolderId: currentFolderId),
           loading: () => const SizedBox(
             height: 96,
             child: Center(child: CircularProgressIndicator()),
@@ -103,11 +100,7 @@ class _TargetList extends StatelessWidget {
         children: [
           tile(id: null, label: 'Library', icon: Icons.home_outlined),
           for (final entry in entries)
-            tile(
-              id: entry.id,
-              label: entry.path,
-              icon: Icons.folder_outlined,
-            ),
+            tile(id: entry.id, label: entry.path, icon: Icons.folder_outlined),
         ],
       ),
     );

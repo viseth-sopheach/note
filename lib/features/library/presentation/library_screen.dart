@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/routes.dart';
+import '../../settings/application/settings_providers.dart';
+import '../../settings/domain/layout_density.dart';
 import '../application/library_actions.dart';
 import '../application/library_providers.dart';
 import '../domain/folder.dart';
@@ -40,6 +42,12 @@ class LibraryScreen extends ConsumerWidget {
 
     final folders = ref.watch(foldersProvider(folderId));
     final notebooks = ref.watch(notebooksProvider(folderId));
+    final showCovers = ref.watch(
+      appSettingsProvider.select((s) => s.showCovers),
+    );
+    final compact = ref.watch(
+      appSettingsProvider.select((s) => s.density == LayoutDensity.compact),
+    );
     final title = _isRoot
         ? 'Viseth\'s Library'
         : (folderAsync?.value?.name ?? '');
@@ -85,6 +93,8 @@ class LibraryScreen extends ConsumerWidget {
                 isRoot: _isRoot,
                 folders: folderList,
                 notebooks: notebookList,
+                showCovers: showCovers,
+                compact: compact,
                 onNewNotebook: () => _createNotebook(context, ref),
                 onNewFolder: () => _createFolder(context, ref),
                 onFolderAction: (folder, action) =>
@@ -110,7 +120,10 @@ class LibraryScreen extends ConsumerWidget {
   }
 
   Future<void> _createNotebook(BuildContext context, WidgetRef ref) async {
-    final result = await NewNotebookDialog.show(context);
+    final result = await NewNotebookDialog.show(
+      context,
+      initialTemplate: ref.read(appSettingsProvider).defaultTemplate,
+    );
     if (result == null || !context.mounted) return;
 
     try {
@@ -323,6 +336,8 @@ class _LibraryContent extends StatelessWidget {
     required this.isRoot,
     required this.folders,
     required this.notebooks,
+    required this.showCovers,
+    required this.compact,
     required this.onNewNotebook,
     required this.onNewFolder,
     required this.onFolderAction,
@@ -332,6 +347,8 @@ class _LibraryContent extends StatelessWidget {
   final bool isRoot;
   final List<Folder> folders;
   final List<Notebook> notebooks;
+  final bool showCovers;
+  final bool compact;
   final VoidCallback onNewNotebook;
   final VoidCallback onNewFolder;
   final void Function(Folder folder, ItemAction action) onFolderAction;
@@ -354,11 +371,11 @@ class _LibraryContent extends StatelessWidget {
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             sliver: SliverGrid.builder(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 240,
-                mainAxisExtent: 56,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
+                mainAxisExtent: compact ? 48 : 56,
+                mainAxisSpacing: compact ? 8 : 12,
+                crossAxisSpacing: compact ? 8 : 12,
               ),
               itemCount: folders.length,
               itemBuilder: (context, index) {
@@ -381,11 +398,11 @@ class _LibraryContent extends StatelessWidget {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
             sliver: SliverGrid.builder(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 180,
                 childAspectRatio: 0.7,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
+                mainAxisSpacing: compact ? 10 : 16,
+                crossAxisSpacing: compact ? 10 : 16,
               ),
               itemCount: notebooks.length,
               itemBuilder: (context, index) {
@@ -395,6 +412,7 @@ class _LibraryContent extends StatelessWidget {
                   onSelected: (action) => onNotebookAction(notebook, action),
                   child: NotebookCard(
                     notebook: notebook,
+                    showCover: showCovers,
                     onTap: () => context.push(AppRoutes.notebook(notebook.id)),
                   ),
                 );

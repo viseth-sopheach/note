@@ -21,11 +21,11 @@ void main() {
   }
 
   AutosaveController makeAutosave(Duration delay) => AutosaveController(
-        controller: controller,
-        repository: repo,
-        notebookId: 'n1',
-        delay: delay,
-      );
+    controller: controller,
+    repository: repo,
+    notebookId: 'n1',
+    delay: delay,
+  );
 
   test('saves shortly after a stroke is finished', () async {
     final autosave = makeAutosave(const Duration(milliseconds: 20));

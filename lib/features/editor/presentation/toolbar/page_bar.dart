@@ -59,10 +59,7 @@ class PageBar extends StatelessWidget {
                     icon: const Icon(Icons.chevron_right),
                     onPressed: pageIndex < pageCount - 1 ? onNext : null,
                   ),
-                  const SizedBox(
-                    height: 24,
-                    child: VerticalDivider(width: 24),
-                  ),
+                  const SizedBox(height: 24, child: VerticalDivider(width: 24)),
                   IconButton(
                     visualDensity: VisualDensity.compact,
                     tooltip: 'Add page…',

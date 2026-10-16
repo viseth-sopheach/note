@@ -1,34 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../application/drawing_controller.dart';
-import '../../application/measure_controller.dart';
 import '../../domain/stroke_tool.dart';
-
-class _InkColor {
-  const _InkColor(this.name, this.value);
-
-  final String name;
-  final int value;
-}
-
-const List<_InkColor> _palette = [
-  _InkColor('Black', 0xFF1B1B1F),
-  _InkColor('Blue', 0xFF1E5AA8),
-  _InkColor('Red', 0xFFC62828),
-  _InkColor('Green', 0xFF2E7D32),
-  _InkColor('Orange', 0xFFEF6C00),
-  _InkColor('Yellow', 0xFFFFEB3B),
-];
+import '../../domain/toolbar_layout.dart';
+import '../measure/measure_controller.dart';
+import 'ink_palette.dart';
 
 const List<double> _penWidths = [1, 2, 4, 6];
 const List<double> _highlighterWidths = [2, 3, 4];
-
-const List<(StrokeTool, IconData, String)> _shapes = [
-  (StrokeTool.line, Icons.horizontal_rule, 'Line (Shift: 15° steps)'),
-  (StrokeTool.rectangle, Icons.crop_square, 'Rectangle (Shift: square)'),
-  (StrokeTool.ellipse, Icons.circle_outlined, 'Ellipse (Shift: circle)'),
-  (StrokeTool.triangle, Icons.change_history_outlined, 'Triangle'),
-];
 
 class DrawingToolbar extends StatelessWidget {
   const DrawingToolbar({
@@ -36,6 +15,8 @@ class DrawingToolbar extends StatelessWidget {
     required this.controller,
     this.fingerDraws = false,
     this.onFingerDrawsChanged,
+    this.toolOrder = StrokeTool.values,
+    this.hiddenTools = const {},
     this.measure,
     this.onToggleMeasure,
   });
@@ -43,13 +24,60 @@ class DrawingToolbar extends StatelessWidget {
   final DrawingController controller;
   final bool fingerDraws;
   final ValueChanged<bool>? onFingerDrawsChanged;
+
+  /// Order of the tool buttons. See [ToolbarLayout.visible].
+  final List<StrokeTool> toolOrder;
+  final Set<StrokeTool> hiddenTools;
+
   final MeasureController? measure;
-  final ValueChanged<MeasureKind>? onToggleMeasure;
+  final void Function(MeasureKind kind)? onToggleMeasure;
+
+  static ButtonSegment<StrokeTool> _segment(StrokeTool tool) => switch (tool) {
+    StrokeTool.pen => const ButtonSegment(
+      value: StrokeTool.pen,
+      icon: Icon(Icons.edit_outlined),
+      label: Text('Pen'),
+    ),
+    StrokeTool.highlighter => const ButtonSegment(
+      value: StrokeTool.highlighter,
+      icon: Icon(Icons.highlight_outlined),
+      label: Text('Highlighter'),
+    ),
+    StrokeTool.eraser => const ButtonSegment(
+      value: StrokeTool.eraser,
+      icon: Icon(Icons.cleaning_services_outlined),
+      label: Text('Eraser'),
+    ),
+    StrokeTool.select => const ButtonSegment(
+      value: StrokeTool.select,
+      icon: Icon(Icons.gesture),
+      label: Text('Select'),
+    ),
+    StrokeTool.line => const ButtonSegment(
+      value: StrokeTool.line,
+      icon: Icon(Icons.horizontal_rule),
+      label: Text('Line'),
+    ),
+    StrokeTool.rectangle => const ButtonSegment(
+      value: StrokeTool.rectangle,
+      icon: Icon(Icons.rectangle_outlined),
+      label: Text('Rectangle'),
+    ),
+    StrokeTool.ellipse => const ButtonSegment(
+      value: StrokeTool.ellipse,
+      icon: Icon(Icons.circle_outlined),
+      label: Text('Ellipse'),
+    ),
+    StrokeTool.triangle => const ButtonSegment(
+      value: StrokeTool.triangle,
+      icon: Icon(Icons.change_history_outlined),
+      label: Text('Triangle'),
+    ),
+  };
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final m = measure;
 
     return Material(
       color: colors.surface,
@@ -58,16 +86,22 @@ class DrawingToolbar extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         child: Theme(
-          data: Theme.of(context).copyWith(visualDensity: VisualDensity.compact),
+          data: Theme.of(context)
+              .copyWith(visualDensity: VisualDensity.compact),
           child: ListenableBuilder(
-            listenable: Listenable.merge([controller, if (m != null) m]),
+            listenable: controller,
             builder: (context, _) {
               final tool = controller.tool;
-              final showInkOptions = tool == StrokeTool.pen ||
-                  tool == StrokeTool.highlighter ||
-                  tool.isShape;
-              final widths =
-                  tool == StrokeTool.highlighter ? _highlighterWidths : _penWidths;
+              final showInkOptions =
+                  tool == StrokeTool.pen || tool == StrokeTool.highlighter;
+              final widths = tool == StrokeTool.pen
+                  ? _penWidths
+                  : _highlighterWidths;
+              final visibleTools = ToolbarLayout.visible(
+                order: toolOrder,
+                hidden: hiddenTools,
+                active: tool,
+              );
               return Row(
                 children: [
                   IconButton(
@@ -101,79 +135,13 @@ class DrawingToolbar extends StatelessWidget {
                   const SizedBox(width: 8),
                   SegmentedButton<StrokeTool>(
                     showSelectedIcon: false,
-                    emptySelectionAllowed: true,
-                    segments: const [
-                      ButtonSegment(
-                        value: StrokeTool.pen,
-                        icon: Icon(Icons.edit_outlined),
-                        label: Text('Pen'),
-                      ),
-                      ButtonSegment(
-                        value: StrokeTool.highlighter,
-                        icon: Icon(Icons.highlight_outlined),
-                        label: Text('Highlighter'),
-                      ),
-                      ButtonSegment(
-                        value: StrokeTool.eraser,
-                        icon: Icon(Icons.cleaning_services_outlined),
-                        label: Text('Eraser'),
-                      ),
-                      ButtonSegment(
-                        value: StrokeTool.select,
-                        icon: Icon(Icons.gesture),
-                        label: Text('Select'),
-                      ),
-                    ],
-                    selected: tool.isShape ? <StrokeTool>{} : {tool},
-                    onSelectionChanged: (s) {
-                      if (s.isNotEmpty) controller.selectTool(s.first);
-                    },
+                    segments: [for (final t in visibleTools) _segment(t)],
+                    selected: {tool},
+                    onSelectionChanged: (s) => controller.selectTool(s.first),
                   ),
-                  const SizedBox(width: 4),
-                  const SizedBox(height: 24, child: VerticalDivider(width: 16)),
-                  for (final (t, icon, tip) in _shapes)
-                    IconButton(
-                      tooltip: tip,
-                      isSelected: tool == t,
-                      icon: Icon(icon),
-                      style: tool == t
-                          ? IconButton.styleFrom(
-                              backgroundColor: colors.secondaryContainer,
-                            )
-                          : null,
-                      onPressed: () => controller.selectTool(t),
-                    ),
-                  if (m != null && onToggleMeasure != null) ...[
-                    const SizedBox(
-                      height: 24,
-                      child: VerticalDivider(width: 16),
-                    ),
-                    IconButton(
-                      tooltip: 'Ruler (R)',
-                      isSelected: m.kind == MeasureKind.ruler,
-                      icon: const Icon(Icons.straighten),
-                      style: m.kind == MeasureKind.ruler
-                          ? IconButton.styleFrom(
-                              backgroundColor: colors.secondaryContainer,
-                            )
-                          : null,
-                      onPressed: () => onToggleMeasure!(MeasureKind.ruler),
-                    ),
-                    IconButton(
-                      tooltip: 'Protractor',
-                      isSelected: m.kind == MeasureKind.protractor,
-                      icon: const Icon(Icons.architecture),
-                      style: m.kind == MeasureKind.protractor
-                          ? IconButton.styleFrom(
-                              backgroundColor: colors.secondaryContainer,
-                            )
-                          : null,
-                      onPressed: () => onToggleMeasure!(MeasureKind.protractor),
-                    ),
-                  ],
                   if (showInkOptions) ...[
                     const SizedBox(width: 16),
-                    for (final c in _palette)
+                    for (final c in kInkColors)
                       _ColorSwatch(
                         color: c,
                         selected: c.value == controller.colorValue,
@@ -205,17 +173,16 @@ class _ColorSwatch extends StatelessWidget {
     required this.onTap,
   });
 
-  final _InkColor color;
+  final InkColor color;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final fill = Color(color.value);
-    final onFill =
-        ThemeData.estimateBrightnessForColor(fill) == Brightness.dark
-            ? Colors.white
-            : Colors.black87;
+    final onFill = ThemeData.estimateBrightnessForColor(fill) == Brightness.dark
+        ? Colors.white
+        : Colors.black87;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -238,7 +205,9 @@ class _ColorSwatch extends StatelessWidget {
                   color: Theme.of(context).colorScheme.outlineVariant,
                 ),
               ),
-              child: selected ? Icon(Icons.check, size: 16, color: onFill) : null,
+              child: selected
+                  ? Icon(Icons.check, size: 16, color: onFill)
+                  : null,
             ),
           ),
         ),

@@ -28,28 +28,27 @@ final class Notebook {
     int? coverColorValue,
     PaperTemplate? template,
     required DateTime updatedAt,
-  }) =>
-      Notebook(
-        id: id,
-        title: title ?? this.title,
-        folderId: folderId,
-        coverColorValue: coverColorValue ?? this.coverColorValue,
-        template: template ?? this.template,
-        pdfPath: pdfPath,
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-      );
+  }) => Notebook(
+    id: id,
+    title: title ?? this.title,
+    folderId: folderId,
+    coverColorValue: coverColorValue ?? this.coverColorValue,
+    template: template ?? this.template,
+    pdfPath: pdfPath,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+  );
 
   Notebook movedTo(String? folderId, {required DateTime updatedAt}) => Notebook(
-        id: id,
-        title: title,
-        folderId: folderId,
-        coverColorValue: coverColorValue,
-        template: template,
-        pdfPath: pdfPath,
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-      );
+    id: id,
+    title: title,
+    folderId: folderId,
+    coverColorValue: coverColorValue,
+    template: template,
+    pdfPath: pdfPath,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -65,13 +64,13 @@ final class Notebook {
 
   @override
   int get hashCode => Object.hash(
-        id,
-        title,
-        folderId,
-        coverColorValue,
-        template,
-        pdfPath,
-        createdAt,
-        updatedAt,
-      );
+    id,
+    title,
+    folderId,
+    coverColorValue,
+    template,
+    pdfPath,
+    createdAt,
+    updatedAt,
+  );
 }

@@ -11,6 +11,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../library/application/library_providers.dart';
 import '../../library/domain/paper_template.dart';
 import '../../library/presentation/dialogs/confirm_delete_dialog.dart';
+import '../../settings/application/settings_providers.dart';
+import '../../settings/domain/editor_position.dart';
+import '../../settings/domain/settings_repository.dart';
 import '../../sharing/application/sharing_providers.dart';
 import '../application/autosave_controller.dart';
 import '../application/drawing_controller.dart';
@@ -18,6 +21,7 @@ import '../application/editor_providers.dart';
 import '../application/measure_controller.dart';
 import '../application/tool_settings.dart';
 import '../domain/page_repository.dart';
+import '../domain/toolbar_layout.dart';
 import 'dialogs/paper_template_dialog.dart';
 import 'drawing/drawing_surface.dart';
 import 'drawing/ink_layers.dart';
@@ -126,7 +130,9 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
   static double get _cellH => kCellSize.height;
 
-  final ToolSettings _settings = ToolSettings();
+  late final ToolSettings _settings;
+  late final SettingsRepository _settingsRepository;
+  late final bool _rememberPosition;
   final MeasureController _measure = MeasureController();
   final TransformationController _transform = TransformationController();
   final List<_PageSession> _sessions = [];
@@ -141,7 +147,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   double _viewportH = 600;
 
   /// Phones and tablets usually have no stylus, so a finger draws by default.
-  bool _fingerDraws = defaultTargetPlatform == TargetPlatform.android ||
+  bool _fingerDraws =
+      defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS;
 
   DrawingController get _active => _sessions[_activeIndex].controller;
@@ -152,6 +159,16 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     WidgetsBinding.instance.addObserver(this);
     _transform.addListener(_keepCentered);
     _repository = ref.read(pageRepositoryProvider);
+    _settingsRepository = ref.read(settingsRepositoryProvider);
+    final saved = ref.read(appSettingsProvider);
+    _rememberPosition = saved.rememberPosition;
+    _settings = ToolSettings(
+      tool: saved.defaultTool,
+      penColorValue: saved.penColorValue,
+      penWidth: saved.penWidth,
+      highlighterColorValue: saved.highlighterColorValue,
+      highlighterWidth: saved.highlighterWidth,
+    );
     unawaited(_load());
   }
 
@@ -173,12 +190,13 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       widget.notebookId,
       pageIndex: index,
     );
-    final template = await _repository.loadTemplate(
-          widget.notebookId,
-          pageIndex: index,
-        ) ??
+    final template =
+        await _repository.loadTemplate(widget.notebookId, pageIndex: index) ??
         widget.template;
-    final controller = DrawingController(settings: _settings);
+    final controller = DrawingController(
+      settings: _settings,
+      undoLimit: ref.read(appSettingsProvider).undoLimit,
+    );
     controller.replaceStrokes(strokes);
     final session = _PageSession(
       index: index,
@@ -186,8 +204,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       template: template,
       autosave: _newAutosave(controller, index),
     );
-    controller.snapSegments =
-        () => _measure.edgesRelativeTo(_paperOrigin(session.index));
+    controller.snapSegments = () =>
+        _measure.edgesRelativeTo(_paperOrigin(session.index));
     return session;
   }
 
@@ -246,10 +264,9 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       if (!await _flushAll()) {
         throw StateError('Unsaved changes could not be saved.');
       }
-      final file = await ref.read(exportServiceProvider).exportNotebookPdf(
-            notebookId: widget.notebookId,
-            title: title,
-          );
+      final file = await ref
+          .read(exportServiceProvider)
+          .exportNotebookPdf(notebookId: widget.notebookId, title: title);
       await ref.read(shareServiceProvider).shareFile(file, title);
     });
   }
@@ -384,13 +401,15 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   Future<void> _deletePage() async {
     if (_busy || _sessions.length < 2) return;
     final index = _visiblePage;
-    final confirmed = await ConfirmDeleteDialog.show(
-      context,
-      title: 'Delete page?',
-      message:
-          'Page ${index + 1} of ${_sessions.length} will be deleted. This cannot be undone.',
-    );
-    if (!confirmed || !mounted) return;
+    if (ref.read(appSettingsProvider).confirmDeletePage) {
+      final confirmed = await ConfirmDeleteDialog.show(
+        context,
+        title: 'Delete page?',
+        message:
+            'Page ${index + 1} of ${_sessions.length} will be deleted. This cannot be undone.',
+      );
+      if (!confirmed || !mounted) return;
+    }
 
     await _runExclusive('Could not delete the page.', () async {
       if (!await _flushAll()) {
@@ -424,17 +443,31 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   double get _contentHeight => _pad * 2 + _sessions.length * _cellH;
 
   double _clampTy(double ty, double scale) {
-    final lowest =
-        math.min(_margin, _viewportH - _contentHeight * scale - _margin);
+    final lowest = math.min(
+      _margin,
+      _viewportH - _contentHeight * scale - _margin,
+    );
     return ty.clamp(lowest, _margin).toDouble();
   }
 
   void _setTransform(double scale, double tx, double ty) {
     _transform.value = Matrix4(
-      scale, 0, 0, 0, //
-      0, scale, 0, 0, //
-      0, 0, 1, 0, //
-      tx, ty, 0, 1,
+      scale,
+      0,
+      0,
+      0, //
+      0,
+      scale,
+      0,
+      0, //
+      0,
+      0,
+      1,
+      0, //
+      tx,
+      ty,
+      0,
+      1,
     );
   }
 
@@ -457,16 +490,44 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     _setTransform(scale, target, m.storage[13]);
   }
 
-  /// First layout: fit the paper to the viewport width (never above 100%)
-  /// with the paper centered. The drawable margin stays reachable by panning.
+  /// First layout: fit narrow screens to the page width, never above the
+  /// saved default zoom. Then restore the last position of this notebook.
   void _fitWidth() {
+    final limit = ref.read(appSettingsProvider).defaultZoom;
     final scale = math
-        .min(1.0, _viewportW / (kPageSize.width + _pad * 2))
-        .clamp(0.25, 1.0)
+        .min(limit, _viewportW / _contentWidth)
+        .clamp(0.25, 4.0)
         .toDouble();
-    final tx = (_viewportW - _contentWidth * scale) / 2;
     _fitted = true;
-    _setTransform(scale, tx, -kBleedY * scale);
+    _setTransform(scale, 0, 0);
+    _restorePosition(scale);
+  }
+
+  void _restorePosition(double scale) {
+    if (!_rememberPosition || _sessions.isEmpty) return;
+    final saved = _settingsRepository.loadEditorPosition(widget.notebookId);
+    if (saved == null) return;
+    final index = saved.pageIndex.clamp(0, _sessions.length - 1);
+    final offset = saved.offset.clamp(-_pad, kPageSize.height).toDouble();
+    final ty = _clampTy(-(_pageTop(index) + offset) * scale, scale);
+    _setTransform(scale, 0, ty);
+    if (index != _activeIndex) setState(() => _activeIndex = index);
+  }
+
+  void _savePosition() {
+    if (!_rememberPosition || !_fitted || _sessions.isEmpty) return;
+    final m = _transform.value;
+    final top = -m.storage[13] / m.storage[0];
+    var index = 0;
+    for (var i = 0; i < _sessions.length; i++) {
+      if (_pageTop(i) <= top + 1) index = i;
+    }
+    unawaited(
+      _settingsRepository.saveEditorPosition(
+        widget.notebookId,
+        EditorPosition(pageIndex: index, offset: top - _pageTop(index)),
+      ),
+    );
   }
 
   int get _visiblePage {
@@ -497,7 +558,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   /// Mouse wheel scrolls the pages; Ctrl + wheel zooms.
   void _onSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
-    if (HardwareKeyboard.instance.isControlPressed) return;
+    final zoomWanted =
+        HardwareKeyboard.instance.isControlPressed &&
+        ref.read(appSettingsProvider).wheelZoom;
+    if (zoomWanted) return; // InteractiveViewer zooms.
     GestureBinding.instance.pointerSignalResolver.register(event, (e) {
       final scroll = e as PointerScrollEvent;
       final m = _transform.value;
@@ -512,6 +576,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) return;
+    _savePosition();
     for (final s in _sessions) {
       unawaited(s.autosave.flush());
     }
@@ -519,6 +584,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
   @override
   void dispose() {
+    _savePosition();
     WidgetsBinding.instance.removeObserver(this);
     _transform.removeListener(_keepCentered);
     for (final s in _sessions) {
@@ -595,6 +661,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     }
 
     final colors = Theme.of(context).colorScheme;
+    final prefs = ref.watch(appSettingsProvider);
 
     final pages = SizedBox(
       width: _contentWidth,
@@ -623,9 +690,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       children: [
         DrawingToolbar(
           controller: _active,
+          toolOrder: prefs.toolbarOrder,
+          hiddenTools: prefs.hiddenTools,
           fingerDraws: _fingerDraws,
-          onFingerDrawsChanged: (value) =>
-              setState(() => _fingerDraws = value),
+          onFingerDrawsChanged: (value) => setState(() => _fingerDraws = value),
           measure: _measure,
           onToggleMeasure: _toggleMeasure,
         ),
@@ -661,7 +729,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                         builder: (context, child) {
                           final busyInput =
                               _sessions.any((s) => s.controller.isDrawing) ||
-                                  _measure.interacting;
+                              _measure.interacting;
                           return InteractiveViewer(
                             transformationController: _transform,
                             constrained: false,
@@ -698,8 +766,9 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
             onNext: () => _scrollToPage(_visiblePage + 1),
             onAdd: () => unawaited(_addPage()),
             onDuplicate: () => unawaited(_duplicatePage()),
-            onDelete:
-                _sessions.length > 1 ? () => unawaited(_deletePage()) : null,
+            onDelete: _sessions.length > 1
+                ? () => unawaited(_deletePage())
+                : null,
           ),
         ),
       ],
@@ -715,7 +784,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           LogicalKeyboardKey.keyZ,
           control: true,
           shift: true,
-        ): () => _active.redo(),
+        ): () =>
+            _active.redo(),
         const SingleActivator(LogicalKeyboardKey.delete): () =>
             _active.deleteSelection(),
         const SingleActivator(LogicalKeyboardKey.escape): () =>
@@ -727,10 +797,12 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         const SingleActivator(LogicalKeyboardKey.keyR): () =>
             _toggleMeasure(MeasureKind.ruler),
         const SingleActivator(LogicalKeyboardKey.keyE, control: true): () =>
-            unawaited(exportPdf(
-              ref.read(notebookProvider(widget.notebookId)).value?.title ??
-                  'Notebook',
-            )),
+            unawaited(
+              exportPdf(
+                ref.read(notebookProvider(widget.notebookId)).value?.title ??
+                    'Notebook',
+              ),
+            ),
       },
       child: Focus(autofocus: true, child: editor),
     );

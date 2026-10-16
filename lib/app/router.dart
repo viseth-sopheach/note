@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../features/editor/presentation/editor_screen.dart';
 import '../features/library/presentation/library_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
+import '../features/settings/presentation/toolbar_settings_screen.dart';
 import 'routes.dart';
 
 final GoRouter appRouter = GoRouter(
@@ -25,6 +26,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.settings,
       builder: (context, state) => const SettingsScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.settingsToolbar,
+      builder: (context, state) => const ToolbarSettingsScreen(),
     ),
   ],
 );

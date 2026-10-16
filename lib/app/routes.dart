@@ -1,6 +1,7 @@
 abstract final class AppRoutes {
   static const String library = '/';
   static const String settings = '/settings';
+  static const String settingsToolbar = '/settings/toolbar';
   static const String folderPattern = '/folder/:id';
   static const String notebookPattern = '/notebook/:id';
 

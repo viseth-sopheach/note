@@ -50,7 +50,7 @@ class RemoveStrokesCommand implements DrawingCommand {
 /// Moves the strokes with the given ids by (dx, dy) in one undoable step.
 class MoveStrokesCommand implements DrawingCommand {
   MoveStrokesCommand(Set<String> ids, this.dx, this.dy)
-      : ids = Set<String>.unmodifiable(ids);
+    : ids = Set<String>.unmodifiable(ids);
 
   final Set<String> ids;
   final double dx;

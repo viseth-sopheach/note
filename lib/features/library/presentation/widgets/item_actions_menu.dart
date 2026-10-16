@@ -22,18 +22,18 @@ class ItemActionsMenu extends StatelessWidget {
     ItemAction value,
     IconData icon,
     String label,
-  ) =>
-      PopupMenuItem(
-        value: value,
-        child: ListTile(
-          leading: Icon(icon),
-          title: Text(label),
-          contentPadding: EdgeInsets.zero,
-        ),
-      );
+  ) => PopupMenuItem(
+    value: value,
+    child: ListTile(
+      leading: Icon(icon),
+      title: Text(label),
+      contentPadding: EdgeInsets.zero,
+    ),
+  );
 
   Future<void> _show(BuildContext context, Offset globalPosition) async {
-    final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
     final driveOk = Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
     final action = await showMenu<ItemAction>(
       context: context,
@@ -48,8 +48,11 @@ class ItemActionsMenu extends StatelessWidget {
         if (canShare) ...[
           _item(ItemAction.export, Icons.ios_share, 'Export PDF / Share'),
           if (driveOk)
-            _item(ItemAction.drive, Icons.cloud_upload_outlined,
-                'Upload to Google Drive'),
+            _item(
+              ItemAction.drive,
+              Icons.cloud_upload_outlined,
+              'Upload to Google Drive',
+            ),
           _item(ItemAction.telegram, Icons.send_outlined, 'Send to Telegram'),
         ],
         _item(ItemAction.delete, Icons.delete_outline, 'Delete'),

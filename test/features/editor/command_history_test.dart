@@ -7,12 +7,12 @@ import 'package:quill_notes/features/editor/domain/stroke_tool.dart';
 
 void main() {
   Stroke stroke(String id) => Stroke(
-        id: id,
-        tool: StrokeTool.pen,
-        colorValue: 0xFF000000,
-        width: 2,
-        points: const [StrokePoint(x: 1, y: 1)],
-      );
+    id: id,
+    tool: StrokeTool.pen,
+    colorValue: 0xFF000000,
+    width: 2,
+    points: const [StrokePoint(x: 1, y: 1)],
+  );
 
   late CommandHistory history;
   late List<Stroke> strokes;

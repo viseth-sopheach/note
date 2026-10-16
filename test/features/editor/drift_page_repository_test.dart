@@ -22,22 +22,21 @@ void main() {
   tearDown(() => db.close());
 
   Stroke stroke(String id) => Stroke(
-        id: id,
-        tool: StrokeTool.pen,
-        colorValue: 0xFF1B1B1F,
-        width: 2,
-        points: const [
-          StrokePoint(x: 1.5, y: 2.5, pressure: 0.5, timestampMs: 0),
-          StrokePoint(x: 10, y: 20, pressure: 1, timestampMs: 16),
-        ],
-      );
+    id: id,
+    tool: StrokeTool.pen,
+    colorValue: 0xFF1B1B1F,
+    width: 2,
+    points: const [
+      StrokePoint(x: 1.5, y: 2.5, pressure: 0.5, timestampMs: 0),
+      StrokePoint(x: 10, y: 20, pressure: 1, timestampMs: 16),
+    ],
+  );
 
   Future<String> newNotebookId() async => (await library.createNotebook(
-        title: 'Test',
-        coverColorValue: 0xFF000000,
-        template: PaperTemplate.blank,
-      ))
-          .id;
+    title: 'Test',
+    coverColorValue: 0xFF000000,
+    template: PaperTemplate.blank,
+  )).id;
 
   test('a new notebook has no strokes', () async {
     final id = await newNotebookId();

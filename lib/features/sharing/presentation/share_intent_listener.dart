@@ -41,9 +41,9 @@ class _ShareIntentListenerState extends ConsumerState<ShareIntentListener> {
 
     // App was already running.
     _sub = ReceiveSharingIntent.instance.getMediaStream().listen(
-          _handle,
-          onError: (_) {},
-        );
+      _handle,
+      onError: (_) {},
+    );
   }
 
   Future<void> _handle(List<SharedMediaFile> files) async {
@@ -56,8 +56,9 @@ class _ShareIntentListenerState extends ConsumerState<ShareIntentListener> {
         if (!_handled.add(path)) continue;
 
         try {
-          final notebook =
-              await ref.read(importServiceProvider).importPdf(path);
+          final notebook = await ref
+              .read(importServiceProvider)
+              .importPdf(path);
           if (notebook != null) {
             appRouter.push(AppRoutes.notebook(notebook.id));
           } else {

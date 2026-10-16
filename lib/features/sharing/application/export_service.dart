@@ -51,7 +51,9 @@ class ExportService {
     for (final stroke in strokes) {
       if (stroke.points.isEmpty) continue;
       final highlighter = stroke.tool == StrokeTool.highlighter;
-      final color = PdfColor.fromInt(0xFF000000 | (stroke.colorValue & 0xFFFFFF));
+      final color = PdfColor.fromInt(
+        0xFF000000 | (stroke.colorValue & 0xFFFFFF),
+      );
       final width = stroke.width * (highlighter ? 6 : 1) * _s;
 
       canvas.saveContext();

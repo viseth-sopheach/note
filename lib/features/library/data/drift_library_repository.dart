@@ -10,7 +10,7 @@ import '../domain/paper_template.dart';
 
 class DriftLibraryRepository implements LibraryRepository {
   DriftLibraryRepository(this._db, {DateTime Function()? clock})
-      : _clock = clock ?? DateTime.now;
+    : _clock = clock ?? DateTime.now;
 
   static const Uuid _uuid = Uuid();
 
@@ -31,16 +31,15 @@ class DriftLibraryRepository implements LibraryRepository {
 
   @override
   Future<List<Folder>> getAllFolders() async {
-    final query = _db.select(_db.folderRows)
-      ..orderBy([(t) => _byName(t.name)]);
+    final query = _db.select(_db.folderRows)..orderBy([(t) => _byName(t.name)]);
     return [for (final row in await query.get()) row.toDomain()];
   }
 
   @override
   Future<Folder?> getFolder(String id) async {
-    final row = await (_db.select(_db.folderRows)
-          ..where((t) => t.id.equals(id)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.folderRows,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
     return row?.toDomain();
   }
 
@@ -61,9 +60,9 @@ class DriftLibraryRepository implements LibraryRepository {
 
   @override
   Future<Notebook?> getNotebook(String id) async {
-    final row = await (_db.select(_db.notebookRows)
-          ..where((t) => t.id.equals(id)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.notebookRows,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
     return row?.toDomain();
   }
 
@@ -78,7 +77,9 @@ class DriftLibraryRepository implements LibraryRepository {
         parentId: parentId,
         createdAt: _clock(),
       );
-      await _db.into(_db.folderRows).insert(
+      await _db
+          .into(_db.folderRows)
+          .insert(
             FolderRowsCompanion.insert(
               id: folder.id,
               name: folder.name,
@@ -112,7 +113,9 @@ class DriftLibraryRepository implements LibraryRepository {
         createdAt: now,
         updatedAt: now,
       );
-      await _db.into(_db.notebookRows).insert(
+      await _db
+          .into(_db.notebookRows)
+          .insert(
             NotebookRowsCompanion.insert(
               id: notebook.id,
               title: notebook.title,
@@ -131,23 +134,25 @@ class DriftLibraryRepository implements LibraryRepository {
   @override
   Future<void> renameFolder(String id, String name) async {
     final cleanName = _validated(name, 'name');
-    final updated = await (_db.update(_db.folderRows)
-          ..where((t) => t.id.equals(id)))
-        .write(FolderRowsCompanion(name: Value(cleanName)));
+    final updated =
+        await (_db.update(_db.folderRows)..where((t) => t.id.equals(id))).write(
+          FolderRowsCompanion(name: Value(cleanName)),
+        );
     if (updated == 0) throw StateError('Folder not found: $id');
   }
 
   @override
   Future<void> renameNotebook(String id, String title) async {
     final cleanTitle = _validated(title, 'title');
-    final updated = await (_db.update(_db.notebookRows)
-          ..where((t) => t.id.equals(id)))
-        .write(
-      NotebookRowsCompanion(
-        title: Value(cleanTitle),
-        updatedAt: Value(_clock()),
-      ),
-    );
+    final updated =
+        await (_db.update(
+          _db.notebookRows,
+        )..where((t) => t.id.equals(id))).write(
+          NotebookRowsCompanion(
+            title: Value(cleanTitle),
+            updatedAt: Value(_clock()),
+          ),
+        );
     if (updated == 0) throw StateError('Notebook not found: $id');
   }
 
@@ -155,40 +160,42 @@ class DriftLibraryRepository implements LibraryRepository {
   Future<void> moveNotebook(String id, {String? toFolderId}) {
     return _db.transaction(() async {
       if (toFolderId != null) await _requireFolder(toFolderId);
-      final updated = await (_db.update(_db.notebookRows)
-            ..where((t) => t.id.equals(id)))
-          .write(
-        NotebookRowsCompanion(
-          folderId: Value(toFolderId),
-          updatedAt: Value(_clock()),
-        ),
-      );
+      final updated =
+          await (_db.update(
+            _db.notebookRows,
+          )..where((t) => t.id.equals(id))).write(
+            NotebookRowsCompanion(
+              folderId: Value(toFolderId),
+              updatedAt: Value(_clock()),
+            ),
+          );
       if (updated == 0) throw StateError('Notebook not found: $id');
     });
   }
 
   @override
   Future<void> deleteNotebook(String id) async {
-    final deleted = await (_db.delete(_db.notebookRows)
-          ..where((t) => t.id.equals(id)))
-        .go();
+    final deleted = await (_db.delete(
+      _db.notebookRows,
+    )..where((t) => t.id.equals(id))).go();
     if (deleted == 0) throw StateError('Notebook not found: $id');
   }
 
   /// Subfolders and notebooks are removed by ON DELETE CASCADE.
   @override
   Future<void> deleteFolder(String id) async {
-    final deleted = await (_db.delete(_db.folderRows)
-          ..where((t) => t.id.equals(id)))
-        .go();
+    final deleted = await (_db.delete(
+      _db.folderRows,
+    )..where((t) => t.id.equals(id))).go();
     if (deleted == 0) throw StateError('Folder not found: $id');
   }
 
   Future<void> _requireFolder(String id) async {
-    final exists = await (_db.selectOnly(_db.folderRows)
-          ..addColumns([_db.folderRows.id])
-          ..where(_db.folderRows.id.equals(id)))
-        .getSingleOrNull();
+    final exists =
+        await (_db.selectOnly(_db.folderRows)
+              ..addColumns([_db.folderRows.id])
+              ..where(_db.folderRows.id.equals(id)))
+            .getSingleOrNull();
     if (exists == null) throw StateError('Folder not found: $id');
   }
 
@@ -209,13 +216,13 @@ extension on FolderRow {
 
 extension on NotebookRow {
   Notebook toDomain() => Notebook(
-        id: id,
-        title: title,
-        folderId: folderId,
-        coverColorValue: coverColorValue,
-        template: template,
-        pdfPath: pdfPath,
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-      );
+    id: id,
+    title: title,
+    folderId: folderId,
+    coverColorValue: coverColorValue,
+    template: template,
+    pdfPath: pdfPath,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+  );
 }

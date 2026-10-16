@@ -9,7 +9,7 @@ import '../domain/stroke_codec.dart';
 
 class DriftPageRepository implements PageRepository {
   DriftPageRepository(this._db, {DateTime Function()? clock})
-      : _clock = clock ?? DateTime.now;
+    : _clock = clock ?? DateTime.now;
 
   static const Uuid _uuid = Uuid();
 
@@ -17,11 +17,10 @@ class DriftPageRepository implements PageRepository {
   final DateTime Function() _clock;
 
   Future<PageRow?> _row(String notebookId, int pageIndex) {
-    return (_db.select(_db.pageRows)
-          ..where(
-            (t) =>
-                t.notebookId.equals(notebookId) & t.pageIndex.equals(pageIndex),
-          ))
+    return (_db.select(_db.pageRows)..where(
+          (t) =>
+              t.notebookId.equals(notebookId) & t.pageIndex.equals(pageIndex),
+        ))
         .getSingleOrNull();
   }
 
@@ -55,18 +54,20 @@ class DriftPageRepository implements PageRepository {
     final now = _clock();
 
     return _db.transaction(() async {
-      final updated = await (_db.update(_db.pageRows)
-            ..where(
-              (t) =>
-                  t.notebookId.equals(notebookId) &
-                  t.pageIndex.equals(pageIndex),
-            ))
-          .write(
-        PageRowsCompanion(strokes: Value(blob), updatedAt: Value(now)),
-      );
+      final updated =
+          await (_db.update(_db.pageRows)..where(
+                (t) =>
+                    t.notebookId.equals(notebookId) &
+                    t.pageIndex.equals(pageIndex),
+              ))
+              .write(
+                PageRowsCompanion(strokes: Value(blob), updatedAt: Value(now)),
+              );
       if (updated > 0) return;
 
-      await _db.into(_db.pageRows).insert(
+      await _db
+          .into(_db.pageRows)
+          .insert(
             PageRowsCompanion.insert(
               id: _uuid.v4(),
               notebookId: notebookId,
@@ -81,10 +82,11 @@ class DriftPageRepository implements PageRepository {
   @override
   Future<int> pageCount(String notebookId) async {
     final maxIndex = _db.pageRows.pageIndex.max();
-    final row = await (_db.selectOnly(_db.pageRows)
-          ..addColumns([maxIndex])
-          ..where(_db.pageRows.notebookId.equals(notebookId)))
-        .getSingle();
+    final row =
+        await (_db.selectOnly(_db.pageRows)
+              ..addColumns([maxIndex])
+              ..where(_db.pageRows.notebookId.equals(notebookId)))
+            .getSingle();
     final max = row.read(maxIndex);
     return max == null ? 0 : max + 1;
   }
@@ -105,7 +107,9 @@ class DriftPageRepository implements PageRepository {
 
     await _db.transaction(() async {
       await _shiftPages(notebookId, from: pageIndex, delta: 1);
-      await _db.into(_db.pageRows).insert(
+      await _db
+          .into(_db.pageRows)
+          .insert(
             PageRowsCompanion.insert(
               id: _uuid.v4(),
               notebookId: notebookId,
@@ -121,12 +125,10 @@ class DriftPageRepository implements PageRepository {
   @override
   Future<void> deletePage(String notebookId, int pageIndex) {
     return _db.transaction(() async {
-      await (_db.delete(_db.pageRows)
-            ..where(
-              (t) =>
-                  t.notebookId.equals(notebookId) &
-                  t.pageIndex.equals(pageIndex),
-            ))
+      await (_db.delete(_db.pageRows)..where(
+            (t) =>
+                t.notebookId.equals(notebookId) & t.pageIndex.equals(pageIndex),
+          ))
           .go();
       await _shiftPages(notebookId, from: pageIndex + 1, delta: -1);
     });

@@ -42,8 +42,9 @@ abstract final class StrokeSelection {
   static Bounds? boundsOf(Iterable<Stroke> strokes) {
     double? left, top, right, bottom;
     for (final s in strokes) {
-      final scale =
-          s.tool == StrokeTool.highlighter ? StrokeHitTest.highlighterWidthScale : 1;
+      final scale = s.tool == StrokeTool.highlighter
+          ? StrokeHitTest.highlighterWidthScale
+          : 1;
       final half = s.width * scale / 2;
       for (final p in s.points) {
         final l = p.x - half, t = p.y - half, r = p.x + half, b = p.y + half;
@@ -57,7 +58,8 @@ abstract final class StrokeSelection {
     return (left: left, top: top!, right: right!, bottom: bottom!);
   }
 
-  static Stroke translate(Stroke stroke, double dx, double dy) => stroke.copyWith(
+  static Stroke translate(Stroke stroke, double dx, double dy) =>
+      stroke.copyWith(
         points: [
           for (final p in stroke.points)
             StrokePoint(

@@ -12,13 +12,8 @@ void main() {
 
   tearDown(() => c.dispose());
 
-  void begin(int pointer, {int t = 100}) => c.beginStroke(
-        pointer: pointer,
-        x: 0,
-        y: 0,
-        pressure: 1,
-        timeMs: t,
-      );
+  void begin(int pointer, {int t = 100}) =>
+      c.beginStroke(pointer: pointer, x: 0, y: 0, pressure: 1, timeMs: t);
 
   test('draws a stroke with times relative to the start', () {
     begin(1, t: 100);

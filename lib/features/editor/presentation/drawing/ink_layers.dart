@@ -55,7 +55,7 @@ class LiveInkLayer extends StatelessWidget {
 
 class CommittedInkPainter extends CustomPainter {
   CommittedInkPainter(this.controller, [this.origin = Offset.zero])
-      : super(repaint: controller);
+    : super(repaint: controller);
 
   final DrawingController controller;
   final Offset origin;
@@ -86,7 +86,7 @@ class CommittedInkPainter extends CustomPainter {
 
 class LiveInkPainter extends CustomPainter {
   LiveInkPainter(this.controller, [this.origin = Offset.zero])
-      : super(repaint: controller.live);
+    : super(repaint: controller.live);
 
   final DrawingController controller;
   final Offset origin;

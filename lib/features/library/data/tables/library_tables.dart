@@ -21,9 +21,11 @@ class FolderRows extends Table {
 
   TextColumn get id => text()();
   TextColumn get name => text().withLength(min: 1, max: kMaxNameLength)();
-  TextColumn get parentId => text()
-      .nullable()
-      .references(FolderRows, #id, onDelete: KeyAction.cascade)();
+  TextColumn get parentId => text().nullable().references(
+    FolderRows,
+    #id,
+    onDelete: KeyAction.cascade,
+  )();
   IntColumn get createdAt => integer().map(const EpochMicrosConverter())();
 
   @override
@@ -38,9 +40,11 @@ class NotebookRows extends Table {
 
   TextColumn get id => text()();
   TextColumn get title => text().withLength(min: 1, max: kMaxNameLength)();
-  TextColumn get folderId => text()
-      .nullable()
-      .references(FolderRows, #id, onDelete: KeyAction.cascade)();
+  TextColumn get folderId => text().nullable().references(
+    FolderRows,
+    #id,
+    onDelete: KeyAction.cascade,
+  )();
   IntColumn get coverColorValue => integer()();
   TextColumn get template => textEnum<PaperTemplate>()();
   IntColumn get createdAt => integer().map(const EpochMicrosConverter())();

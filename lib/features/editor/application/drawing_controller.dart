@@ -36,10 +36,12 @@ class DrawingController extends ChangeNotifier {
     String Function()? idGenerator,
     double minDistance = 0.5,
     ToolSettings? settings,
-  })  : _newId = idGenerator ?? (() => const Uuid().v4()),
-        _recorder = StrokeRecorder(minDistance: minDistance),
-        _ownsSettings = settings == null,
-        _settings = settings ?? ToolSettings() {
+    int undoLimit = 200,
+  }) : _newId = idGenerator ?? (() => const Uuid().v4()),
+       _recorder = StrokeRecorder(minDistance: minDistance),
+       _history = CommandHistory(limit: undoLimit),
+       _ownsSettings = settings == null,
+       _settings = settings ?? ToolSettings() {
     _seenTool = _settings.tool;
     _settings.addListener(_onSettingsChanged);
   }
@@ -62,7 +64,7 @@ class DrawingController extends ChangeNotifier {
   final bool _ownsSettings;
   final _Signal _live = _Signal();
   final List<Stroke> _strokes = [];
-  final CommandHistory _history = CommandHistory();
+  final CommandHistory _history;
 
   late StrokeTool _seenTool;
 
@@ -501,7 +503,8 @@ class DrawingController extends ChangeNotifier {
 
   void _beginSelect(double x, double y) {
     final b = selectionBounds;
-    final grabbed = b != null &&
+    final grabbed =
+        b != null &&
         x >= b.left - _grabSlop &&
         x <= b.right + _grabSlop &&
         y >= b.top - _grabSlop &&

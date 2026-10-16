@@ -36,11 +36,8 @@ class MeasureOverlay extends StatelessWidget {
     );
   }
 
-  Widget _handle({required bool leading}) => _Handle(
-        leading: leading,
-        controller: controller,
-        scale: scale,
-      );
+  Widget _handle({required bool leading}) =>
+      _Handle(leading: leading, controller: controller, scale: scale);
 
   Widget _ruler() {
     const w = MeasureController.rulerLength;
@@ -340,7 +337,12 @@ class _ProtractorPainter extends CustomPainter {
 
     final disc = Path()
       ..moveTo(0, r)
-      ..arcTo(Rect.fromCircle(center: center, radius: r), math.pi, math.pi, false)
+      ..arcTo(
+        Rect.fromCircle(center: center, radius: r),
+        math.pi,
+        math.pi,
+        false,
+      )
       ..close();
     canvas.drawPath(disc, Paint()..color = fill);
     canvas.drawPath(

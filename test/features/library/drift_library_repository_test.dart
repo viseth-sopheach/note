@@ -28,10 +28,7 @@ void main() {
 
     test('rejects blank and overlong names', () async {
       expect(() => repo.createFolder(name: '   '), throwsArgumentError);
-      expect(
-        () => repo.createFolder(name: 'x' * 81),
-        throwsArgumentError,
-      );
+      expect(() => repo.createFolder(name: 'x' * 81), throwsArgumentError);
       expect(
         () => repo.createNotebook(
           title: '',

@@ -6,15 +6,12 @@ import 'package:quill_notes/features/editor/domain/stroke_tool.dart';
 
 void main() {
   Stroke line({StrokeTool tool = StrokeTool.pen, double width = 2}) => Stroke(
-        id: 's',
-        tool: tool,
-        colorValue: 0xFF000000,
-        width: width,
-        points: const [
-          StrokePoint(x: 0, y: 0),
-          StrokePoint(x: 100, y: 0),
-        ],
-      );
+    id: 's',
+    tool: tool,
+    colorValue: 0xFF000000,
+    width: width,
+    points: const [StrokePoint(x: 0, y: 0), StrokePoint(x: 100, y: 0)],
+  );
 
   bool hit(Stroke s, double ax, double ay, double bx, double by, double r) =>
       StrokeHitTest.hitsSegment(s, ax: ax, ay: ay, bx: bx, by: by, radius: r);

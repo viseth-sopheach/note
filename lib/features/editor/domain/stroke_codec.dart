@@ -130,9 +130,7 @@ abstract final class StrokeCodec {
         o += 4;
         final t = data.getUint32(o, Endian.little);
         o += 4;
-        points.add(
-          StrokePoint(x: x, y: y, pressure: pressure, timestampMs: t),
-        );
+        points.add(StrokePoint(x: x, y: y, pressure: pressure, timestampMs: t));
       }
 
       strokes.add(

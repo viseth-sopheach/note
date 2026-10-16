@@ -28,6 +28,5 @@ final class StrokePoint {
   int get hashCode => Object.hash(x, y, pressure, timestampMs);
 
   @override
-  String toString() =>
-      'StrokePoint($x, $y, p: $pressure, t: $timestampMs)';
+  String toString() => 'StrokePoint($x, $y, p: $pressure, t: $timestampMs)';
 }

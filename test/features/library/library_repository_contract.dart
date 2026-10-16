@@ -143,7 +143,10 @@ void runLibraryRepositoryContract(
         template: PaperTemplate.blank,
         pdfPath: '/data/pdfs/a.pdf',
       );
-      expect((await repo.getNotebook(notebook.id))?.pdfPath, '/data/pdfs/a.pdf');
+      expect(
+        (await repo.getNotebook(notebook.id))?.pdfPath,
+        '/data/pdfs/a.pdf',
+      );
     });
   });
 }

@@ -28,10 +28,14 @@ class ImportService {
 
     var title = p.basenameWithoutExtension(sourcePath).trim();
     if (title.isEmpty) title = 'Imported PDF';
-    if (title.length > kMaxNameLength) title = title.substring(0, kMaxNameLength);
+    if (title.length > kMaxNameLength) {
+      title = title.substring(0, kMaxNameLength);
+    }
 
     try {
-      return await _ref.read(libraryActionsProvider).createNotebook(
+      return await _ref
+          .read(libraryActionsProvider)
+          .createNotebook(
             title: title,
             coverColorValue: CoverPalette.colors.first.toARGB32(),
             template: PaperTemplate.blank,

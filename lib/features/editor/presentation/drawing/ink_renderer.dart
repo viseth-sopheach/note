@@ -43,8 +43,8 @@ abstract final class InkRenderer {
       ..isAntiAlias = true;
 
     final first = points.first.pressure;
-    final constantPressure = isHighlighter ||
-        points.every((p) => (p.pressure - first).abs() < 0.02);
+    final constantPressure =
+        isHighlighter || points.every((p) => (p.pressure - first).abs() < 0.02);
 
     if (constantPressure) {
       paint.strokeWidth = _widthAt(baseWidth, first, isHighlighter);
@@ -55,8 +55,11 @@ abstract final class InkRenderer {
     for (var i = 1; i < points.length; i++) {
       final a = points[i - 1];
       final b = points[i];
-      paint.strokeWidth =
-          _widthAt(baseWidth, (a.pressure + b.pressure) / 2, false);
+      paint.strokeWidth = _widthAt(
+        baseWidth,
+        (a.pressure + b.pressure) / 2,
+        false,
+      );
       canvas.drawLine(Offset(a.x, a.y), Offset(b.x, b.y), paint);
     }
   }

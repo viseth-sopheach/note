@@ -6,8 +6,10 @@ class NewFolderDialog extends StatefulWidget {
   const NewFolderDialog({super.key});
 
   /// Returns the trimmed folder name, or null if cancelled.
-  static Future<String?> show(BuildContext context) =>
-      showDialog<String>(context: context, builder: (_) => const NewFolderDialog());
+  static Future<String?> show(BuildContext context) => showDialog<String>(
+    context: context,
+    builder: (_) => const NewFolderDialog(),
+  );
 
   @override
   State<NewFolderDialog> createState() => _NewFolderDialogState();

@@ -5,16 +5,17 @@ import 'package:quill_notes/features/editor/domain/stroke_tool.dart';
 
 void main() {
   Stroke sample({List<StrokePoint>? points}) => Stroke(
-        id: 's1',
-        tool: StrokeTool.pen,
-        colorValue: 0xFF1B1B1F,
-        width: 2,
-        points: points ??
-            const [
-              StrokePoint(x: 1, y: 2, pressure: 0.5, timestampMs: 0),
-              StrokePoint(x: 3, y: 4, pressure: 0.7, timestampMs: 16),
-            ],
-      );
+    id: 's1',
+    tool: StrokeTool.pen,
+    colorValue: 0xFF1B1B1F,
+    width: 2,
+    points:
+        points ??
+        const [
+          StrokePoint(x: 1, y: 2, pressure: 0.5, timestampMs: 0),
+          StrokePoint(x: 3, y: 4, pressure: 0.7, timestampMs: 16),
+        ],
+  );
 
   test('strokes with the same data are equal', () {
     expect(sample(), sample());

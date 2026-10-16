@@ -40,17 +40,22 @@ class TelegramService {
     if (config == null) {
       throw StateError('Telegram is not set up. Open Settings > Telegram.');
     }
-    final request = http.MultipartRequest(
-      'POST',
-      Uri.parse('https://api.telegram.org/bot${config.botToken}/sendDocument'),
-    )
-      ..fields['chat_id'] = config.chatId
-      ..files.add(await http.MultipartFile.fromPath('document', file.path));
+    final request =
+        http.MultipartRequest(
+            'POST',
+            Uri.parse(
+              'https://api.telegram.org/bot${config.botToken}/sendDocument',
+            ),
+          )
+          ..fields['chat_id'] = config.chatId
+          ..files.add(await http.MultipartFile.fromPath('document', file.path));
     if (caption != null) request.fields['caption'] = caption;
 
     final response = await http.Response.fromStream(await request.send());
     if (response.statusCode != 200) {
-      throw HttpException('Telegram error ${response.statusCode}: ${response.body}');
+      throw HttpException(
+        'Telegram error ${response.statusCode}: ${response.body}',
+      );
     }
   }
 

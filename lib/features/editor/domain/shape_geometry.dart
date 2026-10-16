@@ -92,8 +92,9 @@ abstract final class ShapeGeometry {
     final dy = s.by - s.ay;
     final l2 = dx * dx + dy * dy;
     if (l2 == 0) return (x: s.ax, y: s.ay);
-    final t =
-        (((px - s.ax) * dx + (py - s.ay) * dy) / l2).clamp(0.0, 1.0).toDouble();
+    final t = (((px - s.ax) * dx + (py - s.ay) * dy) / l2)
+        .clamp(0.0, 1.0)
+        .toDouble();
     return (x: s.ax + t * dx, y: s.ay + t * dy);
   }
 

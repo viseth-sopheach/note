@@ -7,7 +7,9 @@ import 'import_service.dart';
 import 'share_service.dart';
 import 'telegram_service.dart';
 
-final importServiceProvider = Provider<ImportService>((ref) => ImportService(ref));
+final importServiceProvider = Provider<ImportService>(
+  (ref) => ImportService(ref),
+);
 
 final exportServiceProvider = Provider<ExportService>(
   (ref) => ExportService(ref.watch(pageRepositoryProvider)),
@@ -15,7 +17,8 @@ final exportServiceProvider = Provider<ExportService>(
 
 final shareServiceProvider = Provider<ShareService>((ref) => ShareService());
 
-final telegramServiceProvider =
-    Provider<TelegramService>((ref) => TelegramService());
+final telegramServiceProvider = Provider<TelegramService>(
+  (ref) => TelegramService(),
+);
 
 final driveServiceProvider = Provider<DriveService>((ref) => DriveService());

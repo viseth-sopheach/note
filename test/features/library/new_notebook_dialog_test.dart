@@ -7,16 +7,21 @@ import 'package:quill_notes/features/library/presentation/dialogs/new_notebook_d
 void main() {
   Future<void> openDialog(
     WidgetTester tester,
-    void Function(NewNotebookResult?) onClosed,
-  ) async {
+    void Function(NewNotebookResult?) onClosed, {
+    PaperTemplate initialTemplate = PaperTemplate.blank,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
           builder: (context) => Scaffold(
             body: Center(
               child: ElevatedButton(
-                onPressed: () async =>
-                    onClosed(await NewNotebookDialog.show(context)),
+                onPressed: () async => onClosed(
+                  await NewNotebookDialog.show(
+                    context,
+                    initialTemplate: initialTemplate,
+                  ),
+                ),
                 child: const Text('open'),
               ),
             ),
@@ -38,6 +43,20 @@ void main() {
     expect(result?.title, 'Untitled notebook');
     expect(result?.template, PaperTemplate.blank);
     expect(result?.coverColorValue, CoverPalette.colors.first.toARGB32());
+  });
+
+  testWidgets('starts on the saved default paper', (tester) async {
+    NewNotebookResult? result;
+    await openDialog(
+      tester,
+      (r) => result = r,
+      initialTemplate: PaperTemplate.dotted,
+    );
+
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    expect(result?.template, PaperTemplate.dotted);
   });
 
   testWidgets('blocks an empty title', (tester) async {

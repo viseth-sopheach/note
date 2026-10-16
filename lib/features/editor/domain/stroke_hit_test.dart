@@ -38,8 +38,9 @@ abstract final class StrokeHitTest {
   }
 
   static double _halfWidth(Stroke stroke) {
-    final scale =
-        stroke.tool == StrokeTool.highlighter ? highlighterWidthScale : 1;
+    final scale = stroke.tool == StrokeTool.highlighter
+        ? highlighterWidthScale
+        : 1;
     return stroke.width * scale / 2;
   }
 
@@ -57,8 +58,10 @@ abstract final class StrokeHitTest {
     if (lengthSquared == 0) {
       return math.sqrt((px - ax) * (px - ax) + (py - ay) * (py - ay));
     }
-    final t = (((px - ax) * dx + (py - ay) * dy) / lengthSquared)
-        .clamp(0.0, 1.0);
+    final t = (((px - ax) * dx + (py - ay) * dy) / lengthSquared).clamp(
+      0.0,
+      1.0,
+    );
     final cx = ax + t * dx;
     final cy = ay + t * dy;
     return math.sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
@@ -71,8 +74,7 @@ abstract final class StrokeHitTest {
     double py,
     double qx,
     double qy,
-  ) =>
-      (px - ox) * (qy - oy) - (py - oy) * (qx - ox);
+  ) => (px - ox) * (qy - oy) - (py - oy) * (qx - ox);
 
   static double _segmentDistance(
     double a1x,

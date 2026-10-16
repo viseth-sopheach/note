@@ -15,7 +15,7 @@ void main() {
     expect(container.read(appThemeModeProvider), AppThemeMode.system);
 
     await container
-        .read(appThemeModeProvider.notifier)
+        .read(appSettingsProvider.notifier)
         .setMode(AppThemeMode.dark);
 
     expect(container.read(appThemeModeProvider), AppThemeMode.dark);

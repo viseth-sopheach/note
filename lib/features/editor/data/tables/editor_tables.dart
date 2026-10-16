@@ -9,8 +9,8 @@ class PageRows extends Table {
   String get tableName => 'pages';
 
   TextColumn get id => text()();
-  TextColumn get notebookId => text()
-      .references(NotebookRows, #id, onDelete: KeyAction.cascade)();
+  TextColumn get notebookId =>
+      text().references(NotebookRows, #id, onDelete: KeyAction.cascade)();
   IntColumn get pageIndex => integer()();
 
   /// Binary stroke data, see StrokeCodec.
@@ -25,6 +25,6 @@ class PageRows extends Table {
 
   @override
   List<Set<Column>> get uniqueKeys => [
-        {notebookId, pageIndex},
-      ];
+    {notebookId, pageIndex},
+  ];
 }

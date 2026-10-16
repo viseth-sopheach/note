@@ -29,14 +29,13 @@ final class Stroke {
     int? colorValue,
     double? width,
     List<StrokePoint>? points,
-  }) =>
-      Stroke(
-        id: id,
-        tool: tool ?? this.tool,
-        colorValue: colorValue ?? this.colorValue,
-        width: width ?? this.width,
-        points: points ?? this.points,
-      );
+  }) => Stroke(
+    id: id,
+    tool: tool ?? this.tool,
+    colorValue: colorValue ?? this.colorValue,
+    width: width ?? this.width,
+    points: points ?? this.points,
+  );
 
   @override
   bool operator ==(Object other) {

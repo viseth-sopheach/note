@@ -42,12 +42,12 @@ void _run(String name, Future<_Fixture> Function() create) {
     });
 
     Stroke stroke(String strokeId) => Stroke(
-          id: strokeId,
-          tool: StrokeTool.pen,
-          colorValue: 0xFF000000,
-          width: 2,
-          points: const [StrokePoint(x: 1, y: 1)],
-        );
+      id: strokeId,
+      tool: StrokeTool.pen,
+      colorValue: 0xFF000000,
+      width: 2,
+      points: const [StrokePoint(x: 1, y: 1)],
+    );
 
     Future<void> seed(List<String> ids) async {
       for (var i = 0; i < ids.length; i++) {
@@ -116,7 +116,8 @@ void _run(String name, Future<_Fixture> Function() create) {
 
     test('a negative index is rejected', () async {
       expect(
-        () => pages.insertPage(id, pageIndex: -1, template: PaperTemplate.blank),
+        () =>
+            pages.insertPage(id, pageIndex: -1, template: PaperTemplate.blank),
         throwsArgumentError,
       );
     });

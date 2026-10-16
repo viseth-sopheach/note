@@ -36,8 +36,7 @@ class InMemoryPageRepository implements PageRepository {
   Future<PaperTemplate?> loadTemplate(
     String notebookId, {
     int pageIndex = 0,
-  }) async =>
-      _notebooks[notebookId]?[pageIndex]?.template;
+  }) async => _notebooks[notebookId]?[pageIndex]?.template;
 
   @override
   Future<void> saveStrokes(

@@ -7,7 +7,10 @@ import 'package:quill_notes/features/library/domain/paper_template.dart';
 void main() {
   test('repaints only when the template changes', () {
     const lined = PaperPainter(PaperTemplate.lined);
-    expect(lined.shouldRepaint(const PaperPainter(PaperTemplate.lined)), isFalse);
+    expect(
+      lined.shouldRepaint(const PaperPainter(PaperTemplate.lined)),
+      isFalse,
+    );
     expect(lined.shouldRepaint(const PaperPainter(PaperTemplate.grid)), isTrue);
   });
 
@@ -19,7 +22,9 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(child: PaperView(template: template)),
+              child: SingleChildScrollView(
+                child: PaperView(template: template),
+              ),
             ),
           ),
         ),

@@ -6,8 +6,10 @@ import '../../sharing/application/sharing_providers.dart';
 class TelegramDialog extends ConsumerStatefulWidget {
   const TelegramDialog({super.key});
 
-  static Future<void> show(BuildContext context) =>
-      showDialog<void>(context: context, builder: (_) => const TelegramDialog());
+  static Future<void> show(BuildContext context) => showDialog<void>(
+    context: context,
+    builder: (_) => const TelegramDialog(),
+  );
 
   @override
   ConsumerState<TelegramDialog> createState() => _TelegramDialogState();

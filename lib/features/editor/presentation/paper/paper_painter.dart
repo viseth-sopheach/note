@@ -30,9 +30,11 @@ class PaperPainter extends CustomPainter {
       case PaperTemplate.blank:
         break;
       case PaperTemplate.lined:
-        for (var y = kPaperMargin + kPaperSpacing;
-            y < size.height;
-            y += kPaperSpacing) {
+        for (
+          var y = kPaperMargin + kPaperSpacing;
+          y < size.height;
+          y += kPaperSpacing
+        ) {
           canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
         }
       case PaperTemplate.grid:

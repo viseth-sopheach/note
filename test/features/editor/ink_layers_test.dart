@@ -4,8 +4,9 @@ import 'package:quill_notes/features/editor/application/drawing_controller.dart'
 import 'package:quill_notes/features/editor/presentation/drawing/ink_layers.dart';
 
 void main() {
-  testWidgets('layers render strokes and a live stroke without errors',
-      (tester) async {
+  testWidgets('layers render strokes and a live stroke without errors', (
+    tester,
+  ) async {
     final c = DrawingController(idGenerator: () => 'id');
     addTearDown(c.dispose);
 

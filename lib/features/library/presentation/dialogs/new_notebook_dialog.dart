@@ -17,14 +17,21 @@ final class NewNotebookResult {
 }
 
 class NewNotebookDialog extends StatefulWidget {
-  const NewNotebookDialog({super.key});
+  const NewNotebookDialog({
+    super.key,
+    this.initialTemplate = PaperTemplate.blank,
+  });
+
+  final PaperTemplate initialTemplate;
 
   /// Returns the chosen settings, or null if cancelled.
-  static Future<NewNotebookResult?> show(BuildContext context) =>
-      showDialog<NewNotebookResult>(
-        context: context,
-        builder: (_) => const NewNotebookDialog(),
-      );
+  static Future<NewNotebookResult?> show(
+    BuildContext context, {
+    PaperTemplate initialTemplate = PaperTemplate.blank,
+  }) => showDialog<NewNotebookResult>(
+    context: context,
+    builder: (_) => NewNotebookDialog(initialTemplate: initialTemplate),
+  );
 
   @override
   State<NewNotebookDialog> createState() => _NewNotebookDialogState();
@@ -37,13 +44,15 @@ class _NewNotebookDialogState extends State<NewNotebookDialog> {
   final _titleController = TextEditingController(text: _defaultTitle);
 
   Color _cover = CoverPalette.colors.first;
-  PaperTemplate _template = PaperTemplate.blank;
+  late PaperTemplate _template = widget.initialTemplate;
 
   @override
   void initState() {
     super.initState();
-    _titleController.selection =
-        const TextSelection(baseOffset: 0, extentOffset: _defaultTitle.length);
+    _titleController.selection = const TextSelection(
+      baseOffset: 0,
+      extentOffset: _defaultTitle.length,
+    );
   }
 
   @override
@@ -64,11 +73,11 @@ class _NewNotebookDialogState extends State<NewNotebookDialog> {
   }
 
   static IconData _iconFor(PaperTemplate template) => switch (template) {
-        PaperTemplate.blank => Icons.crop_portrait,
-        PaperTemplate.lined => Icons.view_headline,
-        PaperTemplate.dotted => Icons.more_horiz,
-        PaperTemplate.grid => Icons.grid_4x4,
-      };
+    PaperTemplate.blank => Icons.crop_portrait,
+    PaperTemplate.lined => Icons.view_headline,
+    PaperTemplate.dotted => Icons.more_horiz,
+    PaperTemplate.grid => Icons.grid_4x4,
+  };
 
   @override
   Widget build(BuildContext context) {
