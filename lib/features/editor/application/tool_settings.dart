@@ -14,7 +14,10 @@ class ToolSettings extends ChangeNotifier {
   }) : _tool = tool,
        _penColor = penColorValue,
        _highlighterColor = highlighterColorValue,
+       // Keep the public constructor parameter names compatible.
+       // ignore: prefer_initializing_formals
        _penWidth = penWidth,
+       // ignore: prefer_initializing_formals
        _highlighterWidth = highlighterWidth {
     _colorValue = tool == StrokeTool.highlighter
         ? _highlighterColor
@@ -36,7 +39,9 @@ class ToolSettings extends ChangeNotifier {
 
   void selectTool(StrokeTool tool) {
     if (tool == _tool) return;
+
     _tool = tool;
+
     switch (tool) {
       case StrokeTool.pen:
         _colorValue = _penColor;
@@ -47,22 +52,33 @@ class ToolSettings extends ChangeNotifier {
       default:
         break;
     }
+
     notifyListeners();
   }
 
   void selectColor(int colorValue) {
     if (colorValue == _colorValue) return;
+
     _colorValue = colorValue;
+
     if (_tool == StrokeTool.pen) _penColor = colorValue;
-    if (_tool == StrokeTool.highlighter) _highlighterColor = colorValue;
+    if (_tool == StrokeTool.highlighter) {
+      _highlighterColor = colorValue;
+    }
+
     notifyListeners();
   }
 
   void selectWidth(double width) {
     if (width == _width) return;
+
     _width = width;
+
     if (_tool == StrokeTool.pen) _penWidth = width;
-    if (_tool == StrokeTool.highlighter) _highlighterWidth = width;
+    if (_tool == StrokeTool.highlighter) {
+      _highlighterWidth = width;
+    }
+
     notifyListeners();
   }
 }

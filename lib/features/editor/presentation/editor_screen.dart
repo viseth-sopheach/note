@@ -2,12 +2,16 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:math' as math;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:pdfrx/pdfrx.dart';
 
+import '../../../app/routes.dart';
 import '../../library/application/library_providers.dart';
 import '../../library/domain/paper_template.dart';
 import '../../library/presentation/dialogs/confirm_delete_dialog.dart';
@@ -29,7 +33,7 @@ import 'measure/measure_overlay.dart';
 import 'paper/page_metrics.dart';
 import 'paper/paper_painter.dart';
 import 'paper/paper_view.dart';
-import 'toolbar/drawing_toolbar.dart';
+import 'toolbar/floating_toolbar.dart';
 import 'toolbar/page_bar.dart';
 
 class EditorScreen extends ConsumerStatefulWidget {
@@ -48,35 +52,28 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
   @override
   Widget build(BuildContext context) {
     final notebook = ref.watch(notebookProvider(widget.notebookId));
-    final title = notebook.value?.title;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title ?? 'Notebook'),
-        actions: [
-          IconButton(
-            tooltip: 'Export PDF (Ctrl+E)',
-            icon: const Icon(Icons.picture_as_pdf_outlined),
-            onPressed: title == null
-                ? null
-                : () => unawaited(_canvasKey.currentState?.exportPdf(title)),
-          ),
-        ],
-      ),
-      body: notebook.when(
-        data: (value) {
-          if (value == null) {
-            return const Center(child: Text('Notebook not found'));
-          }
-          return _EditorCanvas(
-            key: _canvasKey,
-            notebookId: widget.notebookId,
-            template: value.template,
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) =>
-            const Center(child: Text('Could not open this notebook.')),
+      body: SafeArea(
+        bottom: false,
+        child: notebook.when(
+          data: (value) {
+            if (value == null) {
+              return const Center(child: Text('Notebook not found'));
+            }
+            return _EditorCanvas(
+              key: _canvasKey,
+              notebookId: widget.notebookId,
+              template: value.template,
+              title: value.title,
+              folderId: value.folderId,
+              pdfPath: value.pdfPath,
+            );
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stack) =>
+              const Center(child: Text('Could not open this notebook.')),
+        ),
       ),
     );
   }
@@ -107,12 +104,16 @@ class _EditorCanvas extends ConsumerStatefulWidget {
     super.key,
     required this.notebookId,
     required this.template,
+    required this.title,
+    this.folderId,
+    this.pdfPath,
   });
 
   final String notebookId;
-
-  /// Template used by pages that have no template of their own.
   final PaperTemplate template;
+  final String title;
+  final String? folderId;
+  final String? pdfPath;
 
   @override
   ConsumerState<_EditorCanvas> createState() => _EditorCanvasState();
@@ -136,6 +137,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   final TransformationController _transform = TransformationController();
   final List<_PageSession> _sessions = [];
   late final PageRepository _repository;
+
+  PdfDocument? _pdf;
 
   bool _loading = true;
   bool _failed = false;
@@ -211,7 +214,12 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   Future<void> _load() async {
     final opened = <_PageSession>[];
     try {
-      final count = math.max(1, await _repository.pageCount(widget.notebookId));
+      if (widget.pdfPath != null) {
+        _pdf = await PdfDocument.openFile(widget.pdfPath!);
+      }
+      final count = _pdf != null
+          ? _pdf!.pages.length
+          : math.max(1, await _repository.pageCount(widget.notebookId));
       for (var i = 0; i < count; i++) {
         opened.add(await _openPage(i));
       }
@@ -589,10 +597,89 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     for (final s in _sessions) {
       s.close();
     }
+    _pdf?.dispose();
     _settings.dispose();
     _measure.dispose();
     _transform.dispose();
     super.dispose();
+  }
+
+  // ---- PDF import ----
+
+  Future<void> _importPdf() async {
+    final files = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf'],
+    );
+
+    final path = files.isEmpty ? null : files.first.path;
+    if (path == null || !mounted) return;
+
+    await _runExclusive('Could not import the PDF.', () async {
+      if (!await _flushAll()) {
+        throw StateError('Unsaved changes could not be saved.');
+      }
+
+      final notebook = await ref
+          .read(importServiceProvider)
+          .importPdf(path, folderId: widget.folderId);
+
+      if (notebook == null) {
+        throw StateError('PDF not found.');
+      }
+
+      if (mounted) {
+        unawaited(context.push(AppRoutes.notebook(notebook.id)));
+      }
+    });
+  }
+
+  void _showPages() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheet) => ListView.builder(
+        itemCount: _sessions.length,
+        itemBuilder: (_, i) => ListTile(
+          leading: const Icon(Icons.description_outlined),
+          title: Text('Page ${i + 1}'),
+          selected: i == _visiblePage,
+          onTap: () {
+            Navigator.of(sheet).pop();
+            _scrollToPage(i);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _comingSoon(String label) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('$label is coming soon')));
+  }
+
+  Widget _paper(_PageSession session) {
+    final pdf = _pdf;
+    if (pdf == null || session.index >= pdf.pages.length) {
+      return PaperView(template: session.template);
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: SizedBox(
+        width: kPageSize.width,
+        height: kPageSize.height,
+        child: PdfPageView(document: pdf, pageNumber: session.index + 1),
+      ),
+    );
   }
 
   // ---- UI ----
@@ -610,29 +697,30 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           controller: session.controller,
           allowTouch: _fingerDraws,
           origin: kPaperOrigin,
+          bounds: Offset.zero & kPageSize,
           child: Stack(
             children: [
-              Positioned(
-                left: kBleedX,
-                top: kBleedY,
-                child: PaperView(template: session.template),
-              ),
+              Positioned(left: kBleedX, top: kBleedY, child: _paper(session)),
               Positioned.fill(
-                child: CommittedInkLayer(
-                  controller: session.controller,
-                  origin: kPaperOrigin,
-                ),
-              ),
-              Positioned.fill(
-                child: LiveInkLayer(
-                  controller: session.controller,
-                  origin: kPaperOrigin,
-                ),
-              ),
-              Positioned.fill(
-                child: SelectionLayer(
-                  controller: session.controller,
-                  origin: kPaperOrigin,
+                child: ClipRect(
+                  clipper: const _PaperClipper(),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CommittedInkLayer(
+                        controller: session.controller,
+                        origin: kPaperOrigin,
+                      ),
+                      LiveInkLayer(
+                        controller: session.controller,
+                        origin: kPaperOrigin,
+                      ),
+                      SelectionLayer(
+                        controller: session.controller,
+                        origin: kPaperOrigin,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -660,7 +748,6 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     }
 
     final colors = Theme.of(context).colorScheme;
-    final prefs = ref.watch(appSettingsProvider);
 
     final pages = SizedBox(
       width: _contentWidth,
@@ -687,14 +774,20 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
     final editor = Column(
       children: [
-        DrawingToolbar(
+        FloatingToolbar(
           controller: _active,
-          toolOrder: prefs.toolbarOrder,
-          hiddenTools: prefs.hiddenTools,
           fingerDraws: _fingerDraws,
-          onFingerDrawsChanged: (value) => setState(() => _fingerDraws = value),
-          measure: _measure,
+          onFingerDrawsChanged: (v) => setState(() => _fingerDraws = v),
+          busy: _busy,
+          onBack: () =>
+              context.canPop() ? context.pop() : context.go(AppRoutes.library),
+          onPages: _showPages,
+          onExport: () => unawaited(exportPdf(widget.title)),
+          onImportPdf: () => unawaited(_importPdf()),
+          onAddPage: () => unawaited(_addPage()),
           onToggleMeasure: _toggleMeasure,
+          onSettings: () => context.push(AppRoutes.settings),
+          onComingSoon: _comingSoon,
         ),
         SizedBox(
           height: 2,
@@ -796,14 +889,20 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         const SingleActivator(LogicalKeyboardKey.keyR): () =>
             _toggleMeasure(MeasureKind.ruler),
         const SingleActivator(LogicalKeyboardKey.keyE, control: true): () =>
-            unawaited(
-              exportPdf(
-                ref.read(notebookProvider(widget.notebookId)).value?.title ??
-                    'Notebook',
-              ),
-            ),
+            unawaited(exportPdf(widget.title)),
       },
       child: Focus(autofocus: true, child: editor),
     );
   }
+}
+
+class _PaperClipper extends CustomClipper<Rect> {
+  const _PaperClipper();
+
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTWH(kBleedX, kBleedY, kPageSize.width, kPageSize.height);
+
+  @override
+  bool shouldReclip(_PaperClipper oldClipper) => false;
 }

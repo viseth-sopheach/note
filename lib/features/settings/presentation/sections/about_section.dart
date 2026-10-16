@@ -25,17 +25,6 @@ class AboutSection extends ConsumerWidget {
         ListTile(title: const Text('App'), trailing: Text(name)),
         const Divider(height: 1),
         ListTile(title: const Text('Version'), trailing: Text(version)),
-        const Divider(height: 1),
-        ListTile(
-          leading: const Icon(Icons.description_outlined),
-          title: const Text('Open-source licenses'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => showLicensePage(
-            context: context,
-            applicationName: name,
-            applicationVersion: info.value?.version,
-          ),
-        ),
       ],
     );
   }

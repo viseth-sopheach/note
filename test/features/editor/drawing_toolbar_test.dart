@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quill_notes/features/editor/application/drawing_controller.dart';
@@ -29,7 +27,7 @@ void main() {
   ) async {
     await pumpToolbar(tester);
 
-    await tester.tap(find.text('Highlighter'));
+    await tester.tap(find.byTooltip('Highlighter'));
     await tester.pump();
 
     expect(c.tool, StrokeTool.highlighter);

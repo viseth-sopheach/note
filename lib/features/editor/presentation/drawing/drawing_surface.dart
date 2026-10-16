@@ -19,12 +19,16 @@ class DrawingSurface extends StatefulWidget {
     required this.child,
     this.allowTouch = false,
     this.origin = Offset.zero,
+    this.bounds,
   });
 
   final DrawingController controller;
   final Widget child;
   final bool allowTouch;
   final Offset origin;
+  
+  /// Paper rectangle in paper coordinates. Input outside it is ignored.
+  final Rect? bounds;
 
   @override
   State<DrawingSurface> createState() => _DrawingSurfaceState();
@@ -37,6 +41,17 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   DrawingController get _c => widget.controller;
 
   Offset _local(PointerEvent e) => e.localPosition - widget.origin;
+
+  /// Clamps pointer coordinates to stay within the valid paper bounds if defined.
+  Offset _clamped(PointerEvent e) {
+    final p = _local(e);
+    final b = widget.bounds;
+    if (b == null) return p;
+    return Offset(
+      p.dx.clamp(b.left, b.right).toDouble(),
+      p.dy.clamp(b.top, b.bottom).toDouble(),
+    );
+  }
 
   bool _isDrawingDevice(PointerEvent e) =>
       e.kind == PointerDeviceKind.mouse ||
@@ -67,7 +82,13 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
         (e.buttons & kPrimaryButton) == 0) {
       return;
     }
-    final p = _local(e);
+    
+    // Critical: Reject strokes that start outside the defined bounds
+    final raw = _local(e);
+    final b = widget.bounds;
+    if (b != null && !b.contains(raw)) return;
+    final p = raw;
+
     final started = _c.beginStroke(
       pointer: e.pointer,
       x: p.dx,
@@ -79,7 +100,8 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   }
 
   void _move(PointerMoveEvent e) {
-    final p = _local(e);
+    // Critical: Clamp movement coordinates to keep strokes bounded on the paper
+    final p = _clamped(e);
     _c.extendStroke(
       pointer: e.pointer,
       x: p.dx,
@@ -92,7 +114,9 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   void _up(PointerUpEvent e) {
     _touches.remove(e.pointer);
     if (e.pointer == _drawingPointer) _drawingPointer = null;
-    final p = _local(e);
+    
+    // Critical: Clamp end coordinates to maintain proper bounds integrity
+    final p = _clamped(e);
     _c.endStroke(
       pointer: e.pointer,
       x: p.dx,
