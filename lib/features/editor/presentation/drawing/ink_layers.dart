@@ -4,17 +4,23 @@ import '../../application/drawing_controller.dart';
 import 'ink_renderer.dart';
 
 /// Finished strokes. Repaints only when strokes or the selection change.
+/// [origin] is the paper corner inside this layer.
 class CommittedInkLayer extends StatelessWidget {
-  const CommittedInkLayer({super.key, required this.controller});
+  const CommittedInkLayer({
+    super.key,
+    required this.controller,
+    this.origin = Offset.zero,
+  });
 
   final DrawingController controller;
+  final Offset origin;
 
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
       child: RepaintBoundary(
         child: CustomPaint(
-          painter: CommittedInkPainter(controller),
+          painter: CommittedInkPainter(controller, origin),
           size: Size.infinite,
         ),
       ),
@@ -25,16 +31,21 @@ class CommittedInkLayer extends StatelessWidget {
 /// The stroke being drawn. Repaints on every accepted point, alone in its
 /// own layer so the paper and finished strokes are not redrawn.
 class LiveInkLayer extends StatelessWidget {
-  const LiveInkLayer({super.key, required this.controller});
+  const LiveInkLayer({
+    super.key,
+    required this.controller,
+    this.origin = Offset.zero,
+  });
 
   final DrawingController controller;
+  final Offset origin;
 
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
       child: RepaintBoundary(
         child: CustomPaint(
-          painter: LiveInkPainter(controller),
+          painter: LiveInkPainter(controller, origin),
           size: Size.infinite,
         ),
       ),
@@ -43,12 +54,16 @@ class LiveInkLayer extends StatelessWidget {
 }
 
 class CommittedInkPainter extends CustomPainter {
-  CommittedInkPainter(this.controller) : super(repaint: controller);
+  CommittedInkPainter(this.controller, [this.origin = Offset.zero])
+      : super(repaint: controller);
 
   final DrawingController controller;
+  final Offset origin;
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.translate(origin.dx, origin.dy);
     final moving = controller.isMovingSelection;
     final selected = controller.selectedIds;
     for (final s in controller.strokes) {
@@ -61,20 +76,25 @@ class CommittedInkPainter extends CustomPainter {
         width: s.width,
       );
     }
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(CommittedInkPainter oldDelegate) =>
-      oldDelegate.controller != controller;
+      oldDelegate.controller != controller || oldDelegate.origin != origin;
 }
 
 class LiveInkPainter extends CustomPainter {
-  LiveInkPainter(this.controller) : super(repaint: controller.live);
+  LiveInkPainter(this.controller, [this.origin = Offset.zero])
+      : super(repaint: controller.live);
 
   final DrawingController controller;
+  final Offset origin;
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.translate(origin.dx, origin.dy);
     InkRenderer.paintStroke(
       canvas,
       points: controller.livePoints,
@@ -82,9 +102,10 @@ class LiveInkPainter extends CustomPainter {
       colorValue: controller.colorValue,
       width: controller.width,
     );
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(LiveInkPainter oldDelegate) =>
-      oldDelegate.controller != controller;
+      oldDelegate.controller != controller || oldDelegate.origin != origin;
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../application/drawing_controller.dart';
+import '../../application/measure_controller.dart';
 import '../../domain/stroke_tool.dart';
 
 class _InkColor {
@@ -22,21 +23,33 @@ const List<_InkColor> _palette = [
 const List<double> _penWidths = [1, 2, 4, 6];
 const List<double> _highlighterWidths = [2, 3, 4];
 
+const List<(StrokeTool, IconData, String)> _shapes = [
+  (StrokeTool.line, Icons.horizontal_rule, 'Line (Shift: 15° steps)'),
+  (StrokeTool.rectangle, Icons.crop_square, 'Rectangle (Shift: square)'),
+  (StrokeTool.ellipse, Icons.circle_outlined, 'Ellipse (Shift: circle)'),
+  (StrokeTool.triangle, Icons.change_history_outlined, 'Triangle'),
+];
+
 class DrawingToolbar extends StatelessWidget {
   const DrawingToolbar({
     super.key,
     required this.controller,
     this.fingerDraws = false,
     this.onFingerDrawsChanged,
+    this.measure,
+    this.onToggleMeasure,
   });
 
   final DrawingController controller;
   final bool fingerDraws;
   final ValueChanged<bool>? onFingerDrawsChanged;
+  final MeasureController? measure;
+  final ValueChanged<MeasureKind>? onToggleMeasure;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final m = measure;
 
     return Material(
       color: colors.surface,
@@ -45,92 +58,138 @@ class DrawingToolbar extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         child: Theme(
-  data: Theme.of(context).copyWith(visualDensity: VisualDensity.compact),
-        child: ListenableBuilder(
-          listenable: controller,
-          builder: (context, _) {
-            final tool = controller.tool;
-            final showInkOptions =
-                tool == StrokeTool.pen || tool == StrokeTool.highlighter;
-            final widths =
-                tool == StrokeTool.pen ? _penWidths : _highlighterWidths;
-            return Row(
-              children: [
-                IconButton(
-                  tooltip: 'Undo (Ctrl+Z)',
-                  icon: const Icon(Icons.undo),
-                  onPressed: controller.canUndo ? controller.undo : null,
-                ),
-                IconButton(
-                  tooltip: 'Redo (Ctrl+Y)',
-                  icon: const Icon(Icons.redo),
-                  onPressed: controller.canRedo ? controller.redo : null,
-                ),
-                IconButton(
-                  tooltip: 'Delete selection (Delete)',
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: controller.hasSelection
-                      ? controller.deleteSelection
-                      : null,
-                ),
-                IconButton(
-                  tooltip: fingerDraws
-                      ? 'Finger draws (tap to use finger for pan/zoom)'
-                      : 'Finger pans and zooms (tap to draw with finger)',
-                  isSelected: fingerDraws,
-                  icon: const Icon(Icons.touch_app_outlined),
-                  selectedIcon: const Icon(Icons.touch_app),
-                  onPressed: onFingerDrawsChanged == null
-                      ? null
-                      : () => onFingerDrawsChanged!(!fingerDraws),
-                ),
-                const SizedBox(width: 8),
-                SegmentedButton<StrokeTool>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(
-                      value: StrokeTool.pen,
-                      icon: Icon(Icons.edit_outlined),
-                      label: Text('Pen'),
+          data: Theme.of(context).copyWith(visualDensity: VisualDensity.compact),
+          child: ListenableBuilder(
+            listenable: Listenable.merge([controller, if (m != null) m]),
+            builder: (context, _) {
+              final tool = controller.tool;
+              final showInkOptions = tool == StrokeTool.pen ||
+                  tool == StrokeTool.highlighter ||
+                  tool.isShape;
+              final widths =
+                  tool == StrokeTool.highlighter ? _highlighterWidths : _penWidths;
+              return Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Undo (Ctrl+Z)',
+                    icon: const Icon(Icons.undo),
+                    onPressed: controller.canUndo ? controller.undo : null,
+                  ),
+                  IconButton(
+                    tooltip: 'Redo (Ctrl+Y)',
+                    icon: const Icon(Icons.redo),
+                    onPressed: controller.canRedo ? controller.redo : null,
+                  ),
+                  IconButton(
+                    tooltip: 'Delete selection (Delete)',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: controller.hasSelection
+                        ? controller.deleteSelection
+                        : null,
+                  ),
+                  IconButton(
+                    tooltip: fingerDraws
+                        ? 'Finger draws (tap to use finger for pan/zoom)'
+                        : 'Finger pans and zooms (tap to draw with finger)',
+                    isSelected: fingerDraws,
+                    icon: const Icon(Icons.touch_app_outlined),
+                    selectedIcon: const Icon(Icons.touch_app),
+                    onPressed: onFingerDrawsChanged == null
+                        ? null
+                        : () => onFingerDrawsChanged!(!fingerDraws),
+                  ),
+                  const SizedBox(width: 8),
+                  SegmentedButton<StrokeTool>(
+                    showSelectedIcon: false,
+                    emptySelectionAllowed: true,
+                    segments: const [
+                      ButtonSegment(
+                        value: StrokeTool.pen,
+                        icon: Icon(Icons.edit_outlined),
+                        label: Text('Pen'),
+                      ),
+                      ButtonSegment(
+                        value: StrokeTool.highlighter,
+                        icon: Icon(Icons.highlight_outlined),
+                        label: Text('Highlighter'),
+                      ),
+                      ButtonSegment(
+                        value: StrokeTool.eraser,
+                        icon: Icon(Icons.cleaning_services_outlined),
+                        label: Text('Eraser'),
+                      ),
+                      ButtonSegment(
+                        value: StrokeTool.select,
+                        icon: Icon(Icons.gesture),
+                        label: Text('Select'),
+                      ),
+                    ],
+                    selected: tool.isShape ? <StrokeTool>{} : {tool},
+                    onSelectionChanged: (s) {
+                      if (s.isNotEmpty) controller.selectTool(s.first);
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                  const SizedBox(height: 24, child: VerticalDivider(width: 16)),
+                  for (final (t, icon, tip) in _shapes)
+                    IconButton(
+                      tooltip: tip,
+                      isSelected: tool == t,
+                      icon: Icon(icon),
+                      style: tool == t
+                          ? IconButton.styleFrom(
+                              backgroundColor: colors.secondaryContainer,
+                            )
+                          : null,
+                      onPressed: () => controller.selectTool(t),
                     ),
-                    ButtonSegment(
-                      value: StrokeTool.highlighter,
-                      icon: Icon(Icons.highlight_outlined),
-                      label: Text('Highlighter'),
+                  if (m != null && onToggleMeasure != null) ...[
+                    const SizedBox(
+                      height: 24,
+                      child: VerticalDivider(width: 16),
                     ),
-                    ButtonSegment(
-                      value: StrokeTool.eraser,
-                      icon: Icon(Icons.cleaning_services_outlined),
-                      label: Text('Eraser'),
+                    IconButton(
+                      tooltip: 'Ruler (R)',
+                      isSelected: m.kind == MeasureKind.ruler,
+                      icon: const Icon(Icons.straighten),
+                      style: m.kind == MeasureKind.ruler
+                          ? IconButton.styleFrom(
+                              backgroundColor: colors.secondaryContainer,
+                            )
+                          : null,
+                      onPressed: () => onToggleMeasure!(MeasureKind.ruler),
                     ),
-                    ButtonSegment(
-                      value: StrokeTool.select,
-                      icon: Icon(Icons.gesture),
-                      label: Text('Select'),
+                    IconButton(
+                      tooltip: 'Protractor',
+                      isSelected: m.kind == MeasureKind.protractor,
+                      icon: const Icon(Icons.architecture),
+                      style: m.kind == MeasureKind.protractor
+                          ? IconButton.styleFrom(
+                              backgroundColor: colors.secondaryContainer,
+                            )
+                          : null,
+                      onPressed: () => onToggleMeasure!(MeasureKind.protractor),
                     ),
                   ],
-                  selected: {tool},
-                  onSelectionChanged: (s) => controller.selectTool(s.first),
-                ),
-                if (showInkOptions) ...[
-                  const SizedBox(width: 16),
-                  for (final c in _palette)
-                    _ColorSwatch(
-                      color: c,
-                      selected: c.value == controller.colorValue,
-                      onTap: () => controller.selectColor(c.value),
-                    ),
-                  const SizedBox(width: 16),
-                  for (final w in widths)
-                    _WidthChip(
-                      width: w,
-                      selected: w == controller.width,
-                      color: Color(controller.colorValue),
-                      onTap: () => controller.selectWidth(w),
-                    ),
+                  if (showInkOptions) ...[
+                    const SizedBox(width: 16),
+                    for (final c in _palette)
+                      _ColorSwatch(
+                        color: c,
+                        selected: c.value == controller.colorValue,
+                        onTap: () => controller.selectColor(c.value),
+                      ),
+                    const SizedBox(width: 16),
+                    for (final w in widths)
+                      _WidthChip(
+                        width: w,
+                        selected: w == controller.width,
+                        color: Color(controller.colorValue),
+                        onTap: () => controller.selectWidth(w),
+                      ),
+                  ],
                 ],
-              ],
-            );
+              );
             },
           ),
         ),

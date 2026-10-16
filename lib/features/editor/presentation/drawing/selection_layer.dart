@@ -5,16 +5,21 @@ import 'ink_renderer.dart';
 
 /// Lasso, selection box and the strokes being moved.
 class SelectionLayer extends StatelessWidget {
-  const SelectionLayer({super.key, required this.controller});
+  const SelectionLayer({
+    super.key,
+    required this.controller,
+    this.origin = Offset.zero,
+  });
 
   final DrawingController controller;
+  final Offset origin;
 
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
       child: RepaintBoundary(
         child: CustomPaint(
-          painter: SelectionPainter(controller),
+          painter: SelectionPainter(controller, origin),
           size: Size.infinite,
         ),
       ),
@@ -23,15 +28,23 @@ class SelectionLayer extends StatelessWidget {
 }
 
 class SelectionPainter extends CustomPainter {
-  SelectionPainter(this.controller)
-      : super(repaint: Listenable.merge([controller, controller.live]));
+  SelectionPainter(this.controller, [this.origin = Offset.zero])
+    : super(repaint: Listenable.merge([controller, controller.live]));
 
   final DrawingController controller;
+  final Offset origin;
 
   static const Color _accent = Color(0xFF1E5AA8);
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.translate(origin.dx, origin.dy);
+    _paintContent(canvas);
+    canvas.restore();
+  }
+
+  void _paintContent(Canvas canvas) {
     final lasso = controller.lasso;
     if (lasso.length > 1) {
       final path = Path()..moveTo(lasso.first.x, lasso.first.y);
@@ -84,5 +97,5 @@ class SelectionPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(SelectionPainter oldDelegate) =>
-      oldDelegate.controller != controller;
+      oldDelegate.controller != controller || oldDelegate.origin != origin;
 }

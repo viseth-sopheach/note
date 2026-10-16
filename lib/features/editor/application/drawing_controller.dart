@@ -1,10 +1,12 @@
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:uuid/uuid.dart';
 
 import '../domain/command_history.dart';
 import '../domain/drawing_command.dart';
+import '../domain/shape_geometry.dart';
 import '../domain/stroke.dart';
 import '../domain/stroke_hit_test.dart';
 import '../domain/stroke_point.dart';
@@ -17,11 +19,14 @@ class _Signal extends ChangeNotifier {
   void ping() => notifyListeners();
 }
 
-enum _Mode { none, draw, erase, lasso, move }
+enum _Mode { none, draw, erase, lasso, move, shape }
 
 /// Holds the strokes of one page, the stroke being drawn and the current
 /// selection. Tool, color and width come from [settings], which can be
 /// shared by the controllers of several pages.
+///
+/// Coordinates are relative to the paper corner and may be negative or
+/// larger than the page (drawing outside the paper).
 ///
 /// Listen to this object for committed changes (stroke added, erased,
 /// moved, selection or tool changed). Listen to [live] for every accepted
@@ -45,6 +50,12 @@ class DrawingController extends ChangeNotifier {
   /// Extra area around the selection that still grabs it, in document units.
   static const double _grabSlop = 8;
 
+  /// A stroke that starts this close to a ruler edge snaps onto it.
+  static const double snapDistance = 24;
+
+  /// Returns ruler edges in this page's coordinates, or an empty list.
+  List<Segment> Function()? snapSegments;
+
   final String Function() _newId;
   final StrokeRecorder _recorder;
   final ToolSettings _settings;
@@ -66,6 +77,13 @@ class DrawingController extends ChangeNotifier {
   double _moveFromY = 0;
   double _dx = 0;
   double _dy = 0;
+
+  final List<StrokePoint> _shape = [];
+  double _shapeX0 = 0;
+  double _shapeY0 = 0;
+  double _shapeX1 = 0;
+  double _shapeY1 = 0;
+  Segment? _snap;
 
   int? _activePointer;
   int _originMs = 0;
@@ -202,8 +220,32 @@ class DrawingController extends ChangeNotifier {
     _live.ping();
   }
 
-  /// Points of the stroke being drawn; empty when idle, erasing or selecting.
-  List<StrokePoint> get livePoints => _recorder.points;
+  /// Points of the stroke or shape being drawn; empty when idle, erasing
+  /// or selecting.
+  List<StrokePoint> get livePoints =>
+      _mode == _Mode.shape ? UnmodifiableListView(_shape) : _recorder.points;
+
+  // ---- Ruler snapping ----
+
+  Segment? _findSnap(double x, double y) {
+    final provider = snapSegments;
+    if (provider == null) return null;
+    Segment? best;
+    var bestDistance = snapDistance;
+    for (final s in provider()) {
+      final d = ShapeGeometry.distanceToSegment(s, x, y);
+      if (d <= bestDistance) {
+        best = s;
+        bestDistance = d;
+      }
+    }
+    return best;
+  }
+
+  ({double x, double y}) _snapPoint(double x, double y) {
+    final s = _snap;
+    return s == null ? (x: x, y: y) : ShapeGeometry.project(s, x, y);
+  }
 
   // ---- Pointer input ----
 
@@ -235,17 +277,62 @@ class DrawingController extends ChangeNotifier {
       case StrokeTool.highlighter:
         _mode = _Mode.draw;
         _originMs = timeMs;
+        _snap = _findSnap(x, y);
+        final start = _snapPoint(x, y);
         _recorder.begin(
           id: _newId(),
           tool: _settings.tool,
           colorValue: _settings.colorValue,
           width: _settings.width,
-          first: StrokePoint(x: x, y: y, pressure: pressure, timestampMs: 0),
+          first: StrokePoint(
+            x: start.x,
+            y: start.y,
+            pressure: pressure,
+            timestampMs: 0,
+          ),
         );
         notifyListeners();
         _live.ping();
         return true;
+
+      case StrokeTool.line:
+        return _beginShape(x, y, snapToRuler: true);
+
+      case StrokeTool.rectangle:
+      case StrokeTool.ellipse:
+      case StrokeTool.triangle:
+        return _beginShape(x, y, snapToRuler: false);
     }
+  }
+
+  bool _beginShape(double x, double y, {required bool snapToRuler}) {
+    _mode = _Mode.shape;
+    _snap = snapToRuler ? _findSnap(x, y) : null;
+    final start = _snapPoint(x, y);
+    _shapeX0 = start.x;
+    _shapeY0 = start.y;
+    _updateShape(x, y);
+    notifyListeners();
+    _live.ping();
+    return true;
+  }
+
+  void _updateShape(double x, double y) {
+    final end = _snapPoint(x, y);
+    _shapeX1 = end.x;
+    _shapeY1 = end.y;
+    _shape
+      ..clear()
+      ..addAll(
+        ShapeGeometry.build(
+          _settings.tool,
+          x0: _shapeX0,
+          y0: _shapeY0,
+          x1: _shapeX1,
+          y1: _shapeY1,
+          constrain: _snap == null && HardwareKeyboard.instance.isShiftPressed,
+        ),
+      );
   }
 
   void extendStroke({
@@ -272,11 +359,15 @@ class DrawingController extends ChangeNotifier {
         _dx = x - _moveFromX;
         _dy = y - _moveFromY;
         _live.ping();
+      case _Mode.shape:
+        _updateShape(x, y);
+        _live.ping();
       case _Mode.draw:
+        final p = _snapPoint(x, y);
         final kept = _recorder.add(
           StrokePoint(
-            x: x,
-            y: y,
+            x: p.x,
+            y: p.y,
             pressure: pressure,
             timestampMs: timeMs - _originMs,
           ),
@@ -332,16 +423,42 @@ class DrawingController extends ChangeNotifier {
         notifyListeners();
         _live.ping();
 
+      case _Mode.shape:
+        _updateShape(x, y);
+        if (ShapeGeometry.isUsable(_shapeX0, _shapeY0, _shapeX1, _shapeY1)) {
+          final stroke = Stroke(
+            id: _newId(),
+            tool: StrokeTool.pen,
+            colorValue: _settings.colorValue,
+            width: _settings.width,
+            points: _shape,
+          );
+          _history.execute(AddStrokeCommand(stroke), _strokes);
+          _revision++;
+        }
+        _shape.clear();
+        _finish();
+        notifyListeners();
+        _live.ping();
+
       case _Mode.draw:
+        final p = _snapPoint(x, y);
         _recorder.add(
           StrokePoint(
-            x: x,
-            y: y,
+            x: p.x,
+            y: p.y,
             pressure: pressure,
             timestampMs: timeMs - _originMs,
           ),
         );
-        _history.execute(AddStrokeCommand(_recorder.end()), _strokes);
+        var stroke = _recorder.end();
+        if (_snap != null && stroke.points.length > 2) {
+          // Snapped to the ruler: keep only the two ends of the line.
+          stroke = stroke.copyWith(
+            points: [stroke.points.first, stroke.points.last],
+          );
+        }
+        _history.execute(AddStrokeCommand(stroke), _strokes);
         _revision++;
         _finish();
         notifyListeners();
@@ -364,6 +481,8 @@ class DrawingController extends ChangeNotifier {
       case _Mode.move:
         _dx = 0;
         _dy = 0;
+      case _Mode.shape:
+        _shape.clear();
       case _Mode.draw:
         _recorder.cancel();
       case _Mode.none:
@@ -377,6 +496,7 @@ class DrawingController extends ChangeNotifier {
   void _finish() {
     _mode = _Mode.none;
     _activePointer = null;
+    _snap = null;
   }
 
   void _beginSelect(double x, double y) {

@@ -11,38 +11,63 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../library/application/library_providers.dart';
 import '../../library/domain/paper_template.dart';
 import '../../library/presentation/dialogs/confirm_delete_dialog.dart';
+import '../../sharing/application/sharing_providers.dart';
 import '../application/autosave_controller.dart';
 import '../application/drawing_controller.dart';
 import '../application/editor_providers.dart';
+import '../application/measure_controller.dart';
 import '../application/tool_settings.dart';
 import '../domain/page_repository.dart';
 import 'dialogs/paper_template_dialog.dart';
 import 'drawing/drawing_surface.dart';
 import 'drawing/ink_layers.dart';
 import 'drawing/selection_layer.dart';
+import 'measure/measure_overlay.dart';
+import 'paper/page_metrics.dart';
 import 'paper/paper_painter.dart';
 import 'paper/paper_view.dart';
 import 'toolbar/drawing_toolbar.dart';
 import 'toolbar/page_bar.dart';
 
-class EditorScreen extends ConsumerWidget {
+class EditorScreen extends ConsumerStatefulWidget {
   const EditorScreen({super.key, required this.notebookId});
 
   final String notebookId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final notebook = ref.watch(notebookProvider(notebookId));
+  ConsumerState<EditorScreen> createState() => _EditorScreenState();
+}
+
+class _EditorScreenState extends ConsumerState<EditorScreen> {
+  final GlobalKey<_EditorCanvasState> _canvasKey =
+      GlobalKey<_EditorCanvasState>();
+
+  @override
+  Widget build(BuildContext context) {
+    final notebook = ref.watch(notebookProvider(widget.notebookId));
+    final title = notebook.value?.title;
 
     return Scaffold(
-      appBar: AppBar(title: Text(notebook.value?.title ?? 'Notebook')),
+      appBar: AppBar(
+        title: Text(title ?? 'Notebook'),
+        actions: [
+          IconButton(
+            tooltip: 'Export PDF (Ctrl+E)',
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            onPressed: title == null
+                ? null
+                : () => unawaited(_canvasKey.currentState?.exportPdf(title)),
+          ),
+        ],
+      ),
       body: notebook.when(
         data: (value) {
           if (value == null) {
             return const Center(child: Text('Notebook not found'));
           }
           return _EditorCanvas(
-            notebookId: notebookId,
+            key: _canvasKey,
+            notebookId: widget.notebookId,
             template: value.template,
           );
         },
@@ -75,7 +100,11 @@ class _PageSession {
 }
 
 class _EditorCanvas extends ConsumerStatefulWidget {
-  const _EditorCanvas({required this.notebookId, required this.template});
+  const _EditorCanvas({
+    super.key,
+    required this.notebookId,
+    required this.template,
+  });
 
   final String notebookId;
 
@@ -89,12 +118,16 @@ class _EditorCanvas extends ConsumerStatefulWidget {
 class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     with WidgetsBindingObserver {
   static const double _pad = 24;
-  static const double _gap = 16;
   static const double _margin = 48;
 
-  static double get _contentWidth => kPageSize.width + _pad * 2;
+  /// Width of the scrollable content: page cell (paper + drawable margin)
+  /// plus padding.
+  static double get _contentWidth => kCellSize.width + _pad * 2;
+
+  static double get _cellH => kCellSize.height;
 
   final ToolSettings _settings = ToolSettings();
+  final MeasureController _measure = MeasureController();
   final TransformationController _transform = TransformationController();
   final List<_PageSession> _sessions = [];
   late final PageRepository _repository;
@@ -131,6 +164,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     );
   }
 
+  /// Paper corner of a page in scene coordinates.
+  Offset _paperOrigin(int index) =>
+      Offset(_pad + kBleedX, _pad + index * _cellH + kBleedY);
+
   Future<_PageSession> _openPage(int index) async {
     final strokes = await _repository.loadStrokes(
       widget.notebookId,
@@ -143,12 +180,15 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         widget.template;
     final controller = DrawingController(settings: _settings);
     controller.replaceStrokes(strokes);
-    return _PageSession(
+    final session = _PageSession(
       index: index,
       controller: controller,
       template: template,
       autosave: _newAutosave(controller, index),
     );
+    controller.snapSegments =
+        () => _measure.edgesRelativeTo(_paperOrigin(session.index));
+    return session;
   }
 
   Future<void> _load() async {
@@ -170,6 +210,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           ..addAll(opened);
         _activeIndex = 0;
         _loading = false;
+        _fitted = false;
       });
     } catch (error, stack) {
       developer.log(
@@ -195,6 +236,36 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       _failed = false;
     });
     unawaited(_load());
+  }
+
+  // ---- Export ----
+
+  /// Saves all pages, builds a PDF and opens the share sheet / save dialog.
+  Future<void> exportPdf(String title) {
+    return _runExclusive('Could not export the PDF.', () async {
+      if (!await _flushAll()) {
+        throw StateError('Unsaved changes could not be saved.');
+      }
+      final file = await ref.read(exportServiceProvider).exportNotebookPdf(
+            notebookId: widget.notebookId,
+            title: title,
+          );
+      await ref.read(shareServiceProvider).shareFile(file, title);
+    });
+  }
+
+  // ---- Ruler and protractor ----
+
+  double _scale() => _transform.value.storage[0];
+
+  void _toggleMeasure(MeasureKind kind) {
+    final m = _transform.value;
+    final s = m.storage[0];
+    _measure.toggle(
+      kind,
+      x: (_viewportW / 2 - m.storage[12]) / s,
+      y: (_viewportH / 2 - m.storage[13]) / s,
+    );
   }
 
   // ---- Page actions ----
@@ -347,15 +418,14 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
   // ---- Scrolling, zooming, centering ----
 
-  double _pageTop(int index) => _pad + index * (kPageSize.height + _gap);
+  /// Top of the page cell (paper top is [kBleedY] lower).
+  double _pageTop(int index) => _pad + index * _cellH;
 
-  double get _contentHeight =>
-      _pad * 2 +
-      _sessions.length * kPageSize.height +
-      (_sessions.length - 1) * _gap;
+  double get _contentHeight => _pad * 2 + _sessions.length * _cellH;
 
   double _clampTy(double ty, double scale) {
-    final lowest = math.min(_margin, _viewportH - _contentHeight * scale - _margin);
+    final lowest =
+        math.min(_margin, _viewportH - _contentHeight * scale - _margin);
     return ty.clamp(lowest, _margin).toDouble();
   }
 
@@ -387,18 +457,23 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     _setTransform(scale, target, m.storage[13]);
   }
 
-  /// First layout: fit narrow screens to the page width, never above 100%.
+  /// First layout: fit the paper to the viewport width (never above 100%)
+  /// with the paper centered. The drawable margin stays reachable by panning.
   void _fitWidth() {
-    final scale = math.min(1.0, _viewportW / _contentWidth).clamp(0.25, 1.0);
+    final scale = math
+        .min(1.0, _viewportW / (kPageSize.width + _pad * 2))
+        .clamp(0.25, 1.0)
+        .toDouble();
+    final tx = (_viewportW - _contentWidth * scale) / 2;
     _fitted = true;
-    _setTransform(scale.toDouble(), 0, 0);
+    _setTransform(scale, tx, -kBleedY * scale);
   }
 
   int get _visiblePage {
     final scale = _transform.value.storage[0];
     final ty = _transform.value.storage[13];
     final sceneY = (_viewportH / 2 - ty) / scale;
-    final i = ((sceneY - _pad) / (kPageSize.height + _gap)).floor();
+    final i = ((sceneY - _pad) / _cellH).floor();
     return i.clamp(0, _sessions.length - 1);
   }
 
@@ -406,7 +481,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     if (index < 0 || index >= _sessions.length) return;
     final m = _transform.value;
     final scale = m.storage[0];
-    final ty = _clampTy(-_pageTop(index) * scale + _pad, scale);
+    final ty = _clampTy(-(_pageTop(index) + kBleedY) * scale + _pad, scale);
     _setTransform(scale, m.storage[12], ty);
     _setActive(index);
   }
@@ -450,32 +525,53 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       s.close();
     }
     _settings.dispose();
+    _measure.dispose();
     _transform.dispose();
     super.dispose();
   }
 
   // ---- UI ----
 
+  /// One page cell: the paper plus a drawable margin around it. Pointer
+  /// input and ink cover the whole cell, so you can draw on the gray area.
   Widget _buildPage(_PageSession session) {
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => _setActive(session.index),
-      child: DrawingSurface(
-        controller: session.controller,
-        allowTouch: _fingerDraws,
-        child: Stack(
-          children: [
-            PaperView(template: session.template),
-            Positioned.fill(
-              child: CommittedInkLayer(controller: session.controller),
-            ),
-            Positioned.fill(
-              child: LiveInkLayer(controller: session.controller),
-            ),
-            Positioned.fill(
-              child: SelectionLayer(controller: session.controller),
-            ),
-          ],
+    return SizedBox(
+      width: kCellSize.width,
+      height: kCellSize.height,
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => _setActive(session.index),
+        child: DrawingSurface(
+          controller: session.controller,
+          allowTouch: _fingerDraws,
+          origin: kPaperOrigin,
+          child: Stack(
+            children: [
+              Positioned(
+                left: kBleedX,
+                top: kBleedY,
+                child: PaperView(template: session.template),
+              ),
+              Positioned.fill(
+                child: CommittedInkLayer(
+                  controller: session.controller,
+                  origin: kPaperOrigin,
+                ),
+              ),
+              Positioned.fill(
+                child: LiveInkLayer(
+                  controller: session.controller,
+                  origin: kPaperOrigin,
+                ),
+              ),
+              Positioned.fill(
+                child: SelectionLayer(
+                  controller: session.controller,
+                  origin: kPaperOrigin,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -500,18 +596,28 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
     final colors = Theme.of(context).colorScheme;
 
-    final pages = Padding(
-      padding: const EdgeInsets.all(_pad),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: _gap,
-        children: [for (final s in _sessions) _buildPage(s)],
+    final pages = SizedBox(
+      width: _contentWidth,
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(_pad),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [for (final s in _sessions) _buildPage(s)],
+            ),
+          ),
+          Positioned.fill(
+            child: MeasureOverlay(controller: _measure, scale: _scale),
+          ),
+        ],
       ),
     );
 
-    final anyDrawing =
-        Listenable.merge([for (final s in _sessions) s.controller]);
+    final anyDrawing = Listenable.merge([
+      for (final s in _sessions) s.controller,
+      _measure,
+    ]);
 
     final editor = Column(
       children: [
@@ -520,6 +626,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           fingerDraws: _fingerDraws,
           onFingerDrawsChanged: (value) =>
               setState(() => _fingerDraws = value),
+          measure: _measure,
+          onToggleMeasure: _toggleMeasure,
         ),
         SizedBox(
           height: 2,
@@ -545,22 +653,24 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                       }
                     });
                   }
-                                    return Stack(
+                  return Stack(
                     children: [
                       ListenableBuilder(
                         listenable: anyDrawing,
                         child: pages,
                         builder: (context, child) {
-                          final drawing =
-                              _sessions.any((s) => s.controller.isDrawing);
+                          final busyInput =
+                              _sessions.any((s) => s.controller.isDrawing) ||
+                                  _measure.interacting;
                           return InteractiveViewer(
                             transformationController: _transform,
                             constrained: false,
+                            alignment: Alignment.topLeft,
                             minScale: 0.25,
                             maxScale: 4,
                             boundaryMargin: const EdgeInsets.all(_margin),
-                            panEnabled: !drawing,
-                            scaleEnabled: !drawing,
+                            panEnabled: !busyInput,
+                            scaleEnabled: !busyInput,
                             child: child!,
                           );
                         },
@@ -614,6 +724,13 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
             _scrollToPage(_visiblePage - 1),
         const SingleActivator(LogicalKeyboardKey.pageDown): () =>
             _scrollToPage(_visiblePage + 1),
+        const SingleActivator(LogicalKeyboardKey.keyR): () =>
+            _toggleMeasure(MeasureKind.ruler),
+        const SingleActivator(LogicalKeyboardKey.keyE, control: true): () =>
+            unawaited(exportPdf(
+              ref.read(notebookProvider(widget.notebookId)).value?.title ??
+                  'Notebook',
+            )),
       },
       child: Focus(autofocus: true, child: editor),
     );

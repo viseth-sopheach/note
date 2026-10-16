@@ -3,11 +3,12 @@ import 'package:flutter/widgets.dart';
 
 import '../../application/drawing_controller.dart';
 
-/// Captures mouse, stylus and (optionally) finger input on the page and
-/// sends it to [controller].
+/// Captures mouse, stylus and (optionally) finger input and sends it to
+/// [controller].
 ///
-/// Place this INSIDE the zoomed and panned content. Pointer positions are
-/// then already in document coordinates, at any zoom level.
+/// Place this INSIDE the zoomed and panned content. [origin] is where the
+/// paper corner is inside this widget, so points are reported relative to
+/// the paper (negative values are outside the paper).
 /// When [allowTouch] is false, finger touch is ignored so it can pan and
 /// zoom the page. When it is true, one finger draws and a second finger
 /// cancels the stroke so pinch zoom still works.
@@ -17,11 +18,13 @@ class DrawingSurface extends StatefulWidget {
     required this.controller,
     required this.child,
     this.allowTouch = false,
+    this.origin = Offset.zero,
   });
 
   final DrawingController controller;
   final Widget child;
   final bool allowTouch;
+  final Offset origin;
 
   @override
   State<DrawingSurface> createState() => _DrawingSurfaceState();
@@ -32,6 +35,8 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   int? _drawingPointer;
 
   DrawingController get _c => widget.controller;
+
+  Offset _local(PointerEvent e) => e.localPosition - widget.origin;
 
   bool _isDrawingDevice(PointerEvent e) =>
       e.kind == PointerDeviceKind.mouse ||
@@ -62,31 +67,36 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
         (e.buttons & kPrimaryButton) == 0) {
       return;
     }
+    final p = _local(e);
     final started = _c.beginStroke(
       pointer: e.pointer,
-      x: e.localPosition.dx,
-      y: e.localPosition.dy,
+      x: p.dx,
+      y: p.dy,
       pressure: _pressure(e),
       timeMs: e.timeStamp.inMilliseconds,
     );
     if (started) _drawingPointer = e.pointer;
   }
 
-  void _move(PointerMoveEvent e) => _c.extendStroke(
-        pointer: e.pointer,
-        x: e.localPosition.dx,
-        y: e.localPosition.dy,
-        pressure: _pressure(e),
-        timeMs: e.timeStamp.inMilliseconds,
-      );
+  void _move(PointerMoveEvent e) {
+    final p = _local(e);
+    _c.extendStroke(
+      pointer: e.pointer,
+      x: p.dx,
+      y: p.dy,
+      pressure: _pressure(e),
+      timeMs: e.timeStamp.inMilliseconds,
+    );
+  }
 
   void _up(PointerUpEvent e) {
     _touches.remove(e.pointer);
     if (e.pointer == _drawingPointer) _drawingPointer = null;
+    final p = _local(e);
     _c.endStroke(
       pointer: e.pointer,
-      x: e.localPosition.dx,
-      y: e.localPosition.dy,
+      x: p.dx,
+      y: p.dy,
       pressure: _pressure(e),
       timeMs: e.timeStamp.inMilliseconds,
     );
