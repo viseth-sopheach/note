@@ -3,8 +3,6 @@ import 'package:drift/drift.dart';
 import '../../domain/name_rules.dart';
 import '../../domain/paper_template.dart';
 
-/// Stores a [DateTime] as microseconds since the epoch: exact round-trip
-/// and cheap to sort.
 final class EpochMicrosConverter extends TypeConverter<DateTime, int> {
   const EpochMicrosConverter();
 
@@ -47,6 +45,7 @@ class NotebookRows extends Table {
   TextColumn get template => textEnum<PaperTemplate>()();
   IntColumn get createdAt => integer().map(const EpochMicrosConverter())();
   IntColumn get updatedAt => integer().map(const EpochMicrosConverter())();
+  TextColumn get pdfPath => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

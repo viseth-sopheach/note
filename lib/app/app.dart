@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/settings/application/settings_providers.dart';
 import '../features/settings/domain/app_theme_mode.dart';
+import '../features/sharing/presentation/share_intent_listener.dart';
 import 'router.dart';
 import 'theme.dart';
 
@@ -26,6 +27,7 @@ class NoteApp extends ConsumerWidget {
       themeMode: _toThemeMode(mode),
       routerConfig: appRouter,
       debugShowCheckedModeBanner: false,
+      builder: (context, child) => ShareIntentListener(child: child!),
     );
   }
 }

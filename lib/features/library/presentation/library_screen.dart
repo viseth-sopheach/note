@@ -19,6 +19,7 @@ import 'widgets/empty_library_view.dart';
 import 'widgets/folder_card.dart';
 import 'widgets/item_actions_menu.dart';
 import 'widgets/notebook_card.dart';
+import '../../sharing/application/sharing_providers.dart';
 
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key, this.folderId});
@@ -39,7 +40,9 @@ class LibraryScreen extends ConsumerWidget {
 
     final folders = ref.watch(foldersProvider(folderId));
     final notebooks = ref.watch(notebooksProvider(folderId));
-    final title = _isRoot ? 'Viseth\'s Library' : (folderAsync?.value?.name ?? '');
+    final title = _isRoot
+        ? 'Viseth\'s Library'
+        : (folderAsync?.value?.name ?? '');
 
     return CallbackShortcuts(
       bindings: {
@@ -49,7 +52,8 @@ class LibraryScreen extends ConsumerWidget {
           LogicalKeyboardKey.keyN,
           control: true,
           shift: true,
-        ): () => _createFolder(context, ref),
+        ): () =>
+            _createFolder(context, ref),
       },
       child: Focus(
         autofocus: true,
@@ -110,7 +114,9 @@ class LibraryScreen extends ConsumerWidget {
     if (result == null || !context.mounted) return;
 
     try {
-      final notebook = await ref.read(libraryActionsProvider).createNotebook(
+      final notebook = await ref
+          .read(libraryActionsProvider)
+          .createNotebook(
             title: result.title,
             coverColorValue: result.coverColorValue,
             template: result.template,
@@ -186,6 +192,9 @@ class LibraryScreen extends ConsumerWidget {
           () => actions.deleteFolder(folder.id),
         );
       case ItemAction.move:
+      case ItemAction.export:
+      case ItemAction.drive:
+      case ItemAction.telegram:
         break; // Moving folders is not supported yet.
     }
   }
@@ -229,7 +238,8 @@ class LibraryScreen extends ConsumerWidget {
         final confirmed = await ConfirmDeleteDialog.show(
           context,
           title: 'Delete notebook?',
-          message: '"${notebook.title}" will be deleted. This cannot be undone.',
+          message:
+              '"${notebook.title}" will be deleted. This cannot be undone.',
         );
         if (!confirmed || !context.mounted) return;
         await _guard(
@@ -237,6 +247,40 @@ class LibraryScreen extends ConsumerWidget {
           'Could not delete the notebook.',
           () => actions.deleteNotebook(notebook.id),
         );
+      case ItemAction.export:
+        await _guard(context, 'Could not export the notebook.', () async {
+          final file = await ref
+              .read(exportServiceProvider)
+              .exportNotebookPdf(
+                notebookId: notebook.id,
+                title: notebook.title,
+              );
+          await ref.read(shareServiceProvider).shareFile(file, notebook.title);
+        });
+      case ItemAction.drive:
+        await _guard(context, 'Could not upload to Google Drive.', () async {
+          final file = await ref
+              .read(exportServiceProvider)
+              .exportNotebookPdf(
+                notebookId: notebook.id,
+                title: notebook.title,
+              );
+          await ref.read(driveServiceProvider).upload(file);
+          if (context.mounted) _toast(context, 'Uploaded to Google Drive');
+        });
+      case ItemAction.telegram:
+        await _guard(context, 'Could not send to Telegram.', () async {
+          final file = await ref
+              .read(exportServiceProvider)
+              .exportNotebookPdf(
+                notebookId: notebook.id,
+                title: notebook.title,
+              );
+          await ref
+              .read(telegramServiceProvider)
+              .sendDocument(file, caption: notebook.title);
+          if (context.mounted) _toast(context, 'Sent to Telegram');
+        });
     }
   }
 
@@ -260,16 +304,17 @@ class LibraryScreen extends ConsumerWidget {
     Object error,
     StackTrace stack,
   ) {
-    developer.log(
-      logMessage,
-      name: 'library',
-      error: error,
-      stackTrace: stack,
-    );
+    developer.log(logMessage, name: 'library', error: error, stackTrace: stack);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(userMessage)));
+  }
+
+  void _toast(BuildContext context, String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -319,6 +364,8 @@ class _LibraryContent extends StatelessWidget {
               itemBuilder: (context, index) {
                 final folder = folders[index];
                 return ItemActionsMenu(
+                  canMove: true,
+                  canShare: true,
                   onSelected: (action) => onFolderAction(folder, action),
                   child: FolderCard(
                     folder: folder,

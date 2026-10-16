@@ -96,6 +96,7 @@ class DriftLibraryRepository implements LibraryRepository {
     required int coverColorValue,
     required PaperTemplate template,
     String? folderId,
+    String? pdfPath,
   }) async {
     final cleanTitle = _validated(title, 'title');
     return _db.transaction(() async {
@@ -107,6 +108,7 @@ class DriftLibraryRepository implements LibraryRepository {
         folderId: folderId,
         coverColorValue: coverColorValue,
         template: template,
+        pdfPath: pdfPath,
         createdAt: now,
         updatedAt: now,
       );
@@ -119,6 +121,7 @@ class DriftLibraryRepository implements LibraryRepository {
               createdAt: notebook.createdAt,
               updatedAt: notebook.updatedAt,
               folderId: Value(folderId),
+              pdfPath: Value(pdfPath),
             ),
           );
       return notebook;
@@ -211,6 +214,7 @@ extension on NotebookRow {
         folderId: folderId,
         coverColorValue: coverColorValue,
         template: template,
+        pdfPath: pdfPath,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );

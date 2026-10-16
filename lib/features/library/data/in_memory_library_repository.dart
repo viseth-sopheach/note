@@ -46,6 +46,7 @@ class InMemoryLibraryRepository implements LibraryRepository {
     required int coverColorValue,
     required PaperTemplate template,
     String? folderId,
+    String? pdfPath,
   }) async {
     if (folderId != null) _requireFolder(folderId);
     final now = _clock();
@@ -55,6 +56,7 @@ class InMemoryLibraryRepository implements LibraryRepository {
       folderId: folderId,
       coverColorValue: coverColorValue,
       template: template,
+      pdfPath: pdfPath,
       createdAt: now,
       updatedAt: now,
     );

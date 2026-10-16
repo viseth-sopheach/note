@@ -394,6 +394,17 @@ class $NotebookRowsTable extends NotebookRows
         type: DriftSqlType.int,
         requiredDuringInsert: true,
       ).withConverter<DateTime>($NotebookRowsTable.$converterupdatedAt);
+  static const VerificationMeta _pdfPathMeta = const VerificationMeta(
+    'pdfPath',
+  );
+  @override
+  late final GeneratedColumn<String> pdfPath = GeneratedColumn<String>(
+    'pdf_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -403,6 +414,7 @@ class $NotebookRowsTable extends NotebookRows
     template,
     createdAt,
     updatedAt,
+    pdfPath,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -445,6 +457,12 @@ class $NotebookRowsTable extends NotebookRows
       );
     } else if (isInserting) {
       context.missing(_coverColorValueMeta);
+    }
+    if (data.containsKey('pdf_path')) {
+      context.handle(
+        _pdfPathMeta,
+        pdfPath.isAcceptableOrUnknown(data['pdf_path']!, _pdfPathMeta),
+      );
     }
     return context;
   }
@@ -489,6 +507,10 @@ class $NotebookRowsTable extends NotebookRows
           data['${effectivePrefix}updated_at'],
         )!,
       ),
+      pdfPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pdf_path'],
+      ),
     );
   }
 
@@ -513,6 +535,7 @@ class NotebookRow extends DataClass implements Insertable<NotebookRow> {
   final PaperTemplate template;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? pdfPath;
   const NotebookRow({
     required this.id,
     required this.title,
@@ -521,6 +544,7 @@ class NotebookRow extends DataClass implements Insertable<NotebookRow> {
     required this.template,
     required this.createdAt,
     required this.updatedAt,
+    this.pdfPath,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -546,6 +570,9 @@ class NotebookRow extends DataClass implements Insertable<NotebookRow> {
         $NotebookRowsTable.$converterupdatedAt.toSql(updatedAt),
       );
     }
+    if (!nullToAbsent || pdfPath != null) {
+      map['pdf_path'] = Variable<String>(pdfPath);
+    }
     return map;
   }
 
@@ -560,6 +587,9 @@ class NotebookRow extends DataClass implements Insertable<NotebookRow> {
       template: Value(template),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      pdfPath: pdfPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pdfPath),
     );
   }
 
@@ -578,6 +608,7 @@ class NotebookRow extends DataClass implements Insertable<NotebookRow> {
       ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      pdfPath: serializer.fromJson<String?>(json['pdfPath']),
     );
   }
   @override
@@ -593,6 +624,7 @@ class NotebookRow extends DataClass implements Insertable<NotebookRow> {
       ),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'pdfPath': serializer.toJson<String?>(pdfPath),
     };
   }
 
@@ -604,6 +636,7 @@ class NotebookRow extends DataClass implements Insertable<NotebookRow> {
     PaperTemplate? template,
     DateTime? createdAt,
     DateTime? updatedAt,
+    Value<String?> pdfPath = const Value.absent(),
   }) => NotebookRow(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -612,6 +645,7 @@ class NotebookRow extends DataClass implements Insertable<NotebookRow> {
     template: template ?? this.template,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    pdfPath: pdfPath.present ? pdfPath.value : this.pdfPath,
   );
   NotebookRow copyWithCompanion(NotebookRowsCompanion data) {
     return NotebookRow(
@@ -624,6 +658,7 @@ class NotebookRow extends DataClass implements Insertable<NotebookRow> {
       template: data.template.present ? data.template.value : this.template,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      pdfPath: data.pdfPath.present ? data.pdfPath.value : this.pdfPath,
     );
   }
 
@@ -636,7 +671,8 @@ class NotebookRow extends DataClass implements Insertable<NotebookRow> {
           ..write('coverColorValue: $coverColorValue, ')
           ..write('template: $template, ')
           ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('pdfPath: $pdfPath')
           ..write(')'))
         .toString();
   }
@@ -650,6 +686,7 @@ class NotebookRow extends DataClass implements Insertable<NotebookRow> {
     template,
     createdAt,
     updatedAt,
+    pdfPath,
   );
   @override
   bool operator ==(Object other) =>
@@ -661,7 +698,8 @@ class NotebookRow extends DataClass implements Insertable<NotebookRow> {
           other.coverColorValue == this.coverColorValue &&
           other.template == this.template &&
           other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.pdfPath == this.pdfPath);
 }
 
 class NotebookRowsCompanion extends UpdateCompanion<NotebookRow> {
@@ -672,6 +710,7 @@ class NotebookRowsCompanion extends UpdateCompanion<NotebookRow> {
   final Value<PaperTemplate> template;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<String?> pdfPath;
   final Value<int> rowid;
   const NotebookRowsCompanion({
     this.id = const Value.absent(),
@@ -681,6 +720,7 @@ class NotebookRowsCompanion extends UpdateCompanion<NotebookRow> {
     this.template = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.pdfPath = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   NotebookRowsCompanion.insert({
@@ -691,6 +731,7 @@ class NotebookRowsCompanion extends UpdateCompanion<NotebookRow> {
     required PaperTemplate template,
     required DateTime createdAt,
     required DateTime updatedAt,
+    this.pdfPath = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        title = Value(title),
@@ -706,6 +747,7 @@ class NotebookRowsCompanion extends UpdateCompanion<NotebookRow> {
     Expression<String>? template,
     Expression<int>? createdAt,
     Expression<int>? updatedAt,
+    Expression<String>? pdfPath,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -716,6 +758,7 @@ class NotebookRowsCompanion extends UpdateCompanion<NotebookRow> {
       if (template != null) 'template': template,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (pdfPath != null) 'pdf_path': pdfPath,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -728,6 +771,7 @@ class NotebookRowsCompanion extends UpdateCompanion<NotebookRow> {
     Value<PaperTemplate>? template,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
+    Value<String?>? pdfPath,
     Value<int>? rowid,
   }) {
     return NotebookRowsCompanion(
@@ -738,6 +782,7 @@ class NotebookRowsCompanion extends UpdateCompanion<NotebookRow> {
       template: template ?? this.template,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      pdfPath: pdfPath ?? this.pdfPath,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -772,6 +817,9 @@ class NotebookRowsCompanion extends UpdateCompanion<NotebookRow> {
         $NotebookRowsTable.$converterupdatedAt.toSql(updatedAt.value),
       );
     }
+    if (pdfPath.present) {
+      map['pdf_path'] = Variable<String>(pdfPath.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -788,6 +836,7 @@ class NotebookRowsCompanion extends UpdateCompanion<NotebookRow> {
           ..write('template: $template, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('pdfPath: $pdfPath, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1678,6 +1727,7 @@ typedef $$NotebookRowsTableCreateCompanionBuilder =
       required PaperTemplate template,
       required DateTime createdAt,
       required DateTime updatedAt,
+      Value<String?> pdfPath,
       Value<int> rowid,
     });
 typedef $$NotebookRowsTableUpdateCompanionBuilder =
@@ -1689,6 +1739,7 @@ typedef $$NotebookRowsTableUpdateCompanionBuilder =
       Value<PaperTemplate> template,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
+      Value<String?> pdfPath,
       Value<int> rowid,
     });
 
@@ -1774,6 +1825,11 @@ class $$NotebookRowsTableFilterComposer
         column: $table.updatedAt,
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
+
+  ColumnFilters<String> get pdfPath => $composableBuilder(
+    column: $table.pdfPath,
+    builder: (column) => ColumnFilters(column),
+  );
 
   $$FolderRowsTableFilterComposer get folderId {
     final $$FolderRowsTableFilterComposer composer = $composerBuilder(
@@ -1863,6 +1919,11 @@ class $$NotebookRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get pdfPath => $composableBuilder(
+    column: $table.pdfPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$FolderRowsTableOrderingComposer get folderId {
     final $$FolderRowsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -1915,6 +1976,9 @@ class $$NotebookRowsTableAnnotationComposer
 
   GeneratedColumnWithTypeConverter<DateTime, int> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get pdfPath =>
+      $composableBuilder(column: $table.pdfPath, builder: (column) => column);
 
   $$FolderRowsTableAnnotationComposer get folderId {
     final $$FolderRowsTableAnnotationComposer composer = $composerBuilder(
@@ -2000,6 +2064,7 @@ class $$NotebookRowsTableTableManager
                 Value<PaperTemplate> template = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<String?> pdfPath = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NotebookRowsCompanion(
                 id: id,
@@ -2009,6 +2074,7 @@ class $$NotebookRowsTableTableManager
                 template: template,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                pdfPath: pdfPath,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2020,6 +2086,7 @@ class $$NotebookRowsTableTableManager
                 required PaperTemplate template,
                 required DateTime createdAt,
                 required DateTime updatedAt,
+                Value<String?> pdfPath = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NotebookRowsCompanion.insert(
                 id: id,
@@ -2029,6 +2096,7 @@ class $$NotebookRowsTableTableManager
                 template: template,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                pdfPath: pdfPath,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

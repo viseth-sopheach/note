@@ -1,8 +1,11 @@
+import '../../sharing/application/drive_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/settings_providers.dart';
 import '../domain/app_theme_mode.dart';
+import '../../sharing/application/sharing_providers.dart';
+import 'telegram_dialog.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -51,6 +54,21 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 24),
+                    const SizedBox(height: 24),
+          Text('Integrations', style: textTheme.titleMedium),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.send_outlined),
+            title: const Text('Telegram bot'),
+            onTap: () => TelegramDialog.show(context),
+          ),
+          if (DriveService.isSupported)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.logout),
+              title: const Text('Sign out of Google Drive'),
+              onTap: () => ref.read(driveServiceProvider).signOut(),
+            ),
           const Divider(),
           Text('About', style: textTheme.titleMedium),
           ListTile(

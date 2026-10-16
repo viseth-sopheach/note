@@ -9,11 +9,11 @@ void main() {
 
   setUpAll(() => verifier = SchemaVerifier(GeneratedHelper()));
 
-  for (final from in [1, 2]) {
-    test('upgrade from v$from to v3 matches the current schema', () async {
+  for (final from in [1, 2, 3]) {
+    test('upgrade from v$from to v4 matches the current schema', () async {
       final schema = await verifier.schemaAt(from);
       final db = AppDatabase(schema.newConnection());
-      await verifier.migrateAndValidate(db, 3);
+      await verifier.migrateAndValidate(db, 4);
       await db.close();
     });
   }

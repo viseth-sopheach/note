@@ -136,5 +136,14 @@ void runLibraryRepositoryContract(
       expect(() => repo.deleteNotebook('nope'), throwsStateError);
       expect(() => repo.deleteFolder('nope'), throwsStateError);
     });
+    test('stores the pdf path', () async {
+      final notebook = await repo.createNotebook(
+        title: 'Doc',
+        coverColorValue: 0xFF000000,
+        template: PaperTemplate.blank,
+        pdfPath: '/data/pdfs/a.pdf',
+      );
+      expect((await repo.getNotebook(notebook.id))?.pdfPath, '/data/pdfs/a.pdf');
+    });
   });
 }

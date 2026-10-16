@@ -9,6 +9,7 @@ final class Notebook {
     required this.createdAt,
     required this.updatedAt,
     this.folderId,
+    this.pdfPath,
   });
 
   final String id;
@@ -16,6 +17,9 @@ final class Notebook {
   final String? folderId;
   final int coverColorValue;
   final PaperTemplate template;
+
+  /// Absolute path of the imported PDF, or null for a normal notebook.
+  final String? pdfPath;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -31,18 +35,18 @@ final class Notebook {
         folderId: folderId,
         coverColorValue: coverColorValue ?? this.coverColorValue,
         template: template ?? this.template,
+        pdfPath: pdfPath,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );
 
-  /// A separate method because `copyWith(folderId: null)` cannot tell
-  /// "keep the current value" apart from "set to null (root)".
   Notebook movedTo(String? folderId, {required DateTime updatedAt}) => Notebook(
         id: id,
         title: title,
         folderId: folderId,
         coverColorValue: coverColorValue,
         template: template,
+        pdfPath: pdfPath,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );
@@ -55,6 +59,7 @@ final class Notebook {
       other.folderId == folderId &&
       other.coverColorValue == coverColorValue &&
       other.template == template &&
+      other.pdfPath == pdfPath &&
       other.createdAt == createdAt &&
       other.updatedAt == updatedAt;
 
@@ -65,6 +70,7 @@ final class Notebook {
         folderId,
         coverColorValue,
         template,
+        pdfPath,
         createdAt,
         updatedAt,
       );

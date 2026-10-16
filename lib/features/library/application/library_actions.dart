@@ -14,18 +14,19 @@ class LibraryActions {
   final Ref _ref;
 
   LibraryRepository get _repository => _ref.read(libraryRepositoryProvider);
-
   Future<Notebook> createNotebook({
     required String title,
     required int coverColorValue,
     required PaperTemplate template,
     String? folderId,
+    String? pdfPath,
   }) async {
     final notebook = await _repository.createNotebook(
       title: title.trim(),
       coverColorValue: coverColorValue,
       template: template,
       folderId: folderId,
+      pdfPath: pdfPath,
     );
     _refresh();
     return notebook;

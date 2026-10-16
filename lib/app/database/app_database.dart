@@ -14,7 +14,7 @@ class AppDatabase extends _$AppDatabase {
       : super(executor ?? driftDatabase(name: 'quill_notes'));
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -26,9 +26,11 @@ class AppDatabase extends _$AppDatabase {
           from2To3: (migrator, schema) async {
             await migrator.addColumn(schema.pages, schema.pages.template);
           },
+          from3To4: (migrator, schema) async {
+            await migrator.addColumn(schema.notebooks, schema.notebooks.pdfPath);
+          },
         ),
         beforeOpen: (details) async {
-          // Required for ON DELETE CASCADE; SQLite has it off by default.
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );
