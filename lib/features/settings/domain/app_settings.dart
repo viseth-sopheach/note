@@ -23,6 +23,7 @@ final class AppSettings {
     this.undoLimit = 200,
     this.confirmDeletePage = true,
     this.rememberPosition = true,
+    this.shapeRecognition = true,
   });
 
   static const List<double> penWidths = [1, 2, 4, 6];
@@ -53,6 +54,7 @@ final class AppSettings {
   final int undoLimit;
   final bool confirmDeletePage;
   final bool rememberPosition;
+  final bool shapeRecognition;
 
   AppSettings copyWith({
     AppThemeMode? themeMode,
@@ -72,6 +74,7 @@ final class AppSettings {
     int? undoLimit,
     bool? confirmDeletePage,
     bool? rememberPosition,
+    bool? shapeRecognition,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     accentColorValue: accentColorValue ?? this.accentColorValue,
@@ -90,6 +93,7 @@ final class AppSettings {
     undoLimit: undoLimit ?? this.undoLimit,
     confirmDeletePage: confirmDeletePage ?? this.confirmDeletePage,
     rememberPosition: rememberPosition ?? this.rememberPosition,
+    shapeRecognition: shapeRecognition ?? this.shapeRecognition,
   );
 
   /// Returns a copy with every value forced into its supported range:

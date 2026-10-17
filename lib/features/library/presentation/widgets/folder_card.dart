@@ -10,17 +10,29 @@ class FolderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card.outlined(
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
-              Icon(
-                Icons.folder_outlined,
-                color: Theme.of(context).colorScheme.primary,
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.folder_outlined,
+                  size: 20,
+                  color: colors.onPrimaryContainer,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -28,9 +40,12 @@ class FolderCard extends StatelessWidget {
                   folder.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall,
+                  style: textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
+              Icon(Icons.chevron_right, size: 20, color: colors.outline),
             ],
           ),
         ),

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/routes.dart';
 import '../../settings/application/settings_providers.dart';
 import '../../settings/domain/layout_density.dart';
+import '../../sharing/application/sharing_providers.dart';
 import '../application/library_actions.dart';
 import '../application/library_providers.dart';
 import '../domain/folder.dart';
@@ -17,11 +18,8 @@ import 'dialogs/move_notebook_dialog.dart';
 import 'dialogs/new_folder_dialog.dart';
 import 'dialogs/new_notebook_dialog.dart';
 import 'dialogs/rename_dialog.dart';
-import 'widgets/empty_library_view.dart';
-import 'widgets/folder_card.dart';
 import 'widgets/item_actions_menu.dart';
-import 'widgets/notebook_card.dart';
-import '../../sharing/application/sharing_providers.dart';
+import 'widgets/library_content.dart';
 
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key, this.folderId});
@@ -33,6 +31,7 @@ class LibraryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Critical: Watch folder metadata if inside a subfolder, and handle 404/not found states.
     final folderAsync = _isRoot ? null : ref.watch(folderProvider(folderId!));
     if (folderAsync != null &&
         folderAsync.hasValue &&
@@ -89,7 +88,7 @@ class LibraryScreen extends ConsumerWidget {
           ),
           body: folders.when(
             data: (folderList) => notebooks.when(
-              data: (notebookList) => _LibraryContent(
+              data: (notebookList) => LibraryContent(
                 isRoot: _isRoot,
                 folders: folderList,
                 notebooks: notebookList,
@@ -328,116 +327,6 @@ class LibraryScreen extends ConsumerWidget {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
-  }
-}
-
-class _LibraryContent extends StatelessWidget {
-  const _LibraryContent({
-    required this.isRoot,
-    required this.folders,
-    required this.notebooks,
-    required this.showCovers,
-    required this.compact,
-    required this.onNewNotebook,
-    required this.onNewFolder,
-    required this.onFolderAction,
-    required this.onNotebookAction,
-  });
-
-  final bool isRoot;
-  final List<Folder> folders;
-  final List<Notebook> notebooks;
-  final bool showCovers;
-  final bool compact;
-  final VoidCallback onNewNotebook;
-  final VoidCallback onNewFolder;
-  final void Function(Folder folder, ItemAction action) onFolderAction;
-  final void Function(Notebook notebook, ItemAction action) onNotebookAction;
-
-  @override
-  Widget build(BuildContext context) {
-    if (folders.isEmpty && notebooks.isEmpty) {
-      return EmptyLibraryView(
-        isRoot: isRoot,
-        onNewNotebook: onNewNotebook,
-        onNewFolder: onNewFolder,
-      );
-    }
-
-    return CustomScrollView(
-      slivers: [
-        if (folders.isNotEmpty) ...[
-          const _SectionHeader('Folders'),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            sliver: SliverGrid.builder(
-              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 240,
-                mainAxisExtent: compact ? 48 : 56,
-                mainAxisSpacing: compact ? 8 : 12,
-                crossAxisSpacing: compact ? 8 : 12,
-              ),
-              itemCount: folders.length,
-              itemBuilder: (context, index) {
-                final folder = folders[index];
-                return ItemActionsMenu(
-                  canMove: true,
-                  canShare: true,
-                  onSelected: (action) => onFolderAction(folder, action),
-                  child: FolderCard(
-                    folder: folder,
-                    onTap: () => context.push(AppRoutes.folder(folder.id)),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-        if (notebooks.isNotEmpty) ...[
-          const _SectionHeader('Notebooks'),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-            sliver: SliverGrid.builder(
-              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 180,
-                childAspectRatio: 0.7,
-                mainAxisSpacing: compact ? 10 : 16,
-                crossAxisSpacing: compact ? 10 : 16,
-              ),
-              itemCount: notebooks.length,
-              itemBuilder: (context, index) {
-                final notebook = notebooks[index];
-                return ItemActionsMenu(
-                  canMove: true,
-                  onSelected: (action) => onNotebookAction(notebook, action),
-                  child: NotebookCard(
-                    notebook: notebook,
-                    showCover: showCovers,
-                    onTap: () => context.push(AppRoutes.notebook(notebook.id)),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-        child: Text(label, style: Theme.of(context).textTheme.titleMedium),
-      ),
-    );
   }
 }
 

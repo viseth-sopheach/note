@@ -170,6 +170,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       penWidth: saved.penWidth,
       highlighterColorValue: saved.highlighterColorValue,
       highlighterWidth: saved.highlighterWidth,
+      shapeRecognition: saved.shapeRecognition,
     );
     unawaited(_load());
   }
@@ -200,6 +201,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       undoLimit: ref.read(appSettingsProvider).undoLimit,
     );
     controller.replaceStrokes(strokes);
+    controller.onShapeRecognized = () => unawaited(HapticFeedback.selectionClick());
     final session = _PageSession(
       index: index,
       controller: controller,

@@ -18,39 +18,63 @@ class EmptyLibraryView extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
 
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.menu_book_outlined, size: 64, color: colors.outline),
-          const SizedBox(height: 16),
-          Text(
-            isRoot ? 'No notebooks yet' : 'This folder is empty',
-            style: textTheme.titleMedium,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Create a notebook to start writing.',
-            style: textTheme.bodyMedium?.copyWith(color: colors.outline),
-          ),
-          const SizedBox(height: 24),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            alignment: WrapAlignment.center,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              FilledButton.icon(
-                onPressed: onNewNotebook,
-                icon: const Icon(Icons.add),
-                label: const Text('New notebook'),
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: colors.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.menu_book_outlined,
+                  size: 40,
+                  color: colors.onPrimaryContainer,
+                ),
               ),
-              OutlinedButton.icon(
-                onPressed: onNewFolder,
-                icon: const Icon(Icons.create_new_folder_outlined),
-                label: const Text('New folder'),
+              const SizedBox(height: 24),
+              Text(
+                isRoot ? 'No notebooks yet' : 'This folder is empty',
+                style: textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Create a notebook to start writing.',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 28),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.center,
+                children: [
+                  FilledButton.icon(
+                    onPressed: onNewNotebook,
+                    icon: const Icon(Icons.add),
+                    label: const Text('New notebook'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onNewFolder,
+                    icon: const Icon(Icons.create_new_folder_outlined),
+                    label: const Text('New folder'),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

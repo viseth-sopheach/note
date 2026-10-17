@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
@@ -7,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../domain/command_history.dart';
 import '../domain/drawing_command.dart';
 import '../domain/shape_geometry.dart';
+import '../domain/shape_recognizer.dart';
 import '../domain/stroke.dart';
 import '../domain/stroke_hit_test.dart';
 import '../domain/stroke_point.dart';
@@ -37,6 +39,7 @@ class DrawingController extends ChangeNotifier {
     double minDistance = 0.5,
     ToolSettings? settings,
     int undoLimit = 200,
+    this.holdDuration = const Duration(milliseconds: 1000),
   }) : _newId = idGenerator ?? (() => const Uuid().v4()),
        _recorder = StrokeRecorder(minDistance: minDistance),
        _history = CommandHistory(limit: undoLimit),
@@ -54,6 +57,16 @@ class DrawingController extends ChangeNotifier {
 
   /// A stroke that starts this close to a ruler edge snaps onto it.
   static const double snapDistance = 24;
+
+  /// Pointer jitter below this distance (document units) still counts as
+  /// holding still.
+  static const double holdTolerance = 3;
+
+  /// How long the pointer must rest at the end of a stroke to snap it.
+  final Duration holdDuration;
+
+  /// Called once when a held stroke was turned into a clean shape.
+  void Function()? onShapeRecognized;
 
   /// Returns ruler edges in this page's coordinates, or an empty list.
   List<Segment> Function()? snapSegments;
@@ -86,6 +99,14 @@ class DrawingController extends ChangeNotifier {
   double _shapeX1 = 0;
   double _shapeY1 = 0;
   Segment? _snap;
+
+  // Hold-to-snap state of the stroke being drawn.
+  Timer? _holdTimer;
+  bool _holdArmed = false;
+  double _holdX = 0;
+  double _holdY = 0;
+  int _holdCount = 0;
+  RecognizedShape? _recognized;
 
   int? _activePointer;
   int _originMs = 0;
@@ -124,6 +145,9 @@ class DrawingController extends ChangeNotifier {
   Listenable get live => _live;
 
   bool get isDrawing => _activePointer != null;
+
+  /// Shape the held stroke was snapped to, or null while nothing snapped.
+  ShapeKind? get recognizedShape => _recognized?.kind;
 
   List<Stroke> get strokes => UnmodifiableListView(_strokes);
 
@@ -223,9 +247,14 @@ class DrawingController extends ChangeNotifier {
   }
 
   /// Points of the stroke or shape being drawn; empty when idle, erasing
-  /// or selecting.
-  List<StrokePoint> get livePoints =>
-      _mode == _Mode.shape ? UnmodifiableListView(_shape) : _recorder.points;
+  /// or selecting. Shows the clean shape once a held stroke snapped.
+  List<StrokePoint> get livePoints {
+    final snapped = _recognized;
+    if (snapped != null) return UnmodifiableListView(snapped.points);
+    return _mode == _Mode.shape
+        ? UnmodifiableListView(_shape)
+        : _recorder.points;
+  }
 
   // ---- Ruler snapping ----
 
@@ -247,6 +276,60 @@ class DrawingController extends ChangeNotifier {
   ({double x, double y}) _snapPoint(double x, double y) {
     final s = _snap;
     return s == null ? (x: x, y: y) : ShapeGeometry.project(s, x, y);
+  }
+
+  // ---- Hold to snap ----
+
+  void _armHold(double x, double y) {
+    _holdArmed = _settings.shapeRecognition && _snap == null;
+    if (!_holdArmed) return;
+    _holdX = x;
+    _holdY = y;
+    _holdCount = _recorder.points.length;
+    _restartHoldTimer();
+  }
+
+  /// Restarts the timer only when the pointer really moved, so jitter of a
+  /// resting hand or stylus does not prevent the snap.
+  void _trackHold(double x, double y) {
+    if (!_holdArmed) return;
+    final dx = x - _holdX;
+    final dy = y - _holdY;
+    if (dx * dx + dy * dy <= holdTolerance * holdTolerance) return;
+    _holdX = x;
+    _holdY = y;
+    _holdCount = _recorder.points.length;
+    _restartHoldTimer();
+  }
+
+  void _restartHoldTimer() {
+    _holdTimer?.cancel();
+    _holdTimer = Timer(holdDuration, _onHold);
+  }
+
+  void _onHold() {
+    _holdTimer = null;
+    if (_mode != _Mode.draw || !isDrawing || _recognized != null) return;
+
+    // Points recorded while resting are jitter, not part of the shape.
+    final points = _recorder.points;
+    final count = _holdCount < 1
+        ? 1
+        : (_holdCount > points.length ? points.length : _holdCount);
+    final shape = ShapeRecognizer.recognize(points.sublist(0, count));
+    if (shape == null) return; // Keep the original stroke.
+
+    _recognized = shape;
+    notifyListeners();
+    _live.ping();
+    onShapeRecognized?.call();
+  }
+
+  void _stopHold() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _holdArmed = false;
+    _recognized = null;
   }
 
   // ---- Pointer input ----
@@ -293,6 +376,7 @@ class DrawingController extends ChangeNotifier {
             timestampMs: 0,
           ),
         );
+        _armHold(x, y);
         notifyListeners();
         _live.ping();
         return true;
@@ -365,6 +449,8 @@ class DrawingController extends ChangeNotifier {
         _updateShape(x, y);
         _live.ping();
       case _Mode.draw:
+        // A snapped shape stays as it is until the pointer is lifted.
+        if (_recognized != null) return;
         final p = _snapPoint(x, y);
         final kept = _recorder.add(
           StrokePoint(
@@ -375,6 +461,7 @@ class DrawingController extends ChangeNotifier {
           ),
         );
         if (kept) _live.ping();
+        _trackHold(x, y);
       case _Mode.none:
         break;
     }
@@ -444,17 +531,23 @@ class DrawingController extends ChangeNotifier {
         _live.ping();
 
       case _Mode.draw:
-        final p = _snapPoint(x, y);
-        _recorder.add(
-          StrokePoint(
-            x: p.x,
-            y: p.y,
-            pressure: pressure,
-            timestampMs: timeMs - _originMs,
-          ),
-        );
+        final recognized = _recognized;
+        if (recognized == null) {
+          final p = _snapPoint(x, y);
+          _recorder.add(
+            StrokePoint(
+              x: p.x,
+              y: p.y,
+              pressure: pressure,
+              timestampMs: timeMs - _originMs,
+            ),
+          );
+        }
         var stroke = _recorder.end();
-        if (_snap != null && stroke.points.length > 2) {
+        if (recognized != null) {
+          // Same id, tool, color and width: only the geometry is cleaned.
+          stroke = stroke.copyWith(points: recognized.points);
+        } else if (_snap != null && stroke.points.length > 2) {
           // Snapped to the ruler: keep only the two ends of the line.
           stroke = stroke.copyWith(
             points: [stroke.points.first, stroke.points.last],
@@ -496,6 +589,7 @@ class DrawingController extends ChangeNotifier {
   }
 
   void _finish() {
+    _stopHold();
     _mode = _Mode.none;
     _activePointer = null;
     _snap = null;
@@ -552,6 +646,7 @@ class DrawingController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _holdTimer?.cancel();
     _settings.removeListener(_onSettingsChanged);
     if (_ownsSettings) _settings.dispose();
     _live.dispose();

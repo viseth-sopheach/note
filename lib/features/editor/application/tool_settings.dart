@@ -11,6 +11,7 @@ class ToolSettings extends ChangeNotifier {
     int highlighterColorValue = 0xFFFFEB3B,
     double penWidth = 2,
     double highlighterWidth = 3,
+    bool shapeRecognition = true,
   }) : _tool = tool,
        _penColor = penColorValue,
        _highlighterColor = highlighterColorValue,
@@ -18,7 +19,8 @@ class ToolSettings extends ChangeNotifier {
        // ignore: prefer_initializing_formals
        _penWidth = penWidth,
        // ignore: prefer_initializing_formals
-       _highlighterWidth = highlighterWidth {
+       _highlighterWidth = highlighterWidth,
+       _shapeRecognition = shapeRecognition {
     _colorValue = tool == StrokeTool.highlighter
         ? _highlighterColor
         : _penColor;
@@ -30,12 +32,22 @@ class ToolSettings extends ChangeNotifier {
   int _highlighterColor;
   double _penWidth;
   double _highlighterWidth;
+  bool _shapeRecognition;
   late int _colorValue;
   late double _width;
 
   StrokeTool get tool => _tool;
   int get colorValue => _colorValue;
   double get width => _width;
+
+  /// Hold at the end of a pen or highlighter stroke to snap it to a shape.
+  bool get shapeRecognition => _shapeRecognition;
+
+  void selectShapeRecognition(bool enabled) {
+    if (enabled == _shapeRecognition) return;
+    _shapeRecognition = enabled;
+    notifyListeners();
+  }
 
   void selectTool(StrokeTool tool) {
     if (tool == _tool) return;
