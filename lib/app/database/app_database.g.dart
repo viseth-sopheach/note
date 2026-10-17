@@ -902,6 +902,17 @@ class $PageRowsTable extends PageRows with TableInfo<$PageRowsTable, PageRow> {
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       ).withConverter<PaperTemplate?>($PageRowsTable.$convertertemplaten);
+  static const VerificationMeta _imagePathMeta = const VerificationMeta(
+    'imagePath',
+  );
+  @override
+  late final GeneratedColumn<String> imagePath = GeneratedColumn<String>(
+    'image_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   late final GeneratedColumnWithTypeConverter<DateTime, int> updatedAt =
       GeneratedColumn<int>(
@@ -918,6 +929,7 @@ class $PageRowsTable extends PageRows with TableInfo<$PageRowsTable, PageRow> {
     pageIndex,
     strokes,
     template,
+    imagePath,
     updatedAt,
   ];
   @override
@@ -961,6 +973,12 @@ class $PageRowsTable extends PageRows with TableInfo<$PageRowsTable, PageRow> {
     } else if (isInserting) {
       context.missing(_strokesMeta);
     }
+    if (data.containsKey('image_path')) {
+      context.handle(
+        _imagePathMeta,
+        imagePath.isAcceptableOrUnknown(data['image_path']!, _imagePathMeta),
+      );
+    }
     return context;
   }
 
@@ -996,6 +1014,10 @@ class $PageRowsTable extends PageRows with TableInfo<$PageRowsTable, PageRow> {
           data['${effectivePrefix}template'],
         ),
       ),
+      imagePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_path'],
+      ),
       updatedAt: $PageRowsTable.$converterupdatedAt.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -1028,6 +1050,9 @@ class PageRow extends DataClass implements Insertable<PageRow> {
 
   /// Paper template of this page. Null means "use the notebook's template".
   final PaperTemplate? template;
+
+  /// Image shown as the page background, or null.
+  final String? imagePath;
   final DateTime updatedAt;
   const PageRow({
     required this.id,
@@ -1035,6 +1060,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
     required this.pageIndex,
     required this.strokes,
     this.template,
+    this.imagePath,
     required this.updatedAt,
   });
   @override
@@ -1048,6 +1074,9 @@ class PageRow extends DataClass implements Insertable<PageRow> {
       map['template'] = Variable<String>(
         $PageRowsTable.$convertertemplaten.toSql(template),
       );
+    }
+    if (!nullToAbsent || imagePath != null) {
+      map['image_path'] = Variable<String>(imagePath);
     }
     {
       map['updated_at'] = Variable<int>(
@@ -1066,6 +1095,9 @@ class PageRow extends DataClass implements Insertable<PageRow> {
       template: template == null && nullToAbsent
           ? const Value.absent()
           : Value(template),
+      imagePath: imagePath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(imagePath),
       updatedAt: Value(updatedAt),
     );
   }
@@ -1083,6 +1115,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
       template: $PageRowsTable.$convertertemplaten.fromJson(
         serializer.fromJson<String?>(json['template']),
       ),
+      imagePath: serializer.fromJson<String?>(json['imagePath']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -1097,6 +1130,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
       'template': serializer.toJson<String?>(
         $PageRowsTable.$convertertemplaten.toJson(template),
       ),
+      'imagePath': serializer.toJson<String?>(imagePath),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -1107,6 +1141,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
     int? pageIndex,
     Uint8List? strokes,
     Value<PaperTemplate?> template = const Value.absent(),
+    Value<String?> imagePath = const Value.absent(),
     DateTime? updatedAt,
   }) => PageRow(
     id: id ?? this.id,
@@ -1114,6 +1149,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
     pageIndex: pageIndex ?? this.pageIndex,
     strokes: strokes ?? this.strokes,
     template: template.present ? template.value : this.template,
+    imagePath: imagePath.present ? imagePath.value : this.imagePath,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   PageRow copyWithCompanion(PageRowsCompanion data) {
@@ -1125,6 +1161,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
       pageIndex: data.pageIndex.present ? data.pageIndex.value : this.pageIndex,
       strokes: data.strokes.present ? data.strokes.value : this.strokes,
       template: data.template.present ? data.template.value : this.template,
+      imagePath: data.imagePath.present ? data.imagePath.value : this.imagePath,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -1137,6 +1174,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
           ..write('pageIndex: $pageIndex, ')
           ..write('strokes: $strokes, ')
           ..write('template: $template, ')
+          ..write('imagePath: $imagePath, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -1149,6 +1187,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
     pageIndex,
     $driftBlobEquality.hash(strokes),
     template,
+    imagePath,
     updatedAt,
   );
   @override
@@ -1160,6 +1199,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
           other.pageIndex == this.pageIndex &&
           $driftBlobEquality.equals(other.strokes, this.strokes) &&
           other.template == this.template &&
+          other.imagePath == this.imagePath &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -1169,6 +1209,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
   final Value<int> pageIndex;
   final Value<Uint8List> strokes;
   final Value<PaperTemplate?> template;
+  final Value<String?> imagePath;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const PageRowsCompanion({
@@ -1177,6 +1218,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
     this.pageIndex = const Value.absent(),
     this.strokes = const Value.absent(),
     this.template = const Value.absent(),
+    this.imagePath = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1186,6 +1228,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
     required int pageIndex,
     required Uint8List strokes,
     this.template = const Value.absent(),
+    this.imagePath = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1199,6 +1242,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
     Expression<int>? pageIndex,
     Expression<Uint8List>? strokes,
     Expression<String>? template,
+    Expression<String>? imagePath,
     Expression<int>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -1208,6 +1252,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
       if (pageIndex != null) 'page_index': pageIndex,
       if (strokes != null) 'strokes': strokes,
       if (template != null) 'template': template,
+      if (imagePath != null) 'image_path': imagePath,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1219,6 +1264,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
     Value<int>? pageIndex,
     Value<Uint8List>? strokes,
     Value<PaperTemplate?>? template,
+    Value<String?>? imagePath,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -1228,6 +1274,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
       pageIndex: pageIndex ?? this.pageIndex,
       strokes: strokes ?? this.strokes,
       template: template ?? this.template,
+      imagePath: imagePath ?? this.imagePath,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1253,6 +1300,9 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
         $PageRowsTable.$convertertemplaten.toSql(template.value),
       );
     }
+    if (imagePath.present) {
+      map['image_path'] = Variable<String>(imagePath.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<int>(
         $PageRowsTable.$converterupdatedAt.toSql(updatedAt.value),
@@ -1272,6 +1322,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
           ..write('pageIndex: $pageIndex, ')
           ..write('strokes: $strokes, ')
           ..write('template: $template, ')
+          ..write('imagePath: $imagePath, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -2190,6 +2241,7 @@ typedef $$PageRowsTableCreateCompanionBuilder = PageRowsCompanion Function({
   required int pageIndex,
   required Uint8List strokes,
   Value<PaperTemplate?> template,
+  Value<String?> imagePath,
   required DateTime updatedAt,
   Value<int> rowid,
 });
@@ -2199,6 +2251,7 @@ typedef $$PageRowsTableUpdateCompanionBuilder = PageRowsCompanion Function({
   Value<int> pageIndex,
   Value<Uint8List> strokes,
   Value<PaperTemplate?> template,
+  Value<String?> imagePath,
   Value<DateTime> updatedAt,
   Value<int> rowid,
 });
@@ -2253,6 +2306,11 @@ class $$PageRowsTableFilterComposer
   get template => $composableBuilder(
     column: $table.template,
     builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<String> get imagePath => $composableBuilder(
+    column: $table.imagePath,
+    builder: (column) => ColumnFilters(column),
   );
 
   ColumnWithTypeConverterFilters<DateTime, DateTime, int> get updatedAt =>
@@ -2314,6 +2372,11 @@ class $$PageRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get imagePath => $composableBuilder(
+    column: $table.imagePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -2363,6 +2426,9 @@ class $$PageRowsTableAnnotationComposer
 
   GeneratedColumnWithTypeConverter<PaperTemplate?, String> get template =>
       $composableBuilder(column: $table.template, builder: (column) => column);
+
+  GeneratedColumn<String> get imagePath =>
+      $composableBuilder(column: $table.imagePath, builder: (column) => column);
 
   GeneratedColumnWithTypeConverter<DateTime, int> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
@@ -2424,6 +2490,7 @@ class $$PageRowsTableTableManager
                 Value<int> pageIndex = const Value.absent(),
                 Value<Uint8List> strokes = const Value.absent(),
                 Value<PaperTemplate?> template = const Value.absent(),
+                Value<String?> imagePath = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PageRowsCompanion(
@@ -2432,6 +2499,7 @@ class $$PageRowsTableTableManager
                 pageIndex: pageIndex,
                 strokes: strokes,
                 template: template,
+                imagePath: imagePath,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -2442,6 +2510,7 @@ class $$PageRowsTableTableManager
                 required int pageIndex,
                 required Uint8List strokes,
                 Value<PaperTemplate?> template = const Value.absent(),
+                Value<String?> imagePath = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => PageRowsCompanion.insert(
@@ -2450,6 +2519,7 @@ class $$PageRowsTableTableManager
                 pageIndex: pageIndex,
                 strokes: strokes,
                 template: template,
+                imagePath: imagePath,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

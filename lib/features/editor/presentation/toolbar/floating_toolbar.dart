@@ -18,6 +18,7 @@ class FloatingToolbar extends StatefulWidget {
     required this.onPages,
     required this.onExport,
     required this.onImportPdf,
+    required this.onInsertImage,
     required this.onAddPage,
     required this.onToggleMeasure,
     required this.onSettings,
@@ -32,6 +33,7 @@ class FloatingToolbar extends StatefulWidget {
   final VoidCallback onPages;
   final VoidCallback onExport;
   final VoidCallback onImportPdf;
+  final VoidCallback onInsertImage;
   final VoidCallback onAddPage;
   final void Function(MeasureKind kind) onToggleMeasure;
   final VoidCallback onSettings;
@@ -73,6 +75,11 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
                     icon: const Icon(Icons.undo),
                     onPressed: _c.canUndo ? _c.undo : null,
                   ),
+                  IconButton(
+                    tooltip: 'Redo (Ctrl+Y)',
+                    icon: const Icon(Icons.redo),
+                    onPressed: _c.canRedo ? _c.redo : null,
+                  ),
                 ],
               ),
               const SizedBox(width: 8),
@@ -100,6 +107,8 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
                       switch (v) {
                         case 'pdf':
                           widget.onImportPdf();
+                        case 'image':
+                          widget.onInsertImage();
                         case 'page':
                           widget.onAddPage();
                       }
@@ -110,6 +119,14 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
                         child: ListTile(
                           leading: Icon(Icons.upload_file),
                           title: Text('Import PDF from device'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'image',
+                        child: ListTile(
+                          leading: Icon(Icons.image_outlined),
+                          title: Text('Insert image'),
                           contentPadding: EdgeInsets.zero,
                         ),
                       ),
@@ -191,11 +208,6 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
         icon: Icons.text_fields,
         tooltip: 'Text box',
         onPressed: () => widget.onComingSoon('Text box'),
-      ),
-      _ToolButton(
-        icon: Icons.mic_none,
-        tooltip: 'Audio / comment',
-        onPressed: () => widget.onComingSoon('Audio'),
       ),
       IconButton(
         tooltip: 'AI assistant',
@@ -385,9 +397,8 @@ class _InkOptions extends StatelessWidget {
                         width: 4 + w * 2,
                         height: 4 + w * 2,
                         decoration: BoxDecoration(
-                          color: Color(controller.colorValue).withValues(
-                            alpha: 1,
-                          ),
+                          color: Color(controller.colorValue)
+                              .withValues(alpha: 1),
                           shape: BoxShape.circle,
                         ),
                       ),

@@ -67,6 +67,26 @@ class DriftLibraryRepository implements LibraryRepository {
   }
 
   @override
+  Future<List<Folder>> searchFolders(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) return const [];
+    final stmt = _db.select(_db.folderRows)
+      ..where((t) => t.name.like('%$q%'))
+      ..orderBy([(t) => _byName(t.name)]);
+    return [for (final r in await stmt.get()) r.toDomain()];
+  }
+
+  @override
+  Future<List<Notebook>> searchNotebooks(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) return const [];
+    final stmt = _db.select(_db.notebookRows)
+      ..where((t) => t.title.like('%$q%'))
+      ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]);
+    return [for (final r in await stmt.get()) r.toDomain()];
+  }
+
+  @override
   Future<Folder> createFolder({required String name, String? parentId}) async {
     final cleanName = _validated(name, 'name');
     return _db.transaction(() async {

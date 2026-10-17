@@ -28,6 +28,26 @@ class InMemoryLibraryRepository implements LibraryRepository {
   }
 
   @override
+  Future<List<Folder>> searchFolders(String query) async {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return const [];
+    return _folders.values
+        .where((f) => f.name.toLowerCase().contains(q))
+        .toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  }
+
+  @override
+  Future<List<Notebook>> searchNotebooks(String query) async {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return const [];
+    return _notebooks.values
+        .where((n) => n.title.toLowerCase().contains(q))
+        .toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+
+  @override
   Future<Folder> createFolder({required String name, String? parentId}) async {
     if (parentId != null) _requireFolder(parentId);
     final folder = Folder(

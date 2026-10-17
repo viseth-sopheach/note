@@ -32,4 +32,8 @@ abstract interface class LibraryRepository {
   Future<Notebook?> getNotebook(String id);
 
   Future<List<Folder>> getAllFolders();
+
+  Future<List<Folder>> searchFolders(String query);
+
+  Future<List<Notebook>> searchNotebooks(String query);
 }

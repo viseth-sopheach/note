@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../sharing/application/drive_service.dart';
 import '../../../sharing/application/sharing_providers.dart';
-import '../telegram_dialog.dart';
 import '../widgets/settings_widgets.dart';
 
 class IntegrationsSection extends ConsumerWidget {
@@ -11,32 +10,25 @@ class IntegrationsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!DriveService.isSupported) return const SizedBox.shrink();
+
     return SettingsSection(
       title: 'Integrations',
       icon: Icons.link_outlined,
       children: [
         ListTile(
-          leading: const Icon(Icons.send_outlined),
-          title: const Text('Telegram bot'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => TelegramDialog.show(context),
+          leading: const Icon(Icons.logout),
+          title: const Text('Sign out of Google Drive'),
+          onTap: () async {
+            await ref.read(driveServiceProvider).signOut();
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                const SnackBar(content: Text('Signed out of Google Drive')),
+              );
+          },
         ),
-        if (DriveService.isSupported) ...[
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Sign out of Google Drive'),
-            onTap: () async {
-              await ref.read(driveServiceProvider).signOut();
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context)
-                ..hideCurrentSnackBar()
-                ..showSnackBar(
-                  const SnackBar(content: Text('Signed out of Google Drive')),
-                );
-            },
-          ),
-        ],
       ],
     );
   }

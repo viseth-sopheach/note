@@ -20,6 +20,9 @@ abstract interface class PageRepository {
   /// Template chosen for the page, or null when it follows the notebook.
   Future<PaperTemplate?> loadTemplate(String notebookId, {int pageIndex = 0});
 
+  /// Background image path of the page, or null.
+  Future<String?> loadImagePath(String notebookId, {int pageIndex = 0});
+
   /// Inserts a page at [pageIndex]; pages at or after it move down by one.
   /// Throws [ArgumentError] when [pageIndex] is negative.
   Future<void> insertPage(
@@ -27,6 +30,7 @@ abstract interface class PageRepository {
     required int pageIndex,
     required PaperTemplate template,
     List<Stroke> strokes = const [],
+    String? imagePath,
   });
 
   /// Deletes the page; later pages move up by one. Missing page is a no-op.

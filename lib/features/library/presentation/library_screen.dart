@@ -18,6 +18,7 @@ import 'dialogs/move_notebook_dialog.dart';
 import 'dialogs/new_folder_dialog.dart';
 import 'dialogs/new_notebook_dialog.dart';
 import 'dialogs/rename_dialog.dart';
+import 'library_search_delegate.dart';
 import 'widgets/item_actions_menu.dart';
 import 'widgets/library_content.dart';
 
@@ -31,7 +32,6 @@ class LibraryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Critical: Watch folder metadata if inside a subfolder, and handle 404/not found states.
     final folderAsync = _isRoot ? null : ref.watch(folderProvider(folderId!));
     if (folderAsync != null &&
         folderAsync.hasValue &&
@@ -61,6 +61,11 @@ class LibraryScreen extends ConsumerWidget {
           shift: true,
         ): () =>
             _createFolder(context, ref),
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true): () =>
+            showSearch<void>(
+              context: context,
+              delegate: LibrarySearchDelegate(),
+            ),
       },
       child: Focus(
         autofocus: true,
@@ -68,6 +73,14 @@ class LibraryScreen extends ConsumerWidget {
           appBar: AppBar(
             title: Text(title),
             actions: [
+              IconButton(
+                tooltip: 'Search (Ctrl+F)',
+                icon: const Icon(Icons.search),
+                onPressed: () => showSearch<void>(
+                  context: context,
+                  delegate: LibrarySearchDelegate(),
+                ),
+              ),
               IconButton(
                 tooltip: 'New folder (Ctrl+Shift+N)',
                 icon: const Icon(Icons.create_new_folder_outlined),

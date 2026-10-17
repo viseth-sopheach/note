@@ -44,6 +44,10 @@ class DriftPageRepository implements PageRepository {
   }
 
   @override
+  Future<String?> loadImagePath(String notebookId, {int pageIndex = 0}) async =>
+      (await _row(notebookId, pageIndex))?.imagePath;
+
+  @override
   Future<void> saveStrokes(
     String notebookId,
     List<Stroke> strokes, {
@@ -97,6 +101,7 @@ class DriftPageRepository implements PageRepository {
     required int pageIndex,
     required PaperTemplate template,
     List<Stroke> strokes = const [],
+    String? imagePath,
   }) async {
     if (pageIndex < 0) {
       throw ArgumentError.value(pageIndex, 'pageIndex', 'Must not be negative');
@@ -117,6 +122,7 @@ class DriftPageRepository implements PageRepository {
               strokes: blob,
               updatedAt: now,
               template: Value(template),
+              imagePath: Value(imagePath),
             ),
           );
     });

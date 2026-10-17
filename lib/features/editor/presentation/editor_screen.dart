@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
@@ -9,7 +10,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../app/routes.dart';
 import '../../library/application/library_providers.dart';
@@ -84,6 +88,7 @@ class _PageSession {
     required this.index,
     required this.controller,
     required this.template,
+    required this.imagePath,
     required this.autosave,
   });
 
@@ -91,6 +96,7 @@ class _PageSession {
   int index;
   final DrawingController controller;
   final PaperTemplate template;
+  final String? imagePath;
   AutosaveController autosave;
 
   void close() {
@@ -196,16 +202,22 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     final template =
         await _repository.loadTemplate(widget.notebookId, pageIndex: index) ??
         widget.template;
+    final imagePath = await _repository.loadImagePath(
+      widget.notebookId,
+      pageIndex: index,
+    );
     final controller = DrawingController(
       settings: _settings,
       undoLimit: ref.read(appSettingsProvider).undoLimit,
     );
     controller.replaceStrokes(strokes);
-    controller.onShapeRecognized = () => unawaited(HapticFeedback.selectionClick());
+    controller.onShapeRecognized = () =>
+        unawaited(HapticFeedback.selectionClick());
     final session = _PageSession(
       index: index,
       controller: controller,
       template: template,
+      imagePath: imagePath,
       autosave: _newAutosave(controller, index),
     );
     controller.snapSegments = () =>
@@ -372,6 +384,53 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     });
   }
 
+  Future<void> _insertImage() async {
+    if (_busy) return;
+    if (widget.pdfPath != null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Images cannot be added to PDF notebooks'),
+          ),
+        );
+      return;
+    }
+    final files = await FilePicker.pickFiles(type: FileType.image);
+    final path = files.isEmpty ? null : files.first.path;
+    if (path == null || !mounted) return;
+
+    await _runExclusive('Could not insert the image.', () async {
+      final docs = await getApplicationDocumentsDirectory();
+      final dir = Directory(p.join(docs.path, 'images'));
+      await dir.create(recursive: true);
+      final ext = p.extension(path).toLowerCase();
+      final target = p.join(
+        dir.path,
+        '${const Uuid().v4()}${ext.isEmpty ? '.jpg' : ext}',
+      );
+      await File(path).copy(target);
+
+      final index = _sessions.length;
+      await _repository.insertPage(
+        widget.notebookId,
+        pageIndex: index,
+        template: widget.template,
+        imagePath: target,
+      );
+      final session = await _openPage(index);
+      if (!mounted) {
+        session.close();
+        return;
+      }
+      setState(() {
+        _sessions.add(session);
+        _activeIndex = index;
+      });
+      _scheduleScroll(index);
+    });
+  }
+
   Future<void> _duplicatePage() async {
     if (_busy || _sessions.isEmpty) return;
     final index = _visiblePage;
@@ -387,6 +446,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         pageIndex: target,
         template: source.template,
         strokes: source.controller.strokes,
+        imagePath: source.imagePath,
       );
       final copy = await _openPage(target);
       final updated = [..._sessions]..insert(target, copy);
@@ -480,23 +540,26 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     );
   }
 
-  /// Keeps the pages horizontally centered at every zoom level. When the
-  /// pages are wider than the viewport, panning is limited to their edges.
+  /// Keeps the pages centered. When the pages are larger than the viewport,
+  /// panning is limited to their edges.
   void _keepCentered() {
     if (_sessions.isEmpty) return;
     final m = _transform.value;
     final scale = m.storage[0];
     final tx = m.storage[12];
-    final scaledWidth = _contentWidth * scale;
+    final ty = m.storage[13];
+    final scaledW = _contentWidth * scale;
+    final scaledH = _contentHeight * scale;
 
-    final double target;
-    if (scaledWidth <= _viewportW) {
-      target = (_viewportW - scaledWidth) / 2;
-    } else {
-      target = tx.clamp(_viewportW - scaledWidth - _margin, _margin).toDouble();
-    }
-    if ((target - tx).abs() < 0.5) return;
-    _setTransform(scale, target, m.storage[13]);
+    final targetX = scaledW <= _viewportW
+        ? (_viewportW - scaledW) / 2
+        : tx.clamp(_viewportW - scaledW - _margin, _margin).toDouble();
+    final targetY = scaledH + 2 * _margin <= _viewportH
+        ? (_viewportH - scaledH) / 2
+        : _clampTy(ty, scale);
+
+    if ((targetX - tx).abs() < 0.5 && (targetY - ty).abs() < 0.5) return;
+    _setTransform(scale, targetX, targetY);
   }
 
   /// First layout: fit narrow screens to the page width, never above the
@@ -508,7 +571,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         .clamp(0.25, 4.0)
         .toDouble();
     _fitted = true;
-    _setTransform(scale, 0, 0);
+    _setTransform(scale, (_viewportW - _contentWidth * scale) / 2, 0);
     _restorePosition(scale);
   }
 
@@ -519,7 +582,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     final index = saved.pageIndex.clamp(0, _sessions.length - 1);
     final offset = saved.offset.clamp(-_pad, kPageSize.height).toDouble();
     final ty = _clampTy(-(_pageTop(index) + offset) * scale, scale);
-    _setTransform(scale, 0, ty);
+    _setTransform(scale, (_viewportW - _contentWidth * scale) / 2, ty);
     if (index != _activeIndex) setState(() => _activeIndex = index);
   }
 
@@ -661,6 +724,32 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   }
 
   Widget _paper(_PageSession session) {
+    final image = session.imagePath;
+    if (image != null) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: SizedBox(
+          width: kPageSize.width,
+          height: kPageSize.height,
+          child: Image.file(
+            File(image),
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) =>
+                const Center(child: Icon(Icons.broken_image_outlined)),
+          ),
+        ),
+      );
+    }
+
     final pdf = _pdf;
     if (pdf == null || session.index >= pdf.pages.length) {
       return PaperView(template: session.template);
@@ -786,6 +875,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           onPages: _showPages,
           onExport: () => unawaited(exportPdf(widget.title)),
           onImportPdf: () => unawaited(_importPdf()),
+          onInsertImage: () => unawaited(_insertImage()),
           onAddPage: () => unawaited(_addPage()),
           onToggleMeasure: _toggleMeasure,
           onSettings: () => context.push(AppRoutes.settings),
@@ -830,9 +920,11 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                             alignment: Alignment.topLeft,
                             minScale: 0.25,
                             maxScale: 4,
-                            boundaryMargin: const EdgeInsets.all(_margin),
+                            boundaryMargin: const EdgeInsets.all(
+                              double.infinity,
+                            ),
                             panEnabled: !busyInput,
-                            scaleEnabled: !busyInput,
+                            scaleEnabled: true,
                             child: child!,
                           );
                         },

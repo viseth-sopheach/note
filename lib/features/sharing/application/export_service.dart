@@ -28,13 +28,25 @@ class ExportService {
 
     for (var i = 0; i < count; i++) {
       final strokes = await _pages.loadStrokes(notebookId, pageIndex: i);
+      final imagePath = await _pages.loadImagePath(notebookId, pageIndex: i);
+      final image = imagePath != null && File(imagePath).existsSync()
+          ? pw.MemoryImage(await File(imagePath).readAsBytes())
+          : null;
       doc.addPage(
         pw.Page(
           pageFormat: const PdfPageFormat(_w, _h),
           margin: pw.EdgeInsets.zero,
-          build: (_) => pw.CustomPaint(
-            size: const PdfPoint(_w, _h),
-            painter: (canvas, size) => _paint(canvas, size, strokes),
+          build: (_) => pw.Stack(
+            children: [
+              if (image != null)
+                pw.Positioned.fill(
+                  child: pw.Image(image, fit: pw.BoxFit.contain),
+                ),
+              pw.CustomPaint(
+                size: const PdfPoint(_w, _h),
+                painter: (canvas, size) => _paint(canvas, size, strokes),
+              ),
+            ],
           ),
         ),
       );

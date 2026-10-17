@@ -15,11 +15,11 @@ class ToolSettings extends ChangeNotifier {
   }) : _tool = tool,
        _penColor = penColorValue,
        _highlighterColor = highlighterColorValue,
-       // Keep the public constructor parameter names compatible.
        // ignore: prefer_initializing_formals
        _penWidth = penWidth,
        // ignore: prefer_initializing_formals
        _highlighterWidth = highlighterWidth,
+       // ignore: prefer_initializing_formals
        _shapeRecognition = shapeRecognition {
     _colorValue = tool == StrokeTool.highlighter
         ? _highlighterColor

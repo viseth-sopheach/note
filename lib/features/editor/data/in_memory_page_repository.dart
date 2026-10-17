@@ -7,10 +7,11 @@ import '../domain/stroke.dart';
 import '../domain/stroke_codec.dart';
 
 class _StoredPage {
-  const _StoredPage(this.bytes, this.template);
+  const _StoredPage(this.bytes, this.template, [this.imagePath]);
 
   final Uint8List bytes;
   final PaperTemplate? template;
+  final String? imagePath;
 }
 
 class InMemoryPageRepository implements PageRepository {
@@ -39,15 +40,21 @@ class InMemoryPageRepository implements PageRepository {
   }) async => _notebooks[notebookId]?[pageIndex]?.template;
 
   @override
+  Future<String?> loadImagePath(String notebookId, {int pageIndex = 0}) async =>
+      _notebooks[notebookId]?[pageIndex]?.imagePath;
+
+  @override
   Future<void> saveStrokes(
     String notebookId,
     List<Stroke> strokes, {
     int pageIndex = 0,
   }) async {
     final pages = _pagesOf(notebookId);
+    final old = pages[pageIndex];
     pages[pageIndex] = _StoredPage(
       StrokeCodec.encode(strokes),
-      pages[pageIndex]?.template,
+      old?.template,
+      old?.imagePath,
     );
     saveCount++;
   }
@@ -65,6 +72,7 @@ class InMemoryPageRepository implements PageRepository {
     required int pageIndex,
     required PaperTemplate template,
     List<Stroke> strokes = const [],
+    String? imagePath,
   }) async {
     if (pageIndex < 0) {
       throw ArgumentError.value(pageIndex, 'pageIndex', 'Must not be negative');
@@ -75,7 +83,7 @@ class InMemoryPageRepository implements PageRepository {
       for (final e in pages.entries)
         (e.key >= pageIndex ? e.key + 1 : e.key): e.value,
     };
-    shifted[pageIndex] = _StoredPage(blob, template);
+    shifted[pageIndex] = _StoredPage(blob, template, imagePath);
     _notebooks[notebookId] = shifted;
   }
 

@@ -34,3 +34,15 @@ final notebookProvider = FutureProvider.family<Notebook?, String>(
 final allFoldersProvider = FutureProvider<List<Folder>>(
   (ref) => ref.watch(libraryRepositoryProvider).getAllFolders(),
 );
+
+final searchProvider = FutureProvider.autoDispose
+    .family<({List<Folder> folders, List<Notebook> notebooks}), String>((
+      ref,
+      query,
+    ) async {
+      final repo = ref.watch(libraryRepositoryProvider);
+      return (
+        folders: await repo.searchFolders(query),
+        notebooks: await repo.searchNotebooks(query),
+      );
+    });

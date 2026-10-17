@@ -18,6 +18,10 @@ class PageRows extends Table {
 
   /// Paper template of this page. Null means "use the notebook's template".
   TextColumn get template => textEnum<PaperTemplate>().nullable()();
+
+  /// Image shown as the page background, or null.
+  TextColumn get imagePath => text().nullable()();
+
   IntColumn get updatedAt => integer().map(const EpochMicrosConverter())();
 
   @override
