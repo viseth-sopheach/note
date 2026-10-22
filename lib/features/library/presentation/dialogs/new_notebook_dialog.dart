@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/glass/glass_button.dart';
+import '../../../../app/glass/glass_dialog.dart';
+
 import '../../domain/name_rules.dart';
 import '../../domain/paper_template.dart';
 import '../cover_palette.dart';
@@ -28,7 +31,7 @@ class NewNotebookDialog extends StatefulWidget {
   static Future<NewNotebookResult?> show(
     BuildContext context, {
     PaperTemplate initialTemplate = PaperTemplate.blank,
-  }) => showDialog<NewNotebookResult>(
+  }) => showGlassDialog<NewNotebookResult>(
     context: context,
     builder: (_) => NewNotebookDialog(initialTemplate: initialTemplate),
   );
@@ -83,67 +86,64 @@ class _NewNotebookDialogState extends State<NewNotebookDialog> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    return AlertDialog(
+    return GlassDialog(
       title: const Text('New notebook'),
-      scrollable: true,
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextFormField(
-                controller: _titleController,
-                autofocus: true,
-                maxLength: kMaxNameLength,
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(labelText: 'Title'),
-                validator: validateName,
-                onFieldSubmitted: (_) => _submit(),
-              ),
-              const SizedBox(height: 16),
-              Text('Cover', style: textTheme.titleSmall),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  for (final color in CoverPalette.colors)
-                    _CoverSwatch(
-                      color: color,
-                      selected: color == _cover,
-                      onTap: () => setState(() => _cover = color),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Text('Paper', style: textTheme.titleSmall),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final template in PaperTemplate.values)
-                    ChoiceChip(
-                      avatar: Icon(_iconFor(template), size: 18),
-                      label: Text(template.label),
-                      selected: template == _template,
-                      onSelected: (_) => setState(() => _template = template),
-                    ),
-                ],
-              ),
-            ],
-          ),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextFormField(
+              controller: _titleController,
+              autofocus: true,
+              maxLength: kMaxNameLength,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(labelText: 'Title'),
+              validator: validateName,
+              onFieldSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 16),
+            Text('Cover', style: textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final color in CoverPalette.colors)
+                  _CoverSwatch(
+                    color: color,
+                    selected: color == _cover,
+                    onTap: () => setState(() => _cover = color),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Text('Paper', style: textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final template in PaperTemplate.values)
+                  ChoiceChip(
+                    avatar: Icon(_iconFor(template), size: 18),
+                    label: Text(template.label),
+                    selected: template == _template,
+                    onSelected: (_) => setState(() => _template = template),
+                  ),
+              ],
+            ),
+          ],
         ),
       ),
       actions: [
-        TextButton(
+        GlassButton(
+          label: 'Cancel',
+          kind: GlassButtonKind.plain,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Create')),
+        GlassButton(label: 'Create', onPressed: _submit),
       ],
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/glass/glass_theme.dart';
 import '../../domain/notebook.dart';
 import '../cover_palette.dart';
 
@@ -18,15 +19,27 @@ class NotebookCard extends StatelessWidget {
   final bool showCover;
 
   static const List<String> _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   static String _edited(DateTime date) {
     final now = DateTime.now();
-    final days = DateTime(now.year, now.month, now.day)
-        .difference(DateTime(date.year, date.month, date.day))
-        .inDays;
+    final days = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).difference(DateTime(date.year, date.month, date.day)).inDays;
     if (days <= 0) return 'Today';
     if (days == 1) return 'Yesterday';
     if (days < 7) return '${days}d ago';
@@ -38,6 +51,7 @@ class NotebookCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final colors = Theme.of(context).colorScheme;
+    final glass = context.glass;
     final cover = Color(notebook.coverColorValue);
     final background = showCover ? cover : colors.surfaceContainerHighest;
     final foreground = showCover
@@ -52,39 +66,69 @@ class NotebookCard extends StatelessWidget {
           child: Semantics(
             button: true,
             label: 'Open notebook ${notebook.title}',
-            child: Material(
-              color: background,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: showCover
-                    ? BorderSide.none
-                    : BorderSide(color: colors.outlineVariant),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: glass.shadow,
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
               ),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: onTap,
-                child: Stack(
-                  children: [
-                    if (showCover)
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: 10,
-                        child: ColoredBox(
-                          color: Colors.black.withValues(alpha: 0.14),
+              child: Material(
+                color: background,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: showCover
+                        ? Colors.white.withValues(alpha: 0.18)
+                        : glass.border,
+                  ),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: onTap,
+                  child: Stack(
+                    children: [
+                      if (showCover)
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.22),
+                                  Colors.transparent,
+                                ],
+                                stops: const [0, 0.6],
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (showCover)
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: 10,
+                          child: ColoredBox(
+                            color: Colors.black.withValues(alpha: 0.14),
+                          ),
+                        ),
+                      Center(
+                        child: Icon(
+                          isPdf
+                              ? Icons.picture_as_pdf_outlined
+                              : Icons.menu_book_outlined,
+                          size: 36,
+                          color: foreground.withValues(alpha: 0.9),
                         ),
                       ),
-                    Center(
-                      child: Icon(
-                        isPdf
-                            ? Icons.picture_as_pdf_outlined
-                            : Icons.menu_book_outlined,
-                        size: 36,
-                        color: foreground.withValues(alpha: 0.9),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

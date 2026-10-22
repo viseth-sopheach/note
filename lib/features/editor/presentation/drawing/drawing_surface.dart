@@ -26,7 +26,7 @@ class DrawingSurface extends StatefulWidget {
   final Widget child;
   final bool allowTouch;
   final Offset origin;
-  
+
   /// Paper rectangle in paper coordinates. Input outside it is ignored.
   final Rect? bounds;
 
@@ -82,7 +82,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
         (e.buttons & kPrimaryButton) == 0) {
       return;
     }
-    
+
     // Critical: Reject strokes that start outside the defined bounds
     final raw = _local(e);
     final b = widget.bounds;
@@ -114,7 +114,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   void _up(PointerUpEvent e) {
     _touches.remove(e.pointer);
     if (e.pointer == _drawingPointer) _drawingPointer = null;
-    
+
     // Critical: Clamp end coordinates to maintain proper bounds integrity
     final p = _clamped(e);
     _c.endStroke(

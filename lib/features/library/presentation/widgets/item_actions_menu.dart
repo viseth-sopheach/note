@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../../../app/glass/glass_menu.dart';
+
 enum ItemAction { rename, move, delete, export, drive, telegram }
 
 class ItemActionsMenu extends StatelessWidget {
@@ -18,44 +20,47 @@ class ItemActionsMenu extends StatelessWidget {
   final bool canMove;
   final bool canShare;
 
-  static PopupMenuItem<ItemAction> _item(
-    ItemAction value,
-    IconData icon,
-    String label,
-  ) => PopupMenuItem(
-    value: value,
-    child: ListTile(
-      leading: Icon(icon),
-      title: Text(label),
-      contentPadding: EdgeInsets.zero,
-    ),
-  );
-
   Future<void> _show(BuildContext context, Offset globalPosition) async {
-    final overlay =
-        Overlay.of(context).context.findRenderObject()! as RenderBox;
     final driveOk = Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
-    final action = await showMenu<ItemAction>(
+    final action = await showGlassMenu<ItemAction>(
       context: context,
-      position: RelativeRect.fromRect(
-        globalPosition & const Size(1, 1),
-        Offset.zero & overlay.size,
-      ),
+      position: globalPosition,
       items: [
-        _item(ItemAction.rename, Icons.edit_outlined, 'Rename'),
+        const GlassMenuItem(
+          value: ItemAction.rename,
+          icon: Icons.edit_outlined,
+          label: 'Rename',
+        ),
         if (canMove)
-          _item(ItemAction.move, Icons.drive_file_move_outlined, 'Move to…'),
+          const GlassMenuItem(
+            value: ItemAction.move,
+            icon: Icons.drive_file_move_outlined,
+            label: 'Move to…',
+          ),
         if (canShare) ...[
-          _item(ItemAction.export, Icons.ios_share, 'Export PDF / Share'),
+          const GlassMenuItem(
+            value: ItemAction.export,
+            icon: Icons.ios_share,
+            label: 'Export PDF / Share',
+          ),
           if (driveOk)
-            _item(
-              ItemAction.drive,
-              Icons.cloud_upload_outlined,
-              'Upload to Google Drive',
+            const GlassMenuItem(
+              value: ItemAction.drive,
+              icon: Icons.cloud_upload_outlined,
+              label: 'Upload to Google Drive',
             ),
-          _item(ItemAction.telegram, Icons.send_outlined, 'Send to Telegram'),
+          const GlassMenuItem(
+            value: ItemAction.telegram,
+            icon: Icons.send_outlined,
+            label: 'Send to Telegram',
+          ),
         ],
-        _item(ItemAction.delete, Icons.delete_outline, 'Delete'),
+        const GlassMenuItem(
+          value: ItemAction.delete,
+          icon: Icons.delete_outline,
+          label: 'Delete',
+          destructive: true,
+        ),
       ],
     );
     if (action != null) onSelected(action);

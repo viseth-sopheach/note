@@ -178,7 +178,10 @@ abstract final class ShapeRecognizer {
     const step = math.pi / 4;
     final snapped = (angle / step).roundToDouble() * step;
     if ((angle - snapped).abs() > _axisSnap) return b;
-    return (x: a.x + chord * math.cos(snapped), y: a.y + chord * math.sin(snapped));
+    return (
+      x: a.x + chord * math.cos(snapped),
+      y: a.y + chord * math.sin(snapped),
+    );
   }
 
   // ---- Closed shapes ----
@@ -207,7 +210,8 @@ abstract final class ShapeRecognizer {
     if (polyError > _polygonMaxError) return null;
 
     if (rect != null && rect.error == polyError) {
-      final square = (rect.w - rect.h).abs() <=
+      final square =
+          (rect.w - rect.h).abs() <=
           _squareTolerance * math.max(rect.w, rect.h);
       return RecognizedShape(
         square ? ShapeKind.square : ShapeKind.rectangle,
@@ -224,16 +228,13 @@ abstract final class ShapeRecognizer {
     final circle = (rx - ry).abs() <= _circleTolerance * math.max(rx, ry);
     final a = circle ? (rx + ry) / 2 : rx;
     final b = circle ? a : ry;
-    return RecognizedShape(
-      circle ? ShapeKind.circle : ShapeKind.ellipse,
-      [
-        for (var i = 0; i <= _ellipseSteps; i++)
-          StrokePoint(
-            x: cx + a * math.cos(2 * math.pi * i / _ellipseSteps),
-            y: cy + b * math.sin(2 * math.pi * i / _ellipseSteps),
-          ),
-      ],
-    );
+    return RecognizedShape(circle ? ShapeKind.circle : ShapeKind.ellipse, [
+      for (var i = 0; i <= _ellipseSteps; i++)
+        StrokePoint(
+          x: cx + a * math.cos(2 * math.pi * i / _ellipseSteps),
+          y: cy + b * math.sin(2 * math.pi * i / _ellipseSteps),
+        ),
+    ]);
   }
 
   static double _ellipseError(
@@ -335,7 +336,8 @@ abstract final class ShapeRecognizer {
         }
         sum += d * d;
       }
-      final area = ((v[1].x - v[0].x) * (v[2].y - v[0].y) -
+      final area =
+          ((v[1].x - v[0].x) * (v[2].y - v[0].y) -
                   (v[2].x - v[0].x) * (v[1].y - v[0].y))
               .abs() /
           2;
@@ -393,7 +395,10 @@ abstract final class ShapeRecognizer {
       final d = _dist(prev, next);
       if (d >= remaining && d > 0) {
         final t = remaining / d;
-        prev = (x: prev.x + (next.x - prev.x) * t, y: prev.y + (next.y - prev.y) * t);
+        prev = (
+          x: prev.x + (next.x - prev.x) * t,
+          y: prev.y + (next.y - prev.y) * t,
+        );
         out.add(prev);
         remaining = step;
       } else {

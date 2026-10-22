@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/glass/glass_button.dart';
+import '../../../../app/glass/glass_dialog.dart';
+
 import '../../application/library_providers.dart';
 import '../../domain/folder.dart';
 
@@ -20,7 +23,7 @@ class MoveNotebookDialog extends ConsumerWidget {
   static Future<MoveTarget?> show(
     BuildContext context, {
     required String? currentFolderId,
-  }) => showDialog<MoveTarget>(
+  }) => showGlassDialog<MoveTarget>(
     context: context,
     builder: (_) => MoveNotebookDialog(currentFolderId: currentFolderId),
   );
@@ -29,7 +32,7 @@ class MoveNotebookDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final folders = ref.watch(allFoldersProvider);
 
-    return AlertDialog(
+    return GlassDialog(
       title: const Text('Move to'),
       content: SizedBox(
         width: 360,
@@ -44,9 +47,10 @@ class MoveNotebookDialog extends ConsumerWidget {
         ),
       ),
       actions: [
-        TextButton(
+        GlassButton(
+          label: 'Cancel',
+          kind: GlassButtonKind.plain,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
         ),
       ],
     );

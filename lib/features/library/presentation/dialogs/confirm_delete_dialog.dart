@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/glass/glass_button.dart';
+import '../../../../app/glass/glass_dialog.dart';
+
 abstract final class ConfirmDeleteDialog {
   /// Returns true only when the user confirms.
   static Future<bool> show(

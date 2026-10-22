@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/glass/glass_button.dart';
+import '../../../../app/glass/glass_dialog.dart';
+
 import '../../domain/name_rules.dart';
 
 class RenameDialog extends StatefulWidget {
@@ -20,7 +23,7 @@ class RenameDialog extends StatefulWidget {
     required String title,
     required String label,
     required String initialValue,
-  }) => showDialog<String>(
+  }) => showGlassDialog<String>(
     context: context,
     builder: (_) =>
         RenameDialog(title: title, label: label, initialValue: initialValue),
@@ -57,7 +60,7 @@ class _RenameDialogState extends State<RenameDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return GlassDialog(
       title: Text(widget.title),
       content: Form(
         key: _formKey,
@@ -72,11 +75,12 @@ class _RenameDialogState extends State<RenameDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        GlassButton(
+          label: 'Cancel',
+          kind: GlassButtonKind.plain,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Rename')),
+        GlassButton(label: 'Rename', onPressed: _submit),
       ],
     );
   }

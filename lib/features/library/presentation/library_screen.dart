@@ -5,6 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/glass/glass_backdrop.dart';
+import '../../../app/glass/glass_button.dart';
+import '../../../app/glass/glass_icon_button.dart';
+import '../../../app/glass/glass_pill.dart';
 import '../../../app/routes.dart';
 import '../../settings/application/settings_providers.dart';
 import '../../settings/domain/layout_density.dart';
@@ -73,52 +77,60 @@ class LibraryScreen extends ConsumerWidget {
           appBar: AppBar(
             title: Text(title),
             actions: [
-              IconButton(
-                tooltip: 'Search (Ctrl+F)',
-                icon: const Icon(Icons.search),
-                onPressed: () => showSearch<void>(
-                  context: context,
-                  delegate: LibrarySearchDelegate(),
-                ),
+              GlassPill(
+                children: [
+                  GlassIconButton(
+                    tooltip: 'Search (Ctrl+F)',
+                    icon: const Icon(Icons.search),
+                    onPressed: () => showSearch<void>(
+                      context: context,
+                      delegate: LibrarySearchDelegate(),
+                    ),
+                  ),
+                  GlassIconButton(
+                    tooltip: 'New folder (Ctrl+Shift+N)',
+                    icon: const Icon(Icons.create_new_folder_outlined),
+                    onPressed: () => _createFolder(context, ref),
+                  ),
+                  GlassIconButton(
+                    tooltip: 'Settings',
+                    icon: const Icon(Icons.settings_outlined),
+                    onPressed: () => context.push(AppRoutes.settings),
+                  ),
+                ],
               ),
-              IconButton(
-                tooltip: 'New folder (Ctrl+Shift+N)',
-                icon: const Icon(Icons.create_new_folder_outlined),
-                onPressed: () => _createFolder(context, ref),
-              ),
-              IconButton(
-                tooltip: 'Settings',
-                icon: const Icon(Icons.settings_outlined),
-                onPressed: () => context.push(AppRoutes.settings),
-              ),
+              const SizedBox(width: 12),
             ],
           ),
-          floatingActionButton: FloatingActionButton.extended(
+          floatingActionButton: GlassFab(
             tooltip: 'New notebook (Ctrl+N)',
+            label: 'New notebook',
+            icon: Icons.add,
             onPressed: () => _createNotebook(context, ref),
-            icon: const Icon(Icons.add),
-            label: const Text('New notebook'),
           ),
-          body: folders.when(
-            data: (folderList) => notebooks.when(
-              data: (notebookList) => LibraryContent(
-                isRoot: _isRoot,
-                folders: folderList,
-                notebooks: notebookList,
-                showCovers: showCovers,
-                compact: compact,
-                onNewNotebook: () => _createNotebook(context, ref),
-                onNewFolder: () => _createFolder(context, ref),
-                onFolderAction: (folder, action) =>
-                    _onFolderAction(context, ref, folder, action),
-                onNotebookAction: (notebook, action) =>
-                    _onNotebookAction(context, ref, notebook, action),
+          body: GlassBackdrop(
+            child: folders.when(
+              data: (folderList) => notebooks.when(
+                data: (notebookList) => LibraryContent(
+                  isRoot: _isRoot,
+                  folders: folderList,
+                  notebooks: notebookList,
+                  showCovers: showCovers,
+                  compact: compact,
+                  onNewNotebook: () => _createNotebook(context, ref),
+                  onNewFolder: () => _createFolder(context, ref),
+                  onFolderAction: (folder, action) =>
+                      _onFolderAction(context, ref, folder, action),
+                  onNotebookAction: (notebook, action) =>
+                      _onNotebookAction(context, ref, notebook, action),
+                ),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, stack) =>
+                    _ErrorView(onRetry: () => _reload(ref)),
               ),
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, stack) => _ErrorView(onRetry: () => _reload(ref)),
             ),
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => _ErrorView(onRetry: () => _reload(ref)),
           ),
         ),
       ),
@@ -356,7 +368,7 @@ class _ErrorView extends StatelessWidget {
         children: [
           const Text('Something went wrong while loading your library.'),
           const SizedBox(height: 16),
-          OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
+          GlassButton(label: 'Retry', onPressed: onRetry),
         ],
       ),
     );
@@ -376,11 +388,11 @@ class _FolderNotFoundView extends StatelessWidget {
           children: [
             const Text('This folder no longer exists.'),
             const SizedBox(height: 16),
-            FilledButton(
+            GlassButton(
+              label: 'Back to library',
               onPressed: () => context.canPop()
                   ? context.pop()
                   : context.go(AppRoutes.library),
-              child: const Text('Back to library'),
             ),
           ],
         ),

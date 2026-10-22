@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/glass/glass_button.dart';
+import '../../../../app/glass/glass_dialog.dart';
 import '../../domain/name_rules.dart';
 
 class NewFolderDialog extends StatefulWidget {
   const NewFolderDialog({super.key});
 
   /// Returns the trimmed folder name, or null if cancelled.
-  static Future<String?> show(BuildContext context) => showDialog<String>(
+  static Future<String?> show(BuildContext context) => showGlassDialog<String>(
     context: context,
     builder: (_) => const NewFolderDialog(),
   );
@@ -32,7 +34,7 @@ class _NewFolderDialogState extends State<NewFolderDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return GlassDialog(
       title: const Text('New folder'),
       content: Form(
         key: _formKey,
@@ -47,11 +49,12 @@ class _NewFolderDialogState extends State<NewFolderDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        GlassButton(
+          label: 'Cancel',
+          kind: GlassButtonKind.plain,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Create')),
+        GlassButton(label: 'Create', onPressed: _submit),
       ],
     );
   }

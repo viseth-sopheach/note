@@ -81,9 +81,12 @@ class EditorSection extends ConsumerWidget {
         const Divider(height: 1),
         SwitchListTile(
           title: const Text('Shape recognition'),
-          subtitle: const Text('Hold at the end of a stroke to snap it to a clean shape'),
+          subtitle: const Text(
+            'Hold at the end of a stroke to snap it to a clean shape',
+          ),
           value: settings.shapeRecognition,
-          onChanged: (v) => notifier.update((s) => s.copyWith(shapeRecognition: v)),
+          onChanged: (v) =>
+              notifier.update((s) => s.copyWith(shapeRecognition: v)),
         ),
       ],
     );
