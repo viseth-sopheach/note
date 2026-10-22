@@ -34,7 +34,7 @@ class SelectionPainter extends CustomPainter {
   final DrawingController controller;
   final Offset origin;
 
-  static const Color _accent = Color(0xFF1E5AA8);
+  static const Color _accent = Color(0xFF0A84FF);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -84,9 +84,13 @@ class SelectionPainter extends CustomPainter {
 
     final b = controller.selectionBounds;
     if (b == null) return;
-    final rect = Rect.fromLTRB(b.left, b.top, b.right, b.bottom).inflate(6);
-    canvas.drawRect(rect, Paint()..color = _accent.withValues(alpha: 0.06));
-    canvas.drawRect(
+
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTRB(b.left, b.top, b.right, b.bottom).inflate(6),
+      const Radius.circular(10),
+    );
+    canvas.drawRRect(rect, Paint()..color = _accent.withValues(alpha: 0.08));
+    canvas.drawRRect(
       rect,
       Paint()
         ..color = _accent

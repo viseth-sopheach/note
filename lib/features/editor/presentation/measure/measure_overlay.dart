@@ -16,8 +16,8 @@ class MeasureOverlay extends StatelessWidget {
   final MeasureController controller;
   final double Function() scale;
 
-  static const Color _fill = Color(0xB3FFF1B8);
-  static const Color _ink = Color(0xFF3A3A3A);
+  static const Color _fill = Color(0xA6EAF1FB);
+  static const Color _ink = Color(0xFF26323F);
 
   @override
   Widget build(BuildContext context) {
@@ -235,9 +235,20 @@ class _Handle extends StatelessWidget {
       onEnd: controller.endInteraction,
       child: Container(
         alignment: Alignment.center,
-        decoration: const BoxDecoration(
-          color: Color(0xFF1E5AA8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
           shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.7),
+            width: 1.5,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 6,
+              offset: Offset(0, 2),
+            ),
+          ],
         ),
         child: const Icon(Icons.rotate_right, size: 18, color: Colors.white),
       ),
@@ -282,7 +293,7 @@ class _RulerPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final body = RRect.fromRectAndRadius(
       Offset.zero & size,
-      const Radius.circular(8),
+      const Radius.circular(14),
     );
     canvas.drawRRect(body, Paint()..color = fill);
     canvas.drawRRect(

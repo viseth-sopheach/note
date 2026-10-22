@@ -32,8 +32,14 @@ List<_P> _polygon(List<_P> v, {double noise = 2.5, int perSide = 40}) {
 List<_P> _circle() => [
   for (var i = 0; i < 120; i++)
     (
-      300 + 100 * (1 + 0.05 * _noise(i)) * math.cos(0.7 + 2.1 * math.pi * i / 119),
-      300 + 100 * (1 + 0.05 * _noise(i)) * math.sin(0.7 + 2.1 * math.pi * i / 119),
+      300 +
+          100 *
+              (1 + 0.05 * _noise(i)) *
+              math.cos(0.7 + 2.1 * math.pi * i / 119),
+      300 +
+          100 *
+              (1 + 0.05 * _noise(i)) *
+              math.sin(0.7 + 2.1 * math.pi * i / 119),
     ),
 ];
 
@@ -124,18 +130,33 @@ void main() {
     late DrawingController c;
     const hold = Duration(milliseconds: 30);
 
-    setUp(() => c = DrawingController(idGenerator: () => 'id', holdDuration: hold));
+    setUp(
+      () => c = DrawingController(idGenerator: () => 'id', holdDuration: hold),
+    );
     tearDown(() => c.dispose());
 
     Future<void> drawAndHold(List<_P> path) async {
-      c.beginStroke(pointer: 1, x: path.first.$1, y: path.first.$2, pressure: 1, timeMs: 0);
+      c.beginStroke(
+        pointer: 1,
+        x: path.first.$1,
+        y: path.first.$2,
+        pressure: 1,
+        timeMs: 0,
+      );
       for (var i = 1; i < path.length; i++) {
-        c.extendStroke(pointer: 1, x: path[i].$1, y: path[i].$2, pressure: 1, timeMs: i * 8);
+        c.extendStroke(
+          pointer: 1,
+          x: path[i].$1,
+          y: path[i].$2,
+          pressure: 1,
+          timeMs: i * 8,
+        );
       }
       await Future<void>.delayed(hold * 3);
     }
 
-    void lift(_P p) => c.endStroke(pointer: 1, x: p.$1, y: p.$2, pressure: 1, timeMs: 9999);
+    void lift(_P p) =>
+        c.endStroke(pointer: 1, x: p.$1, y: p.$2, pressure: 1, timeMs: 9999);
 
     test('a held circle becomes a clean circle', () async {
       final path = _circle();
@@ -148,7 +169,9 @@ void main() {
     });
 
     test('an unrecognized stroke keeps the original points', () async {
-      final path = [for (var i = 0; i < 40; i++) (100.0 + i * 3, 100 + _noise(i) * 30)];
+      final path = [
+        for (var i = 0; i < 40; i++) (100.0 + i * 3, 100 + _noise(i) * 30),
+      ];
       await drawAndHold(path);
       expect(c.recognizedShape, isNull);
       lift(path.last);
@@ -158,9 +181,21 @@ void main() {
 
     test('lifting before the hold time keeps the original stroke', () {
       final path = _circle();
-      c.beginStroke(pointer: 1, x: path.first.$1, y: path.first.$2, pressure: 1, timeMs: 0);
+      c.beginStroke(
+        pointer: 1,
+        x: path.first.$1,
+        y: path.first.$2,
+        pressure: 1,
+        timeMs: 0,
+      );
       for (var i = 1; i < path.length; i++) {
-        c.extendStroke(pointer: 1, x: path[i].$1, y: path[i].$2, pressure: 1, timeMs: i * 8);
+        c.extendStroke(
+          pointer: 1,
+          x: path[i].$1,
+          y: path[i].$2,
+          pressure: 1,
+          timeMs: i * 8,
+        );
       }
       lift(path.last);
 

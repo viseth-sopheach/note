@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/glass/glass_icon_button.dart';
+import '../../../../app/glass/glass_pill.dart';
+
 class PageBar extends StatelessWidget {
   const PageBar({
     super.key,
@@ -28,58 +31,50 @@ class PageBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return Material(
-      color: colors.surface,
-      elevation: 1,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: EdgeInsets.zero,
-          child: Center(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Previous page (Page Up)',
-                    icon: const Icon(Icons.chevron_left),
-                    onPressed: pageIndex > 0 ? onPrevious : null,
-                  ),
-                  Text(
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        child: Center(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: GlassPill(
+              children: [
+                GlassIconButton(
+                  tooltip: 'Previous page (Page Up)',
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: pageIndex > 0 ? onPrevious : null,
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
                     'Page ${pageIndex + 1} of $pageCount',
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Next page (Page Down)',
-                    icon: const Icon(Icons.chevron_right),
-                    onPressed: pageIndex < pageCount - 1 ? onNext : null,
-                  ),
-                  const SizedBox(height: 24, child: VerticalDivider(width: 24)),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Add page…',
-                    icon: const Icon(Icons.note_add_outlined),
-                    onPressed: busy ? null : onAdd,
-                  ),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Duplicate page',
-                    icon: const Icon(Icons.file_copy_outlined),
-                    onPressed: busy ? null : onDuplicate,
-                  ),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Delete page',
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: busy ? null : onDelete,
-                  ),
-                ],
-              ),
+                ),
+                GlassIconButton(
+                  tooltip: 'Next page (Page Down)',
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: pageIndex < pageCount - 1 ? onNext : null,
+                ),
+                const SizedBox(height: 24, child: VerticalDivider(width: 16)),
+                GlassIconButton(
+                  tooltip: 'Add page…',
+                  icon: const Icon(Icons.note_add_outlined),
+                  onPressed: busy ? null : onAdd,
+                ),
+                GlassIconButton(
+                  tooltip: 'Duplicate page',
+                  icon: const Icon(Icons.file_copy_outlined),
+                  onPressed: busy ? null : onDuplicate,
+                ),
+                GlassIconButton(
+                  tooltip: 'Delete page',
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: busy ? null : onDelete,
+                ),
+              ],
             ),
           ),
         ),

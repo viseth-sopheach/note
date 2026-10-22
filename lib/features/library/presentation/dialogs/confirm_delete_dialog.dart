@@ -10,30 +10,25 @@ abstract final class ConfirmDeleteDialog {
     required String title,
     required String message,
   }) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showGlassDialog<bool>(
       context: context,
-      builder: (context) {
-        final colors = Theme.of(context).colorScheme;
-        return AlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              autofocus: true,
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: colors.error,
-                foregroundColor: colors.onError,
-              ),
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => GlassDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          GlassButton(
+            autofocus: true,
+            label: 'Cancel',
+            kind: GlassButtonKind.plain,
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
+          GlassButton(
+            label: 'Delete',
+            kind: GlassButtonKind.destructive,
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      ),
     );
     return confirmed ?? false;
   }

@@ -15,6 +15,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../app/glass/glass_dialog.dart';
+import '../../../app/glass/glass_theme.dart';
 import '../../../app/routes.dart';
 import '../../library/application/library_providers.dart';
 import '../../library/domain/paper_template.dart';
@@ -128,7 +130,7 @@ class _EditorCanvas extends ConsumerStatefulWidget {
 class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     with WidgetsBindingObserver {
   static const double _pad = 24;
-  static const double _margin = 48;
+  static const double _margin = 88;
 
   /// Width of the scrollable content: page cell (paper + drawable margin)
   /// plus padding.
@@ -571,7 +573,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         .clamp(0.25, 4.0)
         .toDouble();
     _fitted = true;
-    _setTransform(scale, (_viewportW - _contentWidth * scale) / 2, 0);
+    _setTransform(scale, (_viewportW - _contentWidth * scale) / 2, _margin);
     _restorePosition(scale);
   }
 
@@ -614,7 +616,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     if (index < 0 || index >= _sessions.length) return;
     final m = _transform.value;
     final scale = m.storage[0];
-    final ty = _clampTy(-(_pageTop(index) + kBleedY) * scale + _pad, scale);
+    final ty = _clampTy(-(_pageTop(index) + kBleedY) * scale + _margin, scale);
     _setTransform(scale, m.storage[12], ty);
     _setActive(index);
   }
@@ -700,18 +702,26 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   }
 
   void _showPages() {
-    showModalBottomSheet<void>(
+    showGlassSheet<void>(
       context: context,
-      builder: (sheet) => ListView.builder(
-        itemCount: _sessions.length,
-        itemBuilder: (_, i) => ListTile(
-          leading: const Icon(Icons.description_outlined),
-          title: Text('Page ${i + 1}'),
-          selected: i == _visiblePage,
-          onTap: () {
-            Navigator.of(sheet).pop();
-            _scrollToPage(i);
-          },
+      builder: (sheet) => Material(
+        type: MaterialType.transparency,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 420),
+          child: ListView.builder(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount: _sessions.length,
+            itemBuilder: (_, i) => ListTile(
+              leading: const Icon(Icons.description_outlined),
+              title: Text('Page ${i + 1}'),
+              selected: i == _visiblePage,
+              onTap: () {
+                Navigator.of(sheet).pop();
+                _scrollToPage(i);
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -838,7 +848,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       );
     }
 
-    final colors = Theme.of(context).colorScheme;
+    final glass = context.glass;
 
     final pages = SizedBox(
       width: _contentWidth,
@@ -863,98 +873,111 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       _measure,
     ]);
 
-    final editor = Column(
-      children: [
-        FloatingToolbar(
-          controller: _active,
-          fingerDraws: _fingerDraws,
-          onFingerDrawsChanged: (v) => setState(() => _fingerDraws = v),
-          busy: _busy,
-          onBack: () =>
-              context.canPop() ? context.pop() : context.go(AppRoutes.library),
-          onPages: _showPages,
-          onExport: () => unawaited(exportPdf(widget.title)),
-          onImportPdf: () => unawaited(_importPdf()),
-          onInsertImage: () => unawaited(_insertImage()),
-          onAddPage: () => unawaited(_addPage()),
-          onToggleMeasure: _toggleMeasure,
-          onSettings: () => context.push(AppRoutes.settings),
-          onComingSoon: _comingSoon,
-        ),
-        SizedBox(
-          height: 2,
-          child: _busy ? const LinearProgressIndicator() : null,
-        ),
-        Expanded(
-          child: AbsorbPointer(
-            absorbing: _busy,
-            child: ColoredBox(
-              color: colors.surfaceContainerHighest,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  _viewportH = constraints.maxHeight;
-                  final widthChanged = constraints.maxWidth != _viewportW;
-                  _viewportW = constraints.maxWidth;
-                  if (widthChanged || !_fitted) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!mounted) return;
-                      if (_fitted) {
-                        _keepCentered();
-                      } else {
-                        _fitWidth();
-                      }
-                    });
-                  }
-                  return Stack(
-                    children: [
-                      ListenableBuilder(
-                        listenable: anyDrawing,
-                        child: pages,
-                        builder: (context, child) {
-                          final busyInput =
-                              _sessions.any((s) => s.controller.isDrawing) ||
-                              _measure.interacting;
-                          return InteractiveViewer(
-                            transformationController: _transform,
-                            constrained: false,
-                            alignment: Alignment.topLeft,
-                            minScale: 0.25,
-                            maxScale: 4,
-                            boundaryMargin: const EdgeInsets.all(
-                              double.infinity,
-                            ),
-                            panEnabled: !busyInput,
-                            scaleEnabled: true,
-                            child: child!,
-                          );
-                        },
-                      ),
-                      Positioned.fill(
-                        child: Listener(
-                          behavior: HitTestBehavior.translucent,
-                          onPointerSignal: _onSignal,
-                        ),
-                      ),
-                    ],
+    final canvas = ColoredBox(
+      color: glass.canvas,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          _viewportH = constraints.maxHeight;
+          final widthChanged = constraints.maxWidth != _viewportW;
+          _viewportW = constraints.maxWidth;
+          if (widthChanged || !_fitted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              if (_fitted) {
+                _keepCentered();
+              } else {
+                _fitWidth();
+              }
+            });
+          }
+          return Stack(
+            children: [
+              ListenableBuilder(
+                listenable: anyDrawing,
+                child: pages,
+                builder: (context, child) {
+                  final busyInput =
+                      _sessions.any((s) => s.controller.isDrawing) ||
+                      _measure.interacting;
+                  return InteractiveViewer(
+                    transformationController: _transform,
+                    constrained: false,
+                    alignment: Alignment.topLeft,
+                    minScale: 0.25,
+                    maxScale: 4,
+                    boundaryMargin: const EdgeInsets.all(double.infinity),
+                    panEnabled: !busyInput,
+                    scaleEnabled: true,
+                    child: child!,
                   );
                 },
               ),
-            ),
+              Positioned.fill(
+                child: Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerSignal: _onSignal,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    final editor = Stack(
+      children: [
+        Positioned.fill(
+          child: AbsorbPointer(absorbing: _busy, child: canvas),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FloatingToolbar(
+                controller: _active,
+                fingerDraws: _fingerDraws,
+                onFingerDrawsChanged: (v) => setState(() => _fingerDraws = v),
+                busy: _busy,
+                onBack: () => context.canPop()
+                    ? context.pop()
+                    : context.go(AppRoutes.library),
+                onPages: _showPages,
+                onExport: () => unawaited(exportPdf(widget.title)),
+                onImportPdf: () => unawaited(_importPdf()),
+                onInsertImage: () => unawaited(_insertImage()),
+                onAddPage: () => unawaited(_addPage()),
+                onToggleMeasure: _toggleMeasure,
+                onSettings: () => context.push(AppRoutes.settings),
+                onComingSoon: _comingSoon,
+              ),
+              SizedBox(
+                height: 2,
+                child: _busy ? const LinearProgressIndicator() : null,
+              ),
+            ],
           ),
         ),
-        ListenableBuilder(
-          listenable: _transform,
-          builder: (context, _) => PageBar(
-            pageIndex: _visiblePage,
-            pageCount: _sessions.length,
-            busy: _busy,
-            onPrevious: () => _scrollToPage(_visiblePage - 1),
-            onNext: () => _scrollToPage(_visiblePage + 1),
-            onAdd: () => unawaited(_addPage()),
-            onDuplicate: () => unawaited(_duplicatePage()),
-            onDelete: _sessions.length > 1
-                ? () => unawaited(_deletePage())
-                : null,
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: ListenableBuilder(
+            listenable: _transform,
+            builder: (context, _) => PageBar(
+              pageIndex: _visiblePage,
+              pageCount: _sessions.length,
+              busy: _busy,
+              onPrevious: () => _scrollToPage(_visiblePage - 1),
+              onNext: () => _scrollToPage(_visiblePage + 1),
+              onAdd: () => unawaited(_addPage()),
+              onDuplicate: () => unawaited(_duplicatePage()),
+              onDelete: _sessions.length > 1
+                  ? () => unawaited(_deletePage())
+                  : null,
+            ),
           ),
         ),
       ],

@@ -1,6 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../app/glass/glass_dialog.dart';
+import '../../../../app/glass/glass_icon_button.dart';
+import '../../../../app/glass/glass_surface.dart';
+import '../../../../app/routes.dart';
 import '../../../library/presentation/cover_palette.dart';
+
+class SettingsBackButton extends StatelessWidget {
+  const SettingsBackButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Center(
+        child: GlassIconButton(
+          tooltip: 'Back',
+          icon: const Icon(Icons.chevron_left),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go(AppRoutes.library),
+        ),
+      ),
+    );
+  }
+}
 
 class SettingsSection extends StatelessWidget {
   const SettingsSection({
@@ -32,10 +56,11 @@ class SettingsSection extends StatelessWidget {
               ],
             ),
           ),
-          Card.outlined(
-            margin: EdgeInsets.zero,
-            clipBehavior: Clip.antiAlias,
-            child: Column(children: children),
+          GlassSurface(
+            child: Material(
+              type: MaterialType.transparency,
+              child: Column(children: children),
+            ),
           ),
         ],
       ),
@@ -59,22 +84,64 @@ class SettingsChoiceTile<T> extends StatelessWidget {
   final List<({T value, String label})> options;
   final ValueChanged<T> onChanged;
 
+  Future<void> _pick(BuildContext context) async {
+    final picked = await showGlassSheet<T>(
+      context: context,
+      builder: (sheet) => Material(
+        type: MaterialType.transparency,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(title, style: Theme.of(sheet).textTheme.titleMedium),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: 8),
+                children: [
+                  for (final o in options)
+                    ListTile(
+                      title: Text(o.label),
+                      trailing: o.value == value
+                          ? Icon(
+                              Icons.check,
+                              color: Theme.of(sheet).colorScheme.primary,
+                            )
+                          : null,
+                      onTap: () => Navigator.of(sheet).pop(o.value),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (picked != null) onChanged(picked);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final current = options
+        .firstWhere((o) => o.value == value, orElse: () => options.first)
+        .label;
+
     return ListTile(
       title: Text(title),
       subtitle: subtitle == null ? null : Text(subtitle!),
-      trailing: DropdownButton<T>(
-        value: value,
-        underline: const SizedBox.shrink(),
-        items: [
-          for (final o in options)
-            DropdownMenuItem<T>(value: o.value, child: Text(o.label)),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(current, style: TextStyle(color: colors.outline)),
+          const SizedBox(width: 4),
+          Icon(Icons.chevron_right, color: colors.outline),
         ],
-        onChanged: (v) {
-          if (v != null) onChanged(v);
-        },
       ),
+      onTap: () => _pick(context),
     );
   }
 }
@@ -130,7 +197,10 @@ class SettingsColorRow extends StatelessWidget {
                           color: o.color,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: Theme.of(context).colorScheme.outlineVariant,
+                            color: o.color == selected
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.outlineVariant,
+                            width: o.color == selected ? 2.5 : 1,
                           ),
                         ),
                         child: o.color == selected

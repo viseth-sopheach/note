@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/glass/glass_icon_button.dart';
+import '../../../../app/glass/glass_menu.dart';
+import '../../../../app/glass/glass_pill.dart';
+import '../../../../app/glass/glass_surface.dart';
+import '../../../../app/glass/glass_tokens.dart';
 import '../../application/drawing_controller.dart';
 import '../../application/measure_controller.dart';
 import '../../domain/stroke_tool.dart';
@@ -7,6 +12,8 @@ import 'ink_palette.dart';
 
 const List<double> _penWidths = [1, 2, 4, 6];
 const List<double> _highlighterWidths = [2, 3, 4];
+const double _compactBreakpoint = 600;
+const double _popoverWidth = 264;
 
 class FloatingToolbar extends StatefulWidget {
   const FloatingToolbar({
@@ -53,138 +60,218 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
-      child: ListenableBuilder(
-        listenable: _c,
-        builder: (context, _) {
-          return Row(
-            children: [
-              _Pill(
-                children: [
-                  IconButton(
-                    tooltip: 'Back',
-                    icon: const Icon(Icons.chevron_left),
-                    onPressed: widget.onBack,
-                  ),
-                  IconButton(
-                    tooltip: 'Pages',
-                    icon: const Icon(Icons.grid_view_outlined),
-                    onPressed: widget.onPages,
-                  ),
-                  IconButton(
-                    tooltip: 'Undo (Ctrl+Z)',
-                    icon: const Icon(Icons.undo),
-                    onPressed: _c.canUndo ? _c.undo : null,
-                  ),
-                  IconButton(
-                    tooltip: 'Redo (Ctrl+Y)',
-                    icon: const Icon(Icons.redo),
-                    onPressed: _c.canRedo ? _c.redo : null,
-                  ),
-                ],
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Center(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: _Pill(children: _centerTools()),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < _compactBreakpoint;
+          return ListenableBuilder(
+            listenable: _c,
+            builder: (context, _) => Row(
+              children: [
+                _leftPill(compact),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: GlassPill(children: _tools()),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              _Pill(
-                children: [
-                  IconButton(
-                    tooltip: 'Export PDF (Ctrl+E)',
-                    icon: const Icon(Icons.picture_as_pdf_outlined),
-                    onPressed: widget.busy ? null : widget.onExport,
-                  ),
-                  PopupMenuButton<String>(
-                    tooltip: 'Insert',
-                    icon: const Icon(Icons.add),
-                    onSelected: (v) {
-                      switch (v) {
-                        case 'pdf':
-                          widget.onImportPdf();
-                        case 'image':
-                          widget.onInsertImage();
-                        case 'page':
-                          widget.onAddPage();
-                      }
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                        value: 'pdf',
-                        child: ListTile(
-                          leading: Icon(Icons.upload_file),
-                          title: Text('Import PDF from device'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'image',
-                        child: ListTile(
-                          leading: Icon(Icons.image_outlined),
-                          title: Text('Insert image'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'page',
-                        child: ListTile(
-                          leading: Icon(Icons.note_add_outlined),
-                          title: Text('Add page'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    tooltip: widget.fingerDraws
-                        ? 'Finger draws (tap for stylus only)'
-                        : 'Stylus only (tap to draw with finger)',
-                    isSelected: !widget.fingerDraws,
-                    icon: const Icon(Icons.touch_app_outlined),
-                    selectedIcon: const Icon(Icons.do_not_touch_outlined),
-                    onPressed: () =>
-                        widget.onFingerDrawsChanged(!widget.fingerDraws),
-                  ),
-                  PopupMenuButton<String>(
-                    tooltip: 'More',
-                    icon: const Icon(Icons.more_horiz),
-                    onSelected: (v) {
-                      switch (v) {
-                        case 'ruler':
-                          widget.onToggleMeasure(MeasureKind.ruler);
-                        case 'protractor':
-                          widget.onToggleMeasure(MeasureKind.protractor);
-                        case 'settings':
-                          widget.onSettings();
-                      }
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'ruler', child: Text('Ruler')),
-                      PopupMenuItem(
-                        value: 'protractor',
-                        child: Text('Protractor'),
-                      ),
-                      PopupMenuItem(value: 'settings', child: Text('Settings')),
-                    ],
-                  ),
-                ],
-              ),
-            ],
+                const SizedBox(width: 8),
+                compact ? _compactMenu() : _rightPill(),
+              ],
+            ),
           );
         },
       ),
     );
   }
 
-  List<Widget> _centerTools() {
-    Widget tool(StrokeTool t, IconData icon, String tip) => _ToolButton(
-      icon: icon,
+  Widget _leftPill(bool compact) {
+    return GlassPill(
+      children: [
+        GlassIconButton(
+          tooltip: 'Back',
+          icon: const Icon(Icons.chevron_left),
+          onPressed: widget.onBack,
+        ),
+        if (!compact)
+          GlassIconButton(
+            tooltip: 'Pages',
+            icon: const Icon(Icons.grid_view_outlined),
+            onPressed: widget.onPages,
+          ),
+        GlassIconButton(
+          tooltip: 'Undo (Ctrl+Z)',
+          icon: const Icon(Icons.undo),
+          onPressed: _c.canUndo ? _c.undo : null,
+        ),
+        GlassIconButton(
+          tooltip: 'Redo (Ctrl+Y)',
+          icon: const Icon(Icons.redo),
+          onPressed: _c.canRedo ? _c.redo : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _rightPill() {
+    return GlassPill(
+      children: [
+        GlassIconButton(
+          tooltip: 'Export PDF (Ctrl+E)',
+          icon: const Icon(Icons.picture_as_pdf_outlined),
+          onPressed: widget.busy ? null : widget.onExport,
+        ),
+        _MenuButton(
+          icon: Icons.add,
+          tooltip: 'Insert',
+          items: const [
+            GlassMenuItem(
+              value: 'pdf',
+              icon: Icons.upload_file,
+              label: 'Import PDF from device',
+            ),
+            GlassMenuItem(
+              value: 'image',
+              icon: Icons.image_outlined,
+              label: 'Insert image',
+            ),
+            GlassMenuItem(
+              value: 'page',
+              icon: Icons.note_add_outlined,
+              label: 'Add page',
+            ),
+          ],
+          onSelected: _onAction,
+        ),
+        GlassIconButton(
+          tooltip: widget.fingerDraws
+              ? 'Finger draws (tap for stylus only)'
+              : 'Stylus only (tap to draw with finger)',
+          selected: !widget.fingerDraws,
+          icon: Icon(
+            widget.fingerDraws
+                ? Icons.touch_app_outlined
+                : Icons.do_not_touch_outlined,
+          ),
+          onPressed: () => widget.onFingerDrawsChanged(!widget.fingerDraws),
+        ),
+        _MenuButton(
+          icon: Icons.more_horiz,
+          tooltip: 'More',
+          items: const [
+            GlassMenuItem(
+              value: 'ruler',
+              icon: Icons.straighten,
+              label: 'Ruler',
+            ),
+            GlassMenuItem(
+              value: 'protractor',
+              icon: Icons.architecture,
+              label: 'Protractor',
+            ),
+            GlassMenuItem(
+              value: 'settings',
+              icon: Icons.settings_outlined,
+              label: 'Settings',
+            ),
+          ],
+          onSelected: _onAction,
+        ),
+      ],
+    );
+  }
+
+  Widget _compactMenu() {
+    return GlassPill(
+      children: [
+        _MenuButton(
+          icon: Icons.more_horiz,
+          tooltip: 'More',
+          items: [
+            const GlassMenuItem(
+              value: 'pages',
+              icon: Icons.grid_view_outlined,
+              label: 'Pages',
+            ),
+            const GlassMenuItem(
+              value: 'export',
+              icon: Icons.picture_as_pdf_outlined,
+              label: 'Export PDF',
+            ),
+            const GlassMenuItem(
+              value: 'pdf',
+              icon: Icons.upload_file,
+              label: 'Import PDF from device',
+            ),
+            const GlassMenuItem(
+              value: 'image',
+              icon: Icons.image_outlined,
+              label: 'Insert image',
+            ),
+            const GlassMenuItem(
+              value: 'page',
+              icon: Icons.note_add_outlined,
+              label: 'Add page',
+            ),
+            GlassMenuItem(
+              value: 'finger',
+              icon: widget.fingerDraws
+                  ? Icons.touch_app_outlined
+                  : Icons.do_not_touch_outlined,
+              label: widget.fingerDraws ? 'Finger draws' : 'Stylus only',
+            ),
+            const GlassMenuItem(
+              value: 'ruler',
+              icon: Icons.straighten,
+              label: 'Ruler',
+            ),
+            const GlassMenuItem(
+              value: 'protractor',
+              icon: Icons.architecture,
+              label: 'Protractor',
+            ),
+            const GlassMenuItem(
+              value: 'settings',
+              icon: Icons.settings_outlined,
+              label: 'Settings',
+            ),
+          ],
+          onSelected: _onAction,
+        ),
+      ],
+    );
+  }
+
+  void _onAction(String value) {
+    switch (value) {
+      case 'pages':
+        widget.onPages();
+      case 'export':
+        if (!widget.busy) widget.onExport();
+      case 'pdf':
+        widget.onImportPdf();
+      case 'image':
+        widget.onInsertImage();
+      case 'page':
+        widget.onAddPage();
+      case 'finger':
+        widget.onFingerDrawsChanged(!widget.fingerDraws);
+      case 'ruler':
+        widget.onToggleMeasure(MeasureKind.ruler);
+      case 'protractor':
+        widget.onToggleMeasure(MeasureKind.protractor);
+      case 'settings':
+        widget.onSettings();
+    }
+  }
+
+  List<Widget> _tools() {
+    Widget tool(StrokeTool t, IconData icon, String tip) => GlassIconButton(
       tooltip: tip,
+      icon: Icon(icon),
       selected: _c.tool == t,
       onPressed: () => _c.selectTool(t),
     );
@@ -204,12 +291,12 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
       ),
       tool(StrokeTool.eraser, Icons.cleaning_services_outlined, 'Eraser'),
       tool(StrokeTool.select, Icons.gesture, 'Lasso select'),
-      _ToolButton(
-        icon: Icons.text_fields,
+      GlassIconButton(
         tooltip: 'Text box',
+        icon: const Icon(Icons.text_fields),
         onPressed: () => widget.onComingSoon('Text box'),
       ),
-      IconButton(
+      GlassIconButton(
         tooltip: 'AI assistant',
         icon: const Text('AI', style: TextStyle(fontWeight: FontWeight.w700)),
         onPressed: () => widget.onComingSoon('AI assistant'),
@@ -220,7 +307,7 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
         tool(StrokeTool.ellipse, Icons.circle_outlined, 'Ellipse'),
         tool(StrokeTool.triangle, Icons.change_history_outlined, 'Triangle'),
       ],
-      IconButton(
+      GlassIconButton(
         tooltip: _expanded ? 'Fewer tools' : 'More tools',
         icon: Icon(_expanded ? Icons.chevron_left : Icons.chevron_right),
         onPressed: () => setState(() => _expanded = !_expanded),
@@ -229,62 +316,41 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
   }
 }
 
-class _Pill extends StatelessWidget {
-  const _Pill({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
-    return Material(
-      color: dark
-          ? theme.colorScheme.surfaceContainerHigh
-          : const Color(0xFFEDEDF0),
-      elevation: 4,
-      shadowColor: Colors.black45,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Row(mainAxisSize: MainAxisSize.min, children: children),
-      ),
-    );
-  }
-}
-
-class _ToolButton extends StatelessWidget {
-  const _ToolButton({
+class _MenuButton extends StatelessWidget {
+  const _MenuButton({
     required this.icon,
     required this.tooltip,
-    required this.onPressed,
-    this.selected = false,
+    required this.items,
+    required this.onSelected,
   });
 
   final IconData icon;
   final String tooltip;
-  final bool selected;
-  final VoidCallback onPressed;
+  final List<GlassMenuItem<String>> items;
+  final ValueChanged<String> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return IconButton(
-      tooltip: tooltip,
-      icon: Icon(icon),
-      style: IconButton.styleFrom(
-        backgroundColor: selected
-            ? colors.primary.withValues(alpha: 0.18)
-            : null,
-        foregroundColor: selected ? colors.primary : null,
+    return Builder(
+      builder: (anchor) => GlassIconButton(
+        tooltip: tooltip,
+        icon: Icon(icon),
+        onPressed: () async {
+          final box = anchor.findRenderObject()! as RenderBox;
+          final origin = box.localToGlobal(Offset(0, box.size.height + 6));
+          final value = await showGlassMenu<String>(
+            context: anchor,
+            position: origin,
+            items: items,
+          );
+          if (value != null) onSelected(value);
+        },
       ),
-      onPressed: onPressed,
     );
   }
 }
 
-/// Pen / highlighter button. Tap to select, tap again for color and size.
-class _InkToolButton extends StatefulWidget {
+class _InkToolButton extends StatelessWidget {
   const _InkToolButton({
     required this.controller,
     required this.tool,
@@ -298,31 +364,92 @@ class _InkToolButton extends StatefulWidget {
   final String tooltip;
 
   @override
-  State<_InkToolButton> createState() => _InkToolButtonState();
+  Widget build(BuildContext context) {
+    return Builder(
+      builder: (anchor) {
+        final selected = controller.tool == tool;
+        return GlassIconButton(
+          tooltip: tooltip,
+          icon: Icon(icon),
+          selected: selected,
+          onPressed: () {
+            if (!selected) {
+              controller.selectTool(tool);
+              return;
+            }
+            _showInkPopover(anchor, controller, tool);
+          },
+        );
+      },
+    );
+  }
 }
 
-class _InkToolButtonState extends State<_InkToolButton> {
-  final MenuController _menu = MenuController();
+Future<void> _showInkPopover(
+  BuildContext anchor,
+  DrawingController controller,
+  StrokeTool tool,
+) {
+  final box = anchor.findRenderObject()! as RenderBox;
+  final origin = box.localToGlobal(Offset(0, box.size.height + 8));
+  final still = MediaQuery.disableAnimationsOf(anchor);
+
+  return showGeneralDialog<void>(
+    context: anchor,
+    barrierDismissible: true,
+    barrierLabel: MaterialLocalizations.of(anchor).modalBarrierDismissLabel,
+    barrierColor: Colors.transparent,
+    transitionDuration: still ? Duration.zero : GlassTokens.menu,
+    pageBuilder: (context, _, _) =>
+        _InkPopover(origin: origin, controller: controller, tool: tool),
+    transitionBuilder: (context, animation, _, child) {
+      final curved = animation.drive(CurveTween(curve: GlassTokens.curve));
+      return FadeTransition(
+        opacity: curved,
+        child: ScaleTransition(
+          alignment: Alignment.topCenter,
+          scale: curved.drive(Tween(begin: 0.94, end: 1.0)),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
+class _InkPopover extends StatelessWidget {
+  const _InkPopover({
+    required this.origin,
+    required this.controller,
+    required this.tool,
+  });
+
+  final Offset origin;
+  final DrawingController controller;
+  final StrokeTool tool;
 
   @override
   Widget build(BuildContext context) {
-    final c = widget.controller;
-    final selected = c.tool == widget.tool;
-    return MenuAnchor(
-      controller: _menu,
-      menuChildren: [_InkOptions(controller: c, tool: widget.tool)],
-      child: _ToolButton(
-        icon: widget.icon,
-        tooltip: widget.tooltip,
-        selected: selected,
-        onPressed: () {
-          if (!selected) {
-            c.selectTool(widget.tool);
-          } else {
-            _menu.isOpen ? _menu.close() : _menu.open();
-          }
-        },
-      ),
+    final size = MediaQuery.sizeOf(context);
+    final left = origin.dx
+        .clamp(8.0, size.width - _popoverWidth - 8)
+        .toDouble();
+
+    return Stack(
+      children: [
+        Positioned(
+          left: left,
+          top: origin.dy,
+          width: _popoverWidth,
+          child: Material(
+            type: MaterialType.transparency,
+            child: GlassSurface(
+              intensity: GlassIntensity.thick,
+              padding: const EdgeInsets.all(12),
+              child: _InkOptions(controller: controller, tool: tool),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -340,22 +467,24 @@ class _InkOptions extends StatelessWidget {
 
     return ListenableBuilder(
       listenable: controller,
-      builder: (context, _) => Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                for (final ink in kInkColors)
-                  GestureDetector(
+      builder: (context, _) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final ink in kInkColors)
+                Semantics(
+                  button: true,
+                  selected: ink.value == controller.colorValue,
+                  label: ink.name,
+                  child: GestureDetector(
                     onTap: () => controller.selectColor(ink.value),
                     child: Container(
-                      width: 28,
-                      height: 28,
+                      width: 30,
+                      height: 30,
                       decoration: BoxDecoration(
                         color: Color(ink.value),
                         shape: BoxShape.circle,
@@ -368,24 +497,29 @@ class _InkOptions extends StatelessWidget {
                       ),
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final w in widths)
-                  GestureDetector(
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final w in widths)
+                Semantics(
+                  button: true,
+                  selected: w == controller.width,
+                  label: 'Width ${w.toStringAsFixed(0)}',
+                  child: GestureDetector(
                     onTap: () => controller.selectWidth(w),
                     child: Container(
-                      width: 36,
-                      height: 36,
+                      width: 38,
+                      height: 38,
                       margin: const EdgeInsets.only(right: 8),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: w == controller.width
-                            ? colors.secondaryContainer
+                            ? colors.primary.withValues(alpha: 0.18)
                             : null,
                         border: Border.all(
                           color: w == controller.width
@@ -404,10 +538,10 @@ class _InkOptions extends StatelessWidget {
                       ),
                     ),
                   ),
-              ],
-            ),
-          ],
-        ),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

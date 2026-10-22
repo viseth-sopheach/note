@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/glass/glass_button.dart';
+import '../../../../app/glass/glass_dialog.dart';
 import '../../../library/domain/paper_template.dart';
 import '../paper/paper_colors.dart';
 
@@ -22,7 +24,7 @@ class PaperTemplateDialog extends StatefulWidget {
     required String title,
     required String confirmLabel,
     required PaperTemplate initial,
-  }) => showDialog<PaperTemplate>(
+  }) => showGlassDialog<PaperTemplate>(
     context: context,
     builder: (_) => PaperTemplateDialog(
       title: title,
@@ -40,33 +42,30 @@ class _PaperTemplateDialogState extends State<PaperTemplateDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return GlassDialog(
       title: Text(widget.title),
-      scrollable: true,
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            for (final template in PaperTemplate.values)
-              _TemplateTile(
-                template: template,
-                selected: template == _selected,
-                onTap: () => setState(() => _selected = template),
-              ),
-          ],
-        ),
+      content: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          for (final template in PaperTemplate.values)
+            _TemplateTile(
+              template: template,
+              selected: template == _selected,
+              onTap: () => setState(() => _selected = template),
+            ),
+        ],
       ),
       actions: [
-        TextButton(
+        GlassButton(
+          label: 'Cancel',
+          kind: GlassButtonKind.plain,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
         ),
-        FilledButton(
+        GlassButton(
           autofocus: true,
+          label: widget.confirmLabel,
           onPressed: () => Navigator.of(context).pop(_selected),
-          child: Text(widget.confirmLabel),
         ),
       ],
     );
@@ -95,7 +94,7 @@ class _TemplateTile extends StatelessWidget {
       label: '${template.label} paper',
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(6),
           child: Column(
@@ -106,14 +105,14 @@ class _TemplateTile extends StatelessWidget {
                 height: 108,
                 decoration: BoxDecoration(
                   color: PaperColors.surface,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: selected ? colors.primary : colors.outlineVariant,
                     width: selected ? 2 : 1,
                   ),
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
+                  borderRadius: BorderRadius.circular(8),
                   child: CustomPaint(painter: _PreviewPainter(template)),
                 ),
               ),

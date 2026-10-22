@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,11 +9,6 @@ import '../widgets/settings_widgets.dart';
 
 class EditorSection extends ConsumerWidget {
   const EditorSection({super.key});
-
-  static bool get _hasMouseWheel =>
-      defaultTargetPlatform == TargetPlatform.windows ||
-      defaultTargetPlatform == TargetPlatform.linux ||
-      defaultTargetPlatform == TargetPlatform.macOS;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -35,15 +29,13 @@ class EditorSection extends ConsumerWidget {
           ],
           onChanged: (z) => notifier.update((s) => s.copyWith(defaultZoom: z)),
         ),
-        if (_hasMouseWheel) ...[
-          const Divider(height: 1),
-          SwitchListTile(
-            title: const Text('Ctrl + mouse wheel zooms'),
-            subtitle: const Text('Off: the wheel only scrolls'),
-            value: settings.wheelZoom,
-            onChanged: (v) => notifier.update((s) => s.copyWith(wheelZoom: v)),
-          ),
-        ],
+        const Divider(height: 1),
+        SwitchListTile(
+          title: const Text('Ctrl + mouse wheel zooms'),
+          subtitle: const Text('Off: the wheel only scrolls'),
+          value: settings.wheelZoom,
+          onChanged: (v) => notifier.update((s) => s.copyWith(wheelZoom: v)),
+        ),
         const Divider(height: 1),
         ListTile(
           leading: const Icon(Icons.view_list_outlined),
