@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/glass/glass_divider.dart';
 import '../../../editor/domain/stroke_tool.dart';
 import '../../../editor/presentation/toolbar/ink_palette.dart';
 import '../../../library/domain/paper_template.dart';
@@ -36,7 +37,7 @@ class PaperSection extends ConsumerWidget {
           onChanged: (t) =>
               notifier.update((s) => s.copyWith(defaultTemplate: t)),
         ),
-        const Divider(height: 1),
+        const GlassDivider(),
         SettingsChoiceTile<StrokeTool>(
           title: 'Default tool',
           value: settings.defaultTool,
@@ -46,7 +47,7 @@ class PaperSection extends ConsumerWidget {
           ],
           onChanged: (t) => notifier.update((s) => s.copyWith(defaultTool: t)),
         ),
-        const Divider(height: 1),
+        const GlassDivider(),
         SettingsColorRow(
           title: 'Pen color',
           options: _inkOptions,
@@ -54,7 +55,7 @@ class PaperSection extends ConsumerWidget {
           onChanged: (c) =>
               notifier.update((s) => s.copyWith(penColorValue: c.toARGB32())),
         ),
-        const Divider(height: 1),
+        const GlassDivider(),
         SettingsChoiceTile<double>(
           title: 'Pen thickness',
           value: settings.penWidth,
@@ -64,7 +65,7 @@ class PaperSection extends ConsumerWidget {
           ],
           onChanged: (w) => notifier.update((s) => s.copyWith(penWidth: w)),
         ),
-        const Divider(height: 1),
+        const GlassDivider(),
         SettingsColorRow(
           title: 'Highlighter color',
           options: _inkOptions,
@@ -73,7 +74,7 @@ class PaperSection extends ConsumerWidget {
             (s) => s.copyWith(highlighterColorValue: c.toARGB32()),
           ),
         ),
-        const Divider(height: 1),
+        const GlassDivider(),
         SettingsChoiceTile<double>(
           title: 'Highlighter thickness',
           value: settings.highlighterWidth,

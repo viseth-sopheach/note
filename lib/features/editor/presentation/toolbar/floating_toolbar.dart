@@ -4,6 +4,7 @@ import '../../../../app/glass/glass_icon_button.dart';
 import '../../../../app/glass/glass_menu.dart';
 import '../../../../app/glass/glass_pill.dart';
 import '../../../../app/glass/glass_surface.dart';
+import '../../../../app/glass/glass_theme.dart';
 import '../../../../app/glass/glass_tokens.dart';
 import '../../application/drawing_controller.dart';
 import '../../application/measure_controller.dart';
@@ -12,8 +13,7 @@ import 'ink_palette.dart';
 
 const List<double> _penWidths = [1, 2, 4, 6];
 const List<double> _highlighterWidths = [2, 3, 4];
-const double _compactBreakpoint = 600;
-const double _popoverWidth = 264;
+const double _menuWidth = 248;
 
 class FloatingToolbar extends StatefulWidget {
   const FloatingToolbar({
@@ -30,6 +30,8 @@ class FloatingToolbar extends StatefulWidget {
     required this.onToggleMeasure,
     required this.onSettings,
     required this.onComingSoon,
+    required this.onDuplicatePage,
+    required this.onDeletePage,
     this.busy = false,
   });
 
@@ -45,6 +47,10 @@ class FloatingToolbar extends StatefulWidget {
   final void Function(MeasureKind kind) onToggleMeasure;
   final VoidCallback onSettings;
   final void Function(String label) onComingSoon;
+  final VoidCallback onDuplicatePage;
+
+  /// Null hides the delete item (only one page left).
+  final VoidCallback? onDeletePage;
   final bool busy;
 
   @override
@@ -56,219 +62,177 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
 
   DrawingController get _c => widget.controller;
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < _compactBreakpoint;
-          return ListenableBuilder(
-            listenable: _c,
-            builder: (context, _) => Row(
-              children: [
-                _leftPill(compact),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: GlassPill(children: _tools()),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                compact ? _compactMenu() : _rightPill(),
-              ],
-            ),
-          );
-        },
+  Future<T?> _menuBelow<T>(BuildContext anchor, List<GlassMenuItem<T>> items) {
+    final box = anchor.findRenderObject()! as RenderBox;
+    final corner = box.localToGlobal(Offset(box.size.width, box.size.height));
+    return showGlassMenu<T>(
+      context: anchor,
+      position: Offset(corner.dx - _menuWidth, corner.dy + 6),
+      items: items,
+    );
+  }
+
+  Future<void> _showInsert(BuildContext anchor) async {
+    final v = await _menuBelow<String>(anchor, const [
+      GlassMenuItem(
+        value: 'pdf',
+        icon: Icons.upload_file,
+        label: 'Import PDF from device',
       ),
-    );
-  }
-
-  Widget _leftPill(bool compact) {
-    return GlassPill(
-      children: [
-        GlassIconButton(
-          tooltip: 'Back',
-          icon: const Icon(Icons.chevron_left),
-          onPressed: widget.onBack,
-        ),
-        if (!compact)
-          GlassIconButton(
-            tooltip: 'Pages',
-            icon: const Icon(Icons.grid_view_outlined),
-            onPressed: widget.onPages,
-          ),
-        GlassIconButton(
-          tooltip: 'Undo (Ctrl+Z)',
-          icon: const Icon(Icons.undo),
-          onPressed: _c.canUndo ? _c.undo : null,
-        ),
-        GlassIconButton(
-          tooltip: 'Redo (Ctrl+Y)',
-          icon: const Icon(Icons.redo),
-          onPressed: _c.canRedo ? _c.redo : null,
-        ),
-      ],
-    );
-  }
-
-  Widget _rightPill() {
-    return GlassPill(
-      children: [
-        GlassIconButton(
-          tooltip: 'Export PDF (Ctrl+E)',
-          icon: const Icon(Icons.picture_as_pdf_outlined),
-          onPressed: widget.busy ? null : widget.onExport,
-        ),
-        _MenuButton(
-          icon: Icons.add,
-          tooltip: 'Insert',
-          items: const [
-            GlassMenuItem(
-              value: 'pdf',
-              icon: Icons.upload_file,
-              label: 'Import PDF from device',
-            ),
-            GlassMenuItem(
-              value: 'image',
-              icon: Icons.image_outlined,
-              label: 'Insert image',
-            ),
-            GlassMenuItem(
-              value: 'page',
-              icon: Icons.note_add_outlined,
-              label: 'Add page',
-            ),
-          ],
-          onSelected: _onAction,
-        ),
-        GlassIconButton(
-          tooltip: widget.fingerDraws
-              ? 'Finger draws (tap for stylus only)'
-              : 'Stylus only (tap to draw with finger)',
-          selected: !widget.fingerDraws,
-          icon: Icon(
-            widget.fingerDraws
-                ? Icons.touch_app_outlined
-                : Icons.do_not_touch_outlined,
-          ),
-          onPressed: () => widget.onFingerDrawsChanged(!widget.fingerDraws),
-        ),
-        _MenuButton(
-          icon: Icons.more_horiz,
-          tooltip: 'More',
-          items: const [
-            GlassMenuItem(
-              value: 'ruler',
-              icon: Icons.straighten,
-              label: 'Ruler',
-            ),
-            GlassMenuItem(
-              value: 'protractor',
-              icon: Icons.architecture,
-              label: 'Protractor',
-            ),
-            GlassMenuItem(
-              value: 'settings',
-              icon: Icons.settings_outlined,
-              label: 'Settings',
-            ),
-          ],
-          onSelected: _onAction,
-        ),
-      ],
-    );
-  }
-
-  Widget _compactMenu() {
-    return GlassPill(
-      children: [
-        _MenuButton(
-          icon: Icons.more_horiz,
-          tooltip: 'More',
-          items: [
-            const GlassMenuItem(
-              value: 'pages',
-              icon: Icons.grid_view_outlined,
-              label: 'Pages',
-            ),
-            const GlassMenuItem(
-              value: 'export',
-              icon: Icons.picture_as_pdf_outlined,
-              label: 'Export PDF',
-            ),
-            const GlassMenuItem(
-              value: 'pdf',
-              icon: Icons.upload_file,
-              label: 'Import PDF from device',
-            ),
-            const GlassMenuItem(
-              value: 'image',
-              icon: Icons.image_outlined,
-              label: 'Insert image',
-            ),
-            const GlassMenuItem(
-              value: 'page',
-              icon: Icons.note_add_outlined,
-              label: 'Add page',
-            ),
-            GlassMenuItem(
-              value: 'finger',
-              icon: widget.fingerDraws
-                  ? Icons.touch_app_outlined
-                  : Icons.do_not_touch_outlined,
-              label: widget.fingerDraws ? 'Finger draws' : 'Stylus only',
-            ),
-            const GlassMenuItem(
-              value: 'ruler',
-              icon: Icons.straighten,
-              label: 'Ruler',
-            ),
-            const GlassMenuItem(
-              value: 'protractor',
-              icon: Icons.architecture,
-              label: 'Protractor',
-            ),
-            const GlassMenuItem(
-              value: 'settings',
-              icon: Icons.settings_outlined,
-              label: 'Settings',
-            ),
-          ],
-          onSelected: _onAction,
-        ),
-      ],
-    );
-  }
-
-  void _onAction(String value) {
-    switch (value) {
-      case 'pages':
-        widget.onPages();
-      case 'export':
-        if (!widget.busy) widget.onExport();
+      GlassMenuItem(
+        value: 'image',
+        icon: Icons.image_outlined,
+        label: 'Insert image',
+      ),
+      GlassMenuItem(
+        value: 'page',
+        icon: Icons.note_add_outlined,
+        label: 'Add page',
+      ),
+    ]);
+    switch (v) {
       case 'pdf':
         widget.onImportPdf();
       case 'image':
         widget.onInsertImage();
       case 'page':
         widget.onAddPage();
-      case 'finger':
-        widget.onFingerDrawsChanged(!widget.fingerDraws);
+    }
+  }
+
+  Future<void> _showMore(BuildContext anchor) async {
+    final v = await _menuBelow<String>(anchor, [
+      const GlassMenuItem(
+        value: 'ruler',
+        icon: Icons.straighten,
+        label: 'Ruler',
+      ),
+      const GlassMenuItem(
+        value: 'protractor',
+        icon: Icons.architecture,
+        label: 'Protractor',
+      ),
+      if (!widget.busy)
+        const GlassMenuItem(
+          value: 'duplicate',
+          icon: Icons.file_copy_outlined,
+          label: 'Duplicate page',
+        ),
+      if (!widget.busy && widget.onDeletePage != null)
+        const GlassMenuItem(
+          value: 'delete',
+          icon: Icons.delete_outline,
+          label: 'Delete page',
+          destructive: true,
+        ),
+      const GlassMenuItem(
+        value: 'settings',
+        icon: Icons.settings_outlined,
+        label: 'Settings',
+      ),
+    ]);
+    switch (v) {
       case 'ruler':
         widget.onToggleMeasure(MeasureKind.ruler);
       case 'protractor':
         widget.onToggleMeasure(MeasureKind.protractor);
+      case 'duplicate':
+        widget.onDuplicatePage();
+      case 'delete':
+        widget.onDeletePage?.call();
       case 'settings':
         widget.onSettings();
     }
   }
 
-  List<Widget> _tools() {
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+      child: ListenableBuilder(
+        listenable: _c,
+        builder: (context, _) {
+          return Row(
+            children: [
+              GlassPill(
+                children: [
+                  GlassIconButton(
+                    tooltip: 'Back',
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: widget.onBack,
+                  ),
+                  GlassIconButton(
+                    tooltip: 'Pages',
+                    icon: const Icon(Icons.grid_view_outlined),
+                    onPressed: widget.onPages,
+                  ),
+                  GlassIconButton(
+                    tooltip: 'Undo (Ctrl+Z)',
+                    icon: const Icon(Icons.undo),
+                    onPressed: _c.canUndo ? _c.undo : null,
+                  ),
+                  GlassIconButton(
+                    tooltip: 'Redo (Ctrl+Y)',
+                    icon: const Icon(Icons.redo),
+                    onPressed: _c.canRedo ? _c.redo : null,
+                  ),
+                ],
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Center(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: GlassPill(children: _centerTools()),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GlassPill(
+                children: [
+                  GlassIconButton(
+                    tooltip: 'Export PDF (Ctrl+E)',
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
+                    onPressed: widget.busy ? null : widget.onExport,
+                  ),
+                  Builder(
+                    builder: (ctx) => GlassIconButton(
+                      tooltip: 'Insert',
+                      icon: const Icon(Icons.add),
+                      onPressed: () => _showInsert(ctx),
+                    ),
+                  ),
+                  GlassIconButton(
+                    tooltip: widget.fingerDraws
+                        ? 'Finger draws (tap for stylus only)'
+                        : 'Stylus only (tap to draw with finger)',
+                    selected: !widget.fingerDraws,
+                    icon: Icon(
+                      widget.fingerDraws
+                          ? Icons.touch_app_outlined
+                          : Icons.do_not_touch_outlined,
+                    ),
+                    onPressed: () =>
+                        widget.onFingerDrawsChanged(!widget.fingerDraws),
+                  ),
+                  Builder(
+                    builder: (ctx) => GlassIconButton(
+                      tooltip: 'More',
+                      icon: const Icon(Icons.more_horiz),
+                      onPressed: () => _showMore(ctx),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  List<Widget> _centerTools() {
     Widget tool(StrokeTool t, IconData icon, String tip) => GlassIconButton(
       tooltip: tip,
       icon: Icon(icon),
@@ -316,41 +280,7 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
   }
 }
 
-class _MenuButton extends StatelessWidget {
-  const _MenuButton({
-    required this.icon,
-    required this.tooltip,
-    required this.items,
-    required this.onSelected,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final List<GlassMenuItem<String>> items;
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Builder(
-      builder: (anchor) => GlassIconButton(
-        tooltip: tooltip,
-        icon: Icon(icon),
-        onPressed: () async {
-          final box = anchor.findRenderObject()! as RenderBox;
-          final origin = box.localToGlobal(Offset(0, box.size.height + 6));
-          final value = await showGlassMenu<String>(
-            context: anchor,
-            position: origin,
-            items: items,
-          );
-          if (value != null) onSelected(value);
-        },
-      ),
-    );
-  }
-}
-
-class _InkToolButton extends StatelessWidget {
+class _InkToolButton extends StatefulWidget {
   const _InkToolButton({
     required this.controller,
     required this.tool,
@@ -364,92 +294,39 @@ class _InkToolButton extends StatelessWidget {
   final String tooltip;
 
   @override
-  Widget build(BuildContext context) {
-    return Builder(
-      builder: (anchor) {
-        final selected = controller.tool == tool;
-        return GlassIconButton(
-          tooltip: tooltip,
-          icon: Icon(icon),
-          selected: selected,
-          onPressed: () {
-            if (!selected) {
-              controller.selectTool(tool);
-              return;
-            }
-            _showInkPopover(anchor, controller, tool);
-          },
-        );
-      },
-    );
-  }
+  State<_InkToolButton> createState() => _InkToolButtonState();
 }
 
-Future<void> _showInkPopover(
-  BuildContext anchor,
-  DrawingController controller,
-  StrokeTool tool,
-) {
-  final box = anchor.findRenderObject()! as RenderBox;
-  final origin = box.localToGlobal(Offset(0, box.size.height + 8));
-  final still = MediaQuery.disableAnimationsOf(anchor);
-
-  return showGeneralDialog<void>(
-    context: anchor,
-    barrierDismissible: true,
-    barrierLabel: MaterialLocalizations.of(anchor).modalBarrierDismissLabel,
-    barrierColor: Colors.transparent,
-    transitionDuration: still ? Duration.zero : GlassTokens.menu,
-    pageBuilder: (context, _, _) =>
-        _InkPopover(origin: origin, controller: controller, tool: tool),
-    transitionBuilder: (context, animation, _, child) {
-      final curved = animation.drive(CurveTween(curve: GlassTokens.curve));
-      return FadeTransition(
-        opacity: curved,
-        child: ScaleTransition(
-          alignment: Alignment.topCenter,
-          scale: curved.drive(Tween(begin: 0.94, end: 1.0)),
-          child: child,
-        ),
-      );
-    },
-  );
-}
-
-class _InkPopover extends StatelessWidget {
-  const _InkPopover({
-    required this.origin,
-    required this.controller,
-    required this.tool,
-  });
-
-  final Offset origin;
-  final DrawingController controller;
-  final StrokeTool tool;
+class _InkToolButtonState extends State<_InkToolButton> {
+  final MenuController _menu = MenuController();
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final left = origin.dx
-        .clamp(8.0, size.width - _popoverWidth - 8)
-        .toDouble();
+    final c = widget.controller;
+    final selected = c.tool == widget.tool;
 
-    return Stack(
-      children: [
-        Positioned(
-          left: left,
-          top: origin.dy,
-          width: _popoverWidth,
-          child: Material(
-            type: MaterialType.transparency,
-            child: GlassSurface(
-              intensity: GlassIntensity.thick,
-              padding: const EdgeInsets.all(12),
-              child: _InkOptions(controller: controller, tool: tool),
-            ),
-          ),
-        ),
-      ],
+    return MenuAnchor(
+      controller: _menu,
+      style: const MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(Colors.transparent),
+        surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
+        shadowColor: WidgetStatePropertyAll(Colors.transparent),
+        elevation: WidgetStatePropertyAll(0),
+        padding: WidgetStatePropertyAll(EdgeInsets.zero),
+      ),
+      menuChildren: [_InkOptions(controller: c, tool: widget.tool)],
+      child: GlassIconButton(
+        tooltip: widget.tooltip,
+        icon: Icon(widget.icon),
+        selected: selected,
+        onPressed: () {
+          if (!selected) {
+            c.selectTool(widget.tool);
+          } else {
+            _menu.isOpen ? _menu.close() : _menu.open();
+          }
+        },
+      ),
     );
   }
 }
@@ -462,86 +339,91 @@ class _InkOptions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final scheme = Theme.of(context).colorScheme;
+    final glass = context.glass;
     final widths = tool == StrokeTool.pen ? _penWidths : _highlighterWidths;
 
-    return ListenableBuilder(
-      listenable: controller,
-      builder: (context, _) => Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              for (final ink in kInkColors)
-                Semantics(
-                  button: true,
-                  selected: ink.value == controller.colorValue,
-                  label: ink.name,
-                  child: GestureDetector(
-                    onTap: () => controller.selectColor(ink.value),
-                    child: Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: Color(ink.value),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: ink.value == controller.colorValue
-                              ? colors.primary
-                              : colors.outlineVariant,
-                          width: ink.value == controller.colorValue ? 3 : 1,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final w in widths)
-                Semantics(
-                  button: true,
-                  selected: w == controller.width,
-                  label: 'Width ${w.toStringAsFixed(0)}',
-                  child: GestureDetector(
-                    onTap: () => controller.selectWidth(w),
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      margin: const EdgeInsets.only(right: 8),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: w == controller.width
-                            ? colors.primary.withValues(alpha: 0.18)
-                            : null,
-                        border: Border.all(
-                          color: w == controller.width
-                              ? colors.primary
-                              : colors.outlineVariant,
-                        ),
-                      ),
+    return GlassSurface(
+      intensity: GlassIntensity.thick,
+      padding: const EdgeInsets.all(GlassTokens.space3),
+      child: ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final ink in kInkColors)
+                  Semantics(
+                    button: true,
+                    selected: ink.value == controller.colorValue,
+                    label: ink.name,
+                    child: GestureDetector(
+                      onTap: () => controller.selectColor(ink.value),
                       child: Container(
-                        width: 4 + w * 2,
-                        height: 4 + w * 2,
+                        width: 32,
+                        height: 32,
                         decoration: BoxDecoration(
-                          color: Color(controller.colorValue)
-                              .withValues(alpha: 1),
+                          color: Color(ink.value),
                           shape: BoxShape.circle,
+                          border: Border.all(
+                            color: ink.value == controller.colorValue
+                                ? scheme.primary
+                                : glass.border,
+                            width: ink.value == controller.colorValue ? 3 : 1,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
-          ),
-        ],
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final w in widths)
+                  Semantics(
+                    button: true,
+                    selected: w == controller.width,
+                    label: 'Width ${w.toStringAsFixed(0)}',
+                    child: GestureDetector(
+                      onTap: () => controller.selectWidth(w),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        margin: const EdgeInsets.only(right: 8),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: w == controller.width
+                              ? scheme.primary.withValues(alpha: 0.18)
+                              : null,
+                          border: Border.all(
+                            color: w == controller.width
+                                ? scheme.primary
+                                : glass.border,
+                          ),
+                        ),
+                        child: Container(
+                          width: 4 + w * 2,
+                          height: 4 + w * 2,
+                          decoration: BoxDecoration(
+                            color: Color(controller.colorValue)
+                                .withValues(alpha: 1),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

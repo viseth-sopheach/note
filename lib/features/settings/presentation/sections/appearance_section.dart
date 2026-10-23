@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/glass/glass_divider.dart';
+import '../../../../app/glass/glass_segmented_control.dart';
+import '../../../../app/glass/glass_switch_tile.dart';
 import '../../application/settings_providers.dart';
 import '../../domain/app_theme_mode.dart';
 import '../../domain/layout_density.dart';
@@ -42,19 +45,14 @@ class AppearanceSection extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Theme', style: textTheme.bodyLarge),
-              const SizedBox(height: 8),
-              SegmentedButton<AppThemeMode>(
-                showSelectedIcon: false,
+              const SizedBox(height: 12),
+              GlassSegmentedControl<AppThemeMode>(
                 segments: [
                   for (final m in AppThemeMode.values)
-                    ButtonSegment(
-                      value: m,
-                      icon: Icon(_iconFor(m)),
-                      label: Text(m.label),
-                    ),
+                    GlassSegment(value: m, label: m.label, icon: _iconFor(m)),
                 ],
-                selected: {settings.themeMode},
-                onSelectionChanged: (s) => notifier.setMode(s.first),
+                selected: settings.themeMode,
+                onChanged: notifier.setMode,
               ),
               const SizedBox(height: 8),
               Text(
@@ -64,7 +62,7 @@ class AppearanceSection extends ConsumerWidget {
             ],
           ),
         ),
-        const Divider(height: 1),
+        const GlassDivider(),
         SettingsColorRow(
           title: 'Accent color',
           options: kAccentColors,
@@ -73,7 +71,7 @@ class AppearanceSection extends ConsumerWidget {
             (s) => s.copyWith(accentColorValue: c.toARGB32()),
           ),
         ),
-        const Divider(height: 1),
+        const GlassDivider(),
         SettingsChoiceTile<LayoutDensity>(
           title: 'Layout density',
           subtitle: 'Spacing of lists, buttons and the library',
@@ -83,10 +81,10 @@ class AppearanceSection extends ConsumerWidget {
           ],
           onChanged: (d) => notifier.update((s) => s.copyWith(density: d)),
         ),
-        const Divider(height: 1),
-        SwitchListTile(
-          title: const Text('Show notebook covers'),
-          subtitle: const Text('Off shows plain tiles in the library'),
+        const GlassDivider(),
+        GlassSwitchTile(
+          title: 'Show notebook covers',
+          subtitle: 'Off shows plain tiles in the library',
           value: settings.showCovers,
           onChanged: (v) => notifier.update((s) => s.copyWith(showCovers: v)),
         ),

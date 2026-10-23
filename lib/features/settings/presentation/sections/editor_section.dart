@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/glass/glass_divider.dart';
+import '../../../../app/glass/glass_list_tile.dart';
+import '../../../../app/glass/glass_switch_tile.dart';
 import '../../../../app/routes.dart';
 import '../../application/settings_providers.dart';
 import '../../domain/app_settings.dart';
@@ -29,22 +32,22 @@ class EditorSection extends ConsumerWidget {
           ],
           onChanged: (z) => notifier.update((s) => s.copyWith(defaultZoom: z)),
         ),
-        const Divider(height: 1),
-        SwitchListTile(
-          title: const Text('Ctrl + mouse wheel zooms'),
-          subtitle: const Text('Off: the wheel only scrolls'),
+        const GlassDivider(),
+        GlassSwitchTile(
+          title: 'Ctrl + mouse wheel zooms',
+          subtitle: 'Off: the wheel only scrolls',
           value: settings.wheelZoom,
           onChanged: (v) => notifier.update((s) => s.copyWith(wheelZoom: v)),
         ),
-        const Divider(height: 1),
-        ListTile(
-          leading: const Icon(Icons.view_list_outlined),
-          title: const Text('Customize toolbar'),
-          subtitle: const Text('Order and visibility of tools'),
+        const GlassDivider(),
+        GlassListTile(
+          leading: Icons.view_list_outlined,
+          title: 'Customize toolbar',
+          subtitle: 'Order and visibility of tools',
           trailing: const Icon(Icons.chevron_right),
           onTap: () => context.push(AppRoutes.settingsToolbar),
         ),
-        const Divider(height: 1),
+        const GlassDivider(),
         SettingsChoiceTile<int>(
           title: 'Undo history',
           subtitle: 'Applies to notebooks opened afterwards',
@@ -55,27 +58,25 @@ class EditorSection extends ConsumerWidget {
           ],
           onChanged: (n) => notifier.update((s) => s.copyWith(undoLimit: n)),
         ),
-        const Divider(height: 1),
-        SwitchListTile(
-          title: const Text('Confirm before deleting a page'),
+        const GlassDivider(),
+        GlassSwitchTile(
+          title: 'Confirm before deleting a page',
           value: settings.confirmDeletePage,
           onChanged: (v) =>
               notifier.update((s) => s.copyWith(confirmDeletePage: v)),
         ),
-        const Divider(height: 1),
-        SwitchListTile(
-          title: const Text('Remember last position'),
-          subtitle: const Text('Reopen notebooks where you left off'),
+        const GlassDivider(),
+        GlassSwitchTile(
+          title: 'Remember last position',
+          subtitle: 'Reopen notebooks where you left off',
           value: settings.rememberPosition,
           onChanged: (v) =>
               notifier.update((s) => s.copyWith(rememberPosition: v)),
         ),
-        const Divider(height: 1),
-        SwitchListTile(
-          title: const Text('Shape recognition'),
-          subtitle: const Text(
-            'Hold at the end of a stroke to snap it to a clean shape',
-          ),
+        const GlassDivider(),
+        GlassSwitchTile(
+          title: 'Shape recognition',
+          subtitle: 'Hold at the end of a stroke to snap it to a clean shape',
           value: settings.shapeRecognition,
           onChanged: (v) =>
               notifier.update((s) => s.copyWith(shapeRecognition: v)),

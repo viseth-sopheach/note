@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/glass/glass_divider.dart';
+import '../../../../app/glass/glass_list_tile.dart';
 import '../../application/settings_providers.dart';
 import '../widgets/settings_widgets.dart';
 
@@ -22,9 +24,9 @@ class AboutSection extends ConsumerWidget {
       title: 'About',
       icon: Icons.info_outline,
       children: [
-        ListTile(title: const Text('App'), trailing: Text(name)),
-        const Divider(height: 1),
-        ListTile(title: const Text('Version'), trailing: Text(version)),
+        GlassListTile(title: 'App', trailing: Text(name)),
+        const GlassDivider(),
+        GlassListTile(title: 'Version', trailing: Text(version)),
       ],
     );
   }

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/glass/glass_dialog.dart';
 import '../../../../app/glass/glass_icon_button.dart';
+import '../../../../app/glass/glass_list_tile.dart';
 import '../../../../app/glass/glass_surface.dart';
 import '../../../../app/routes.dart';
 import '../../../library/presentation/cover_palette.dart';
@@ -103,8 +104,8 @@ class SettingsChoiceTile<T> extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 children: [
                   for (final o in options)
-                    ListTile(
-                      title: Text(o.label),
+                    GlassListTile(
+                      title: o.label,
                       trailing: o.value == value
                           ? Icon(
                               Icons.check,
@@ -130,13 +131,13 @@ class SettingsChoiceTile<T> extends StatelessWidget {
         .firstWhere((o) => o.value == value, orElse: () => options.first)
         .label;
 
-    return ListTile(
-      title: Text(title),
-      subtitle: subtitle == null ? null : Text(subtitle!),
+    return GlassListTile(
+      title: title,
+      subtitle: subtitle,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(current, style: TextStyle(color: colors.outline)),
+          Text(current),
           const SizedBox(width: 4),
           Icon(Icons.chevron_right, color: colors.outline),
         ],
