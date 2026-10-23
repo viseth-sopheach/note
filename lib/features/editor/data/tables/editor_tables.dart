@@ -24,6 +24,9 @@ class PageRows extends Table {
 
   IntColumn get updatedAt => integer().map(const EpochMicrosConverter())();
 
+  /// JSON list of images placed on the page (see PageImage), or null.
+  TextColumn get images => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 

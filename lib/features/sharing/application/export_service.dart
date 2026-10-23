@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import '../../editor/domain/page_image.dart';
 import '../../editor/domain/page_repository.dart';
 import '../../editor/domain/stroke.dart';
 import '../../editor/domain/stroke_tool.dart';
@@ -32,6 +33,27 @@ class ExportService {
       final image = imagePath != null && File(imagePath).existsSync()
           ? pw.MemoryImage(await File(imagePath).readAsBytes())
           : null;
+
+      final overlays = <pw.Widget>[];
+      for (final img in await _pages.loadImages(notebookId, pageIndex: i)) {
+        final file = File(img.path);
+        if (!file.existsSync()) continue;
+        overlays.add(
+          pw.Positioned(
+            left: img.x * _s,
+            top: img.y * _s,
+            child: pw.SizedBox(
+              width: img.width * _s,
+              height: img.height * _s,
+              child: pw.Image(
+                pw.MemoryImage(await file.readAsBytes()),
+                fit: pw.BoxFit.fill,
+              ),
+            ),
+          ),
+        );
+      }
+
       doc.addPage(
         pw.Page(
           pageFormat: const PdfPageFormat(_w, _h),
@@ -42,6 +64,7 @@ class ExportService {
                 pw.Positioned.fill(
                   child: pw.Image(image, fit: pw.BoxFit.contain),
                 ),
+              ...overlays,
               pw.CustomPaint(
                 size: const PdfPoint(_w, _h),
                 painter: (canvas, size) => _paint(canvas, size, strokes),

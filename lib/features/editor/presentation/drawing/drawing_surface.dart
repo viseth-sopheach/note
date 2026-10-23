@@ -20,6 +20,7 @@ class DrawingSurface extends StatefulWidget {
     this.allowTouch = false,
     this.origin = Offset.zero,
     this.bounds,
+    this.isClaimed,
   });
 
   final DrawingController controller;
@@ -29,6 +30,11 @@ class DrawingSurface extends StatefulWidget {
 
   /// Paper rectangle in paper coordinates. Input outside it is ignored.
   final Rect? bounds;
+
+  /// Called with the pointer-down position in paper coordinates. Return true
+  /// when something else (for example an image) owns the touch, so no stroke
+  /// starts.
+  final bool Function(Offset paperPoint)? isClaimed;
 
   @override
   State<DrawingSurface> createState() => _DrawingSurfaceState();
@@ -85,6 +91,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
 
     // Critical: Reject strokes that start outside the defined bounds
     final raw = _local(e);
+    if (widget.isClaimed?.call(raw) ?? false) return;
     final b = widget.bounds;
     if (b != null && !b.contains(raw)) return;
     final p = raw;

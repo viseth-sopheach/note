@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -10,12 +11,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../app/glass/glass_dialog.dart';
+import '../../../app/glass/glass_list_tile.dart';
 import '../../../app/glass/glass_scroll_thumb.dart';
 import '../../../app/glass/glass_theme.dart';
 import '../../../app/routes.dart';
@@ -30,18 +33,21 @@ import '../application/autosave_controller.dart';
 import '../application/drawing_controller.dart';
 import '../application/editor_providers.dart';
 import '../application/measure_controller.dart';
+import '../application/page_images_controller.dart';
 import '../application/tool_settings.dart';
 import '../domain/page_repository.dart';
+import '../domain/stroke_tool.dart';
 import 'dialogs/paper_template_dialog.dart';
 import 'drawing/drawing_surface.dart';
+import 'drawing/image_layer.dart';
 import 'drawing/ink_layers.dart';
 import 'drawing/selection_layer.dart';
+import 'editor_stack.dart';
 import 'measure/measure_overlay.dart';
 import 'paper/page_metrics.dart';
 import 'paper/paper_painter.dart';
 import 'paper/paper_view.dart';
 import 'toolbar/floating_toolbar.dart';
-import 'toolbar/page_bar.dart';
 
 class EditorScreen extends ConsumerStatefulWidget {
   const EditorScreen({super.key, required this.notebookId});
@@ -92,6 +98,7 @@ class _PageSession {
     required this.controller,
     required this.template,
     required this.imagePath,
+    required this.images,
     required this.autosave,
   });
 
@@ -100,10 +107,12 @@ class _PageSession {
   final DrawingController controller;
   final PaperTemplate template;
   final String? imagePath;
+  final PageImagesController images;
   AutosaveController autosave;
 
   void close() {
     unawaited(autosave.dispose());
+    unawaited(images.close());
     controller.dispose();
   }
 }
@@ -237,6 +246,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       widget.notebookId,
       pageIndex: index,
     );
+    final pageImages = await _repository.loadImages(
+      widget.notebookId,
+      pageIndex: index,
+    );
     final controller = DrawingController(
       settings: _settings,
       undoLimit: ref.read(appSettingsProvider).undoLimit,
@@ -249,6 +262,13 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       controller: controller,
       template: template,
       imagePath: imagePath,
+      images: PageImagesController(
+        repository: _repository,
+        notebookId: widget.notebookId,
+        pageIndex: index,
+        pageSize: kPageSize,
+        initial: pageImages,
+      ),
       autosave: _newAutosave(controller, index),
     );
     controller.snapSegments = () =>
@@ -367,14 +387,19 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
   /// Saves every page. Returns false when something could not be saved.
   Future<bool> _flushAll() async {
-    await Future.wait([for (final s in _sessions) s.autosave.flush()]);
-    return _sessions.every((s) => !s.autosave.hasUnsavedChanges);
+    await Future.wait([
+      for (final s in _sessions) ...[s.autosave.flush(), s.images.flush()],
+    ]);
+    return _sessions.every(
+      (s) => !s.autosave.hasUnsavedChanges && !s.images.hasUnsavedChanges,
+    );
   }
 
   /// Points the page at a new index and restarts its autosave there.
   Future<void> _rebind(_PageSession session, int index) async {
     if (session.index == index) return;
     await session.autosave.dispose();
+    await session.images.rebind(index);
     session.index = index;
     session.autosave = _newAutosave(session.controller, index);
   }
@@ -385,6 +410,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     });
   }
 
+  /// Asks for a paper template, then adds the page.
   Future<void> _addPage() async {
     if (_busy || _sessions.isEmpty) return;
     final template = await PaperTemplateDialog.show(
@@ -394,8 +420,17 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       initial: _sessions[_visiblePage].template,
     );
     if (template == null || !mounted) return;
+    await _appendPage(template);
+  }
 
-    await _runExclusive('Could not add a page.', () async {
+  /// Adds a page that follows the template of the page in view.
+  Future<void> _addPageSameTemplate() async {
+    if (_busy || _sessions.isEmpty) return;
+    await _appendPage(_sessions[_visiblePage].template);
+  }
+
+  Future<void> _appendPage(PaperTemplate template) {
+    return _runExclusive('Could not add a page.', () async {
       final index = _sessions.length;
       await _repository.insertPage(
         widget.notebookId,
@@ -415,20 +450,79 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     });
   }
 
-  Future<void> _insertImage() async {
-    if (_busy) return;
-    if (widget.pdfPath != null) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('Images cannot be added to PDF notebooks'),
+  /// Returns the chosen image path, or null when cancelled or unavailable.
+  /// Phones can pick from files or take a photo; desktop uses the file picker.
+  Future<String?> _pickImagePath() async {
+    try {
+      final mobile =
+          defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS;
+      var camera = false;
+
+      if (mobile) {
+        final choice = await showGlassSheet<String>(
+          context: context,
+          builder: (sheet) => Material(
+            type: MaterialType.transparency,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GlassListTile(
+                    leading: Icons.photo_library_outlined,
+                    title: 'Photo library / Files',
+                    onTap: () => Navigator.of(sheet).pop('files'),
+                  ),
+                  GlassListTile(
+                    leading: Icons.photo_camera_outlined,
+                    title: 'Take photo',
+                    onTap: () => Navigator.of(sheet).pop('camera'),
+                  ),
+                ],
+              ),
+            ),
           ),
         );
-      return;
+        if (choice == null || !mounted) return null;
+        camera = choice == 'camera';
+      }
+
+      if (camera) {
+        final shot = await ImagePicker().pickImage(
+          source: ImageSource.camera,
+          maxWidth: 2480,
+          imageQuality: 90,
+        );
+        return shot?.path;
+      }
+
+      final files = await FilePicker.pickFiles(type: FileType.image);
+      return files.isEmpty ? null : files.first.path;
+    } catch (error, stack) {
+      developer.log(
+        'Image picker failed',
+        name: 'editor',
+        error: error,
+        stackTrace: stack,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text('Could not open the image picker.')),
+          );
+      }
+      return null;
     }
-    final files = await FilePicker.pickFiles(type: FileType.image);
-    final path = files.isEmpty ? null : files.first.path;
+  }
+
+  /// Places a picked image on the page in view. The image can then be moved
+  /// and resized with its handles.
+  Future<void> _insertImage() async {
+    if (_busy || _sessions.isEmpty) return;
+
+    final path = await _pickImagePath();
     if (path == null || !mounted) return;
 
     await _runExclusive('Could not insert the image.', () async {
@@ -436,30 +530,51 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       final dir = Directory(p.join(docs.path, 'images'));
       await dir.create(recursive: true);
       final ext = p.extension(path).toLowerCase();
-      final target = p.join(
-        dir.path,
-        '${const Uuid().v4()}${ext.isEmpty ? '.jpg' : ext}',
+      final target = File(
+        p.join(dir.path, '${const Uuid().v4()}${ext.isEmpty ? '.jpg' : ext}'),
       );
-      await File(path).copy(target);
+      await File(path).copy(target.path);
 
-      final index = _sessions.length;
-      await _repository.insertPage(
-        widget.notebookId,
-        pageIndex: index,
-        template: widget.template,
-        imagePath: target,
-      );
-      final session = await _openPage(index);
-      if (!mounted) {
-        session.close();
-        return;
+      try {
+        final natural = await _imageSize(target);
+        final index = _visiblePage;
+        final m = _transform.value;
+        final sceneY = (_viewportH / 2 - m.storage[13]) / m.storage[0];
+        final center = Offset(
+          kPageSize.width / 2,
+          (sceneY - _paperOrigin(index).dy)
+              .clamp(0.0, kPageSize.height)
+              .toDouble(),
+        );
+
+        _sessions[index].images.add(
+          path: target.path,
+          natural: natural,
+          center: center,
+        );
+        _setActive(index);
+      } catch (_) {
+        if (await target.exists()) await target.delete();
+        rethrow;
       }
-      setState(() {
-        _sessions.add(session);
-        _activeIndex = index;
-      });
-      _scheduleScroll(index);
     });
+  }
+
+  /// Reads the pixel size without decoding the whole image.
+  Future<Size> _imageSize(File file) async {
+    final buffer = await ui.ImmutableBuffer.fromUint8List(
+      await file.readAsBytes(),
+    );
+    try {
+      final descriptor = await ui.ImageDescriptor.encoded(buffer);
+      try {
+        return Size(descriptor.width.toDouble(), descriptor.height.toDouble());
+      } finally {
+        descriptor.dispose();
+      }
+    } finally {
+      buffer.dispose();
+    }
   }
 
   Future<void> _duplicatePage() async {
@@ -478,6 +593,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         template: source.template,
         strokes: source.controller.strokes,
         imagePath: source.imagePath,
+        images: source.images.images,
       );
       final copy = await _openPage(target);
       final updated = [..._sessions]..insert(target, copy);
@@ -686,6 +802,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     _savePosition();
     for (final s in _sessions) {
       unawaited(s.autosave.flush());
+      unawaited(s.images.flush());
     }
   }
 
@@ -764,11 +881,80 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     );
   }
 
+  Future<void> _showMoreSheet() async {
+    final items = <({String value, IconData icon, String label})>[
+      (value: 'ruler', icon: Icons.straighten, label: 'Ruler'),
+      (value: 'protractor', icon: Icons.architecture, label: 'Protractor'),
+      if (!_busy)
+        (
+          value: 'duplicate',
+          icon: Icons.file_copy_outlined,
+          label: 'Duplicate page',
+        ),
+      if (!_busy && _sessions.length > 1)
+        (
+          value: 'delete',
+          icon: Icons.delete_outline,
+          label: 'Delete page',
+        ),
+      if (!_busy)
+        (
+          value: 'export',
+          icon: Icons.picture_as_pdf_outlined,
+          label: 'Export PDF',
+        ),
+      (value: 'settings', icon: Icons.settings_outlined, label: 'Settings'),
+    ];
+
+    final action = await showGlassSheet<String>(
+      context: context,
+      builder: (sheet) => Material(
+        type: MaterialType.transparency,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final item in items)
+                GlassListTile(
+                  leading: item.icon,
+                  title: item.label,
+                  onTap: () => Navigator.of(sheet).pop(item.value),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+
+    switch (action) {
+      case 'ruler':
+        _toggleMeasure(MeasureKind.ruler);
+      case 'protractor':
+        _toggleMeasure(MeasureKind.protractor);
+      case 'duplicate':
+        unawaited(_duplicatePage());
+      case 'delete':
+        unawaited(_deletePage());
+      case 'export':
+        unawaited(exportPdf(widget.title));
+      case 'settings':
+        unawaited(context.push(AppRoutes.settings));
+    }
+  }
+
   void _comingSoon(String label) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text('$label is coming soon')));
   }
+
+  /// Dark paper only for template pages. PDF and image pages stay light.
+  bool _darkPaper(_PageSession session) =>
+      Theme.of(context).brightness == Brightness.dark &&
+      session.imagePath == null &&
+      _pdf == null;
 
   Widget _paper(_PageSession session) {
     final image = session.imagePath;
@@ -799,7 +985,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
     final pdf = _pdf;
     if (pdf == null || session.index >= pdf.pages.length) {
-      return PaperView(template: session.template);
+      return PaperView(
+        template: session.template,
+        dark: _darkPaper(session),
+      );
     }
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -825,6 +1014,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   /// One page cell: the paper plus a drawable margin around it. Pointer
   /// input and ink cover the whole cell, so you can draw on the gray area.
   Widget _buildPage(_PageSession session) {
+    final dark = _darkPaper(session);
+
     return SizedBox(
       width: kCellSize.width,
       height: kCellSize.height,
@@ -836,9 +1027,25 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           allowTouch: _fingerDraws,
           origin: kPaperOrigin,
           bounds: Offset.zero & kPageSize,
+          isClaimed: (point) {
+            final claimed = session.images.claims(
+              point,
+              selectToolActive: session.controller.tool == StrokeTool.select,
+            );
+            if (!claimed) session.images.select(null);
+            return claimed;
+          },
           child: Stack(
             children: [
               Positioned(left: kBleedX, top: kBleedY, child: _paper(session)),
+              Positioned.fill(
+                child: ImageLayer(
+                  controller: session.images,
+                  drawing: session.controller,
+                  scale: _scale,
+                  origin: kPaperOrigin,
+                ),
+              ),
               Positioned.fill(
                 child: ClipRect(
                   clipper: const _PaperClipper(),
@@ -848,14 +1055,17 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                       CommittedInkLayer(
                         controller: session.controller,
                         origin: kPaperOrigin,
+                        darkPaper: dark,
                       ),
                       LiveInkLayer(
                         controller: session.controller,
                         origin: kPaperOrigin,
+                        darkPaper: dark,
                       ),
                       SelectionLayer(
                         controller: session.controller,
                         origin: kPaperOrigin,
+                        darkPaper: dark,
                       ),
                     ],
                   ),
@@ -905,10 +1115,11 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
     final anyDrawing = Listenable.merge([
       for (final s in _sessions) s.controller,
+      for (final s in _sessions) s.images,
       _measure,
     ]);
 
-    final editor = Stack(
+    final canvas = Stack(
       children: [
         Positioned.fill(
           child: AbsorbPointer(
@@ -937,7 +1148,11 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                         child: pages,
                         builder: (context, child) {
                           final busyInput =
-                              _sessions.any((s) => s.controller.isDrawing) ||
+                              _sessions.any(
+                                (s) =>
+                                    s.controller.isDrawing ||
+                                    s.images.interacting,
+                              ) ||
                               _measure.interacting;
                           return InteractiveViewer(
                             transformationController: _transform,
@@ -990,60 +1205,57 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
             },
           ),
         ),
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              FloatingToolbar(
-                controller: _active,
-                fingerDraws: _fingerDraws,
-                onFingerDrawsChanged: (v) => setState(() => _fingerDraws = v),
-                busy: _busy,
-                onBack: () => context.canPop()
-                    ? context.pop()
-                    : context.go(AppRoutes.library),
-                onPages: _showPages,
-                onExport: () => unawaited(exportPdf(widget.title)),
-                onImportPdf: () => unawaited(_importPdf()),
-                onInsertImage: () => unawaited(_insertImage()),
-                onAddPage: () => unawaited(_addPage()),
-                onToggleMeasure: _toggleMeasure,
-                onSettings: () => context.push(AppRoutes.settings),
-                onComingSoon: _comingSoon,
-                onDuplicatePage: () => unawaited(_duplicatePage()),
-                onDeletePage: _sessions.length > 1
-                    ? () => unawaited(_deletePage())
-                    : null,
-              ),
-              SizedBox(
-                height: 2,
-                child: _busy ? const LinearProgressIndicator() : null,
-              ),
-            ],
-          ),
+      ],
+    );
+
+    final toolbar = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FloatingToolbar(
+          controller: _active,
+          fingerDraws: _fingerDraws,
+          onFingerDrawsChanged: (v) => setState(() => _fingerDraws = v),
+          busy: _busy,
+          onBack: () =>
+              context.canPop() ? context.pop() : context.go(AppRoutes.library),
+          onPages: _showPages,
+          onExport: () => unawaited(exportPdf(widget.title)),
+          onImportPdf: () => unawaited(_importPdf()),
+          onInsertImage: () => unawaited(_insertImage()),
+          onAddPage: () => unawaited(_addPageSameTemplate()),
+          onAddTemplate: () => unawaited(_addPage()),
+          onToggleMeasure: _toggleMeasure,
+          onSettings: () => context.push(AppRoutes.settings),
+          onComingSoon: _comingSoon,
+          onDuplicatePage: () => unawaited(_duplicatePage()),
+          onDeletePage: _sessions.length > 1
+              ? () => unawaited(_deletePage())
+              : null,
         ),
-        Positioned.fill(
-          child: ListenableBuilder(
-            listenable: Listenable.merge([_transform, _scrolling, _atBottom]),
-            builder: (context, _) => PageBar(
-              pageIndex: _visiblePage,
-              pageCount: _sessions.length,
-              visible: _scrolling.value,
-              showAdd: _atBottom.value,
-              busy: _busy,
-              onPrevious: () => _scrollToPage(_visiblePage - 1),
-              onNext: () => _scrollToPage(_visiblePage + 1),
-              onAdd: () => unawaited(_addPage()),
-            ),
-          ),
+        SizedBox(
+          height: 2,
+          child: _busy ? const LinearProgressIndicator() : null,
         ),
       ],
     );
 
-    return editor;
+    return EditorStack(
+      canvas: canvas,
+      toolbar: toolbar,
+      transform: _transform,
+      scrolling: _scrolling,
+      atBottom: _atBottom,
+      pageIndex: () => _visiblePage,
+      pageCount: _sessions.length,
+      busy: _busy,
+      onPrevious: () => _scrollToPage(_visiblePage - 1),
+      onNext: () => _scrollToPage(_visiblePage + 1),
+      onAdd: () => unawaited(_addPageSameTemplate()),
+      onAddTemplate: () => unawaited(_addPage()),
+      onAddImage: () => unawaited(_insertImage()),
+      onImport: () => unawaited(_importPdf()),
+      onMore: () => unawaited(_showMoreSheet()),
+    );
   }
 }
 

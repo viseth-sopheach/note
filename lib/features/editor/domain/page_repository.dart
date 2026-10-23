@@ -1,5 +1,6 @@
 import '../../library/domain/paper_template.dart';
 import 'stroke.dart';
+import 'page_image.dart';
 
 /// Storage contract for page content. The UI depends on this interface only.
 abstract interface class PageRepository {
@@ -23,6 +24,16 @@ abstract interface class PageRepository {
   /// Background image path of the page, or null.
   Future<String?> loadImagePath(String notebookId, {int pageIndex = 0});
 
+  /// Images placed on the page, or an empty list.
+  Future<List<PageImage>> loadImages(String notebookId, {int pageIndex = 0});
+
+  /// Replaces the images of the page. Keeps strokes and template.
+  Future<void> saveImages(
+    String notebookId,
+    List<PageImage> images, {
+    int pageIndex = 0,
+  });
+
   /// Inserts a page at [pageIndex]; pages at or after it move down by one.
   /// Throws [ArgumentError] when [pageIndex] is negative.
   Future<void> insertPage(
@@ -31,6 +42,7 @@ abstract interface class PageRepository {
     required PaperTemplate template,
     List<Stroke> strokes = const [],
     String? imagePath,
+    List<PageImage> images = const [],
   });
 
   /// Deletes the page; later pages move up by one. Missing page is a no-op.

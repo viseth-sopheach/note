@@ -27,6 +27,7 @@ class FloatingToolbar extends StatefulWidget {
     required this.onImportPdf,
     required this.onInsertImage,
     required this.onAddPage,
+    required this.onAddTemplate,
     required this.onToggleMeasure,
     required this.onSettings,
     required this.onComingSoon,
@@ -44,6 +45,7 @@ class FloatingToolbar extends StatefulWidget {
   final VoidCallback onImportPdf;
   final VoidCallback onInsertImage;
   final VoidCallback onAddPage;
+  final VoidCallback onAddTemplate;
   final void Function(MeasureKind kind) onToggleMeasure;
   final VoidCallback onSettings;
   final void Function(String label) onComingSoon;
@@ -89,6 +91,11 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
         icon: Icons.note_add_outlined,
         label: 'Add page',
       ),
+      GlassMenuItem(
+        value: 'template',
+        icon: Icons.article_outlined,
+        label: 'Add page with template…',
+      ),
     ]);
     switch (v) {
       case 'pdf':
@@ -97,6 +104,8 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
         widget.onInsertImage();
       case 'page':
         widget.onAddPage();
+      case 'template':
+        widget.onAddTemplate();
     }
   }
 

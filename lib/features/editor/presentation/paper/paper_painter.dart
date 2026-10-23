@@ -13,16 +13,21 @@ const double kPaperSpacing = 32;
 const double kPaperMargin = 48;
 
 class PaperPainter extends CustomPainter {
-  const PaperPainter(this.template);
+  const PaperPainter(this.template, {this.dark = false});
 
   final PaperTemplate template;
+  final bool dark;
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = PaperColors.surface);
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = PaperColors.surfaceFor(dark),
+    );
 
+    final lineColor = PaperColors.lineFor(dark);
     final linePaint = Paint()
-      ..color = PaperColors.line
+      ..color = lineColor
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
@@ -45,7 +50,7 @@ class PaperPainter extends CustomPainter {
           canvas.drawLine(Offset(x, 0), Offset(x, size.height), linePaint);
         }
       case PaperTemplate.dotted:
-        final dotPaint = Paint()..color = PaperColors.line;
+        final dotPaint = Paint()..color = lineColor;
         for (var y = kPaperSpacing; y < size.height; y += kPaperSpacing) {
           for (var x = kPaperSpacing; x < size.width; x += kPaperSpacing) {
             canvas.drawCircle(Offset(x, y), 1.5, dotPaint);
@@ -56,5 +61,5 @@ class PaperPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(PaperPainter oldDelegate) =>
-      oldDelegate.template != template;
+      oldDelegate.template != template || oldDelegate.dark != dark;
 }

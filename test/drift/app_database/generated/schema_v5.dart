@@ -233,6 +233,14 @@ class Pages extends Table with TableInfo {
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
+  late final GeneratedColumn<String> images = GeneratedColumn<String>(
+    'images',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -242,6 +250,7 @@ class Pages extends Table with TableInfo {
     template,
     imagePath,
     updatedAt,
+    images,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;

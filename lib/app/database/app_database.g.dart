@@ -922,6 +922,15 @@ class $PageRowsTable extends PageRows with TableInfo<$PageRowsTable, PageRow> {
         type: DriftSqlType.int,
         requiredDuringInsert: true,
       ).withConverter<DateTime>($PageRowsTable.$converterupdatedAt);
+  static const VerificationMeta _imagesMeta = const VerificationMeta('images');
+  @override
+  late final GeneratedColumn<String> images = GeneratedColumn<String>(
+    'images',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -931,6 +940,7 @@ class $PageRowsTable extends PageRows with TableInfo<$PageRowsTable, PageRow> {
     template,
     imagePath,
     updatedAt,
+    images,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -979,6 +989,12 @@ class $PageRowsTable extends PageRows with TableInfo<$PageRowsTable, PageRow> {
         imagePath.isAcceptableOrUnknown(data['image_path']!, _imagePathMeta),
       );
     }
+    if (data.containsKey('images')) {
+      context.handle(
+        _imagesMeta,
+        images.isAcceptableOrUnknown(data['images']!, _imagesMeta),
+      );
+    }
     return context;
   }
 
@@ -1024,6 +1040,10 @@ class $PageRowsTable extends PageRows with TableInfo<$PageRowsTable, PageRow> {
           data['${effectivePrefix}updated_at'],
         )!,
       ),
+      images: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}images'],
+      ),
     );
   }
 
@@ -1054,6 +1074,9 @@ class PageRow extends DataClass implements Insertable<PageRow> {
   /// Image shown as the page background, or null.
   final String? imagePath;
   final DateTime updatedAt;
+
+  /// JSON list of images placed on the page (see PageImage), or null.
+  final String? images;
   const PageRow({
     required this.id,
     required this.notebookId,
@@ -1062,6 +1085,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
     this.template,
     this.imagePath,
     required this.updatedAt,
+    this.images,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1083,6 +1107,9 @@ class PageRow extends DataClass implements Insertable<PageRow> {
         $PageRowsTable.$converterupdatedAt.toSql(updatedAt),
       );
     }
+    if (!nullToAbsent || images != null) {
+      map['images'] = Variable<String>(images);
+    }
     return map;
   }
 
@@ -1099,6 +1126,9 @@ class PageRow extends DataClass implements Insertable<PageRow> {
           ? const Value.absent()
           : Value(imagePath),
       updatedAt: Value(updatedAt),
+      images: images == null && nullToAbsent
+          ? const Value.absent()
+          : Value(images),
     );
   }
 
@@ -1117,6 +1147,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
       ),
       imagePath: serializer.fromJson<String?>(json['imagePath']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      images: serializer.fromJson<String?>(json['images']),
     );
   }
   @override
@@ -1132,6 +1163,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
       ),
       'imagePath': serializer.toJson<String?>(imagePath),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'images': serializer.toJson<String?>(images),
     };
   }
 
@@ -1143,6 +1175,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
     Value<PaperTemplate?> template = const Value.absent(),
     Value<String?> imagePath = const Value.absent(),
     DateTime? updatedAt,
+    Value<String?> images = const Value.absent(),
   }) => PageRow(
     id: id ?? this.id,
     notebookId: notebookId ?? this.notebookId,
@@ -1151,6 +1184,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
     template: template.present ? template.value : this.template,
     imagePath: imagePath.present ? imagePath.value : this.imagePath,
     updatedAt: updatedAt ?? this.updatedAt,
+    images: images.present ? images.value : this.images,
   );
   PageRow copyWithCompanion(PageRowsCompanion data) {
     return PageRow(
@@ -1163,6 +1197,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
       template: data.template.present ? data.template.value : this.template,
       imagePath: data.imagePath.present ? data.imagePath.value : this.imagePath,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      images: data.images.present ? data.images.value : this.images,
     );
   }
 
@@ -1175,7 +1210,8 @@ class PageRow extends DataClass implements Insertable<PageRow> {
           ..write('strokes: $strokes, ')
           ..write('template: $template, ')
           ..write('imagePath: $imagePath, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('images: $images')
           ..write(')'))
         .toString();
   }
@@ -1189,6 +1225,7 @@ class PageRow extends DataClass implements Insertable<PageRow> {
     template,
     imagePath,
     updatedAt,
+    images,
   );
   @override
   bool operator ==(Object other) =>
@@ -1200,7 +1237,8 @@ class PageRow extends DataClass implements Insertable<PageRow> {
           $driftBlobEquality.equals(other.strokes, this.strokes) &&
           other.template == this.template &&
           other.imagePath == this.imagePath &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.images == this.images);
 }
 
 class PageRowsCompanion extends UpdateCompanion<PageRow> {
@@ -1211,6 +1249,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
   final Value<PaperTemplate?> template;
   final Value<String?> imagePath;
   final Value<DateTime> updatedAt;
+  final Value<String?> images;
   final Value<int> rowid;
   const PageRowsCompanion({
     this.id = const Value.absent(),
@@ -1220,6 +1259,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
     this.template = const Value.absent(),
     this.imagePath = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.images = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PageRowsCompanion.insert({
@@ -1230,6 +1270,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
     this.template = const Value.absent(),
     this.imagePath = const Value.absent(),
     required DateTime updatedAt,
+    this.images = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        notebookId = Value(notebookId),
@@ -1244,6 +1285,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
     Expression<String>? template,
     Expression<String>? imagePath,
     Expression<int>? updatedAt,
+    Expression<String>? images,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1254,6 +1296,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
       if (template != null) 'template': template,
       if (imagePath != null) 'image_path': imagePath,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (images != null) 'images': images,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1266,6 +1309,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
     Value<PaperTemplate?>? template,
     Value<String?>? imagePath,
     Value<DateTime>? updatedAt,
+    Value<String?>? images,
     Value<int>? rowid,
   }) {
     return PageRowsCompanion(
@@ -1276,6 +1320,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
       template: template ?? this.template,
       imagePath: imagePath ?? this.imagePath,
       updatedAt: updatedAt ?? this.updatedAt,
+      images: images ?? this.images,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1308,6 +1353,9 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
         $PageRowsTable.$converterupdatedAt.toSql(updatedAt.value),
       );
     }
+    if (images.present) {
+      map['images'] = Variable<String>(images.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1324,6 +1372,7 @@ class PageRowsCompanion extends UpdateCompanion<PageRow> {
           ..write('template: $template, ')
           ..write('imagePath: $imagePath, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('images: $images, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2243,6 +2292,7 @@ typedef $$PageRowsTableCreateCompanionBuilder = PageRowsCompanion Function({
   Value<PaperTemplate?> template,
   Value<String?> imagePath,
   required DateTime updatedAt,
+  Value<String?> images,
   Value<int> rowid,
 });
 typedef $$PageRowsTableUpdateCompanionBuilder = PageRowsCompanion Function({
@@ -2253,6 +2303,7 @@ typedef $$PageRowsTableUpdateCompanionBuilder = PageRowsCompanion Function({
   Value<PaperTemplate?> template,
   Value<String?> imagePath,
   Value<DateTime> updatedAt,
+  Value<String?> images,
   Value<int> rowid,
 });
 
@@ -2319,6 +2370,11 @@ class $$PageRowsTableFilterComposer
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
 
+  ColumnFilters<String> get images => $composableBuilder(
+    column: $table.images,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$NotebookRowsTableFilterComposer get notebookId {
     final $$NotebookRowsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -2382,6 +2438,11 @@ class $$PageRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get images => $composableBuilder(
+    column: $table.images,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$NotebookRowsTableOrderingComposer get notebookId {
     final $$NotebookRowsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -2432,6 +2493,9 @@ class $$PageRowsTableAnnotationComposer
 
   GeneratedColumnWithTypeConverter<DateTime, int> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get images =>
+      $composableBuilder(column: $table.images, builder: (column) => column);
 
   $$NotebookRowsTableAnnotationComposer get notebookId {
     final $$NotebookRowsTableAnnotationComposer composer = $composerBuilder(
@@ -2492,6 +2556,7 @@ class $$PageRowsTableTableManager
                 Value<PaperTemplate?> template = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<String?> images = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PageRowsCompanion(
                 id: id,
@@ -2501,6 +2566,7 @@ class $$PageRowsTableTableManager
                 template: template,
                 imagePath: imagePath,
                 updatedAt: updatedAt,
+                images: images,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2512,6 +2578,7 @@ class $$PageRowsTableTableManager
                 Value<PaperTemplate?> template = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
                 required DateTime updatedAt,
+                Value<String?> images = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PageRowsCompanion.insert(
                 id: id,
@@ -2521,6 +2588,7 @@ class $$PageRowsTableTableManager
                 template: template,
                 imagePath: imagePath,
                 updatedAt: updatedAt,
+                images: images,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../../application/drawing_controller.dart';
+import '../paper/paper_colors.dart';
 import 'ink_renderer.dart';
 
 /// Lasso, selection box and the strokes being moved.
@@ -9,17 +10,19 @@ class SelectionLayer extends StatelessWidget {
     super.key,
     required this.controller,
     this.origin = Offset.zero,
+    this.darkPaper = false,
   });
 
   final DrawingController controller;
   final Offset origin;
+  final bool darkPaper;
 
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
       child: RepaintBoundary(
         child: CustomPaint(
-          painter: SelectionPainter(controller, origin),
+          painter: SelectionPainter(controller, origin, darkPaper),
           size: Size.infinite,
         ),
       ),
@@ -28,11 +31,15 @@ class SelectionLayer extends StatelessWidget {
 }
 
 class SelectionPainter extends CustomPainter {
-  SelectionPainter(this.controller, [this.origin = Offset.zero])
-    : super(repaint: Listenable.merge([controller, controller.live]));
+  SelectionPainter(
+    this.controller, [
+    this.origin = Offset.zero,
+    this.darkPaper = false,
+  ]) : super(repaint: Listenable.merge([controller, controller.live]));
 
   final DrawingController controller;
   final Offset origin;
+  final bool darkPaper;
 
   static const Color _accent = Color(0xFF0A84FF);
 
@@ -75,7 +82,7 @@ class SelectionPainter extends CustomPainter {
           canvas,
           points: s.points,
           tool: s.tool,
-          colorValue: s.colorValue,
+          colorValue: PaperColors.inkFor(s.colorValue, darkPaper: darkPaper),
           width: s.width,
         );
       }
@@ -101,5 +108,7 @@ class SelectionPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(SelectionPainter oldDelegate) =>
-      oldDelegate.controller != controller || oldDelegate.origin != origin;
+      oldDelegate.controller != controller ||
+      oldDelegate.origin != origin ||
+      oldDelegate.darkPaper != darkPaper;
 }

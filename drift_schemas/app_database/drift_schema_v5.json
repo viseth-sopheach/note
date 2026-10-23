@@ -328,6 +328,16 @@
               "dart_expr": "const EpochMicrosConverter()",
               "dart_type_name": "DateTime"
             }
+          },
+          {
+            "name": "images",
+            "getter_name": "images",
+            "moor_type": "string",
+            "nullable": true,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
           }
         ],
         "is_virtual": false,
@@ -407,7 +417,7 @@
       "sql": [
         {
           "dialect": "sqlite",
-          "sql": "CREATE TABLE IF NOT EXISTS \"pages\" (\"id\" TEXT NOT NULL, \"notebook_id\" TEXT NOT NULL REFERENCES notebooks (id) ON DELETE CASCADE, \"page_index\" INTEGER NOT NULL, \"strokes\" BLOB NOT NULL, \"template\" TEXT NULL, \"image_path\" TEXT NULL, \"updated_at\" INTEGER NOT NULL, PRIMARY KEY (\"id\"), UNIQUE (\"notebook_id\", \"page_index\"));"
+          "sql": "CREATE TABLE IF NOT EXISTS \"pages\" (\"id\" TEXT NOT NULL, \"notebook_id\" TEXT NOT NULL REFERENCES notebooks (id) ON DELETE CASCADE, \"page_index\" INTEGER NOT NULL, \"strokes\" BLOB NOT NULL, \"template\" TEXT NULL, \"image_path\" TEXT NULL, \"updated_at\" INTEGER NOT NULL, \"images\" TEXT NULL, PRIMARY KEY (\"id\"), UNIQUE (\"notebook_id\", \"page_index\"));"
         }
       ]
     },

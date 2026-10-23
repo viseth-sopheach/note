@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../app/database/app_database.dart';
 import '../../library/domain/paper_template.dart';
+import '../domain/page_image.dart';
 import '../domain/page_repository.dart';
 import '../domain/stroke.dart';
 import '../domain/stroke_codec.dart';
@@ -46,6 +47,46 @@ class DriftPageRepository implements PageRepository {
   @override
   Future<String?> loadImagePath(String notebookId, {int pageIndex = 0}) async =>
       (await _row(notebookId, pageIndex))?.imagePath;
+
+  @override
+  Future<List<PageImage>> loadImages(
+    String notebookId, {
+    int pageIndex = 0,
+  }) async => PageImage.decodeList((await _row(notebookId, pageIndex))?.images);
+
+  @override
+  Future<void> saveImages(
+    String notebookId,
+    List<PageImage> images, {
+    int pageIndex = 0,
+  }) {
+    final json = images.isEmpty ? null : PageImage.encodeList(images);
+    final now = _clock();
+
+    return _db.transaction(() async {
+      final updated =
+          await (_db.update(_db.pageRows)..where(
+                (t) =>
+                    t.notebookId.equals(notebookId) &
+                    t.pageIndex.equals(pageIndex),
+              ))
+              .write(PageRowsCompanion(images: Value(json), updatedAt: Value(now)));
+      if (updated > 0 || json == null) return;
+
+      await _db
+          .into(_db.pageRows)
+          .insert(
+            PageRowsCompanion.insert(
+              id: _uuid.v4(),
+              notebookId: notebookId,
+              pageIndex: pageIndex,
+              strokes: StrokeCodec.encode(const []),
+              updatedAt: now,
+              images: Value(json),
+            ),
+          );
+    });
+  }
 
   @override
   Future<void> saveStrokes(
@@ -102,6 +143,7 @@ class DriftPageRepository implements PageRepository {
     required PaperTemplate template,
     List<Stroke> strokes = const [],
     String? imagePath,
+    List<PageImage> images = const [],
   }) async {
     if (pageIndex < 0) {
       throw ArgumentError.value(pageIndex, 'pageIndex', 'Must not be negative');
@@ -123,6 +165,7 @@ class DriftPageRepository implements PageRepository {
               updatedAt: now,
               template: Value(template),
               imagePath: Value(imagePath),
+              images: Value(images.isEmpty ? null : PageImage.encodeList(images)),
             ),
           );
     });

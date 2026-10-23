@@ -5,9 +5,10 @@ import 'paper_painter.dart';
 
 /// One white page with its template. Static, so it gets its own raster layer.
 class PaperView extends StatelessWidget {
-  const PaperView({super.key, required this.template});
+  const PaperView({super.key, required this.template, this.dark = false});
 
   final PaperTemplate template;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +26,7 @@ class PaperView extends StatelessWidget {
         child: SizedBox(
           width: kPageSize.width,
           height: kPageSize.height,
-          child: CustomPaint(painter: PaperPainter(template)),
+          child: CustomPaint(painter: PaperPainter(template, dark: dark)),
         ),
       ),
     );
