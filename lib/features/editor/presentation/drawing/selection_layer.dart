@@ -74,13 +74,13 @@ class SelectionPainter extends CustomPainter {
 
     if (!controller.hasSelection) return;
 
-    if (controller.isMovingSelection) {
+    if (controller.isTransformingSelection) {
       canvas.save();
       canvas.translate(controller.selectionDx, controller.selectionDy);
       for (final s in controller.selectedStrokes) {
         InkRenderer.paintStroke(
           canvas,
-          points: s.points,
+          points: controller.previewPoints(s),
           tool: s.tool,
           colorValue: PaperColors.inkFor(s.colorValue, darkPaper: darkPaper),
           width: s.width,
@@ -89,11 +89,12 @@ class SelectionPainter extends CustomPainter {
       canvas.restore();
     }
 
-    final b = controller.selectionBounds;
-    if (b == null) return;
+    final f = controller.selectionFrame;
+    if (f == null) return;
 
     final rect = RRect.fromRectAndRadius(
-      Rect.fromLTRB(b.left, b.top, b.right, b.bottom).inflate(6),
+      Rect.fromLTRB(f.left, f.top, f.right, f.bottom)
+          .inflate(DrawingController.framePad),
       const Radius.circular(10),
     );
     canvas.drawRRect(rect, Paint()..color = _accent.withValues(alpha: 0.08));
@@ -104,6 +105,21 @@ class SelectionPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5,
     );
+
+    // Handles keep a constant size on screen at any zoom.
+    final k = 1 / (controller.viewScale?.call() ?? 1.0).clamp(0.05, 20.0);
+    for (final spot in controller.handleSpots) {
+      final c = Offset(spot.x, spot.y);
+      canvas.drawCircle(c, 7 * k, Paint()..color = const Color(0xFFFFFFFF));
+      canvas.drawCircle(
+        c,
+        7 * k,
+        Paint()
+          ..color = _accent
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2 * k,
+      );
+    }
   }
 
   @override

@@ -70,3 +70,29 @@ class MoveStrokesCommand implements DrawingCommand {
   @override
   void revert(List<Stroke> strokes) => _shift(strokes, -dx, -dy);
 }
+
+/// Swaps strokes (matched by id) between two states in one undoable step.
+/// Used for auto-recognition and for resizing.
+class ReplaceStrokesCommand implements DrawingCommand {
+  ReplaceStrokesCommand(List<Stroke> before, List<Stroke> after)
+    : assert(before.length == after.length),
+      _before = List<Stroke>.unmodifiable(before),
+      _after = List<Stroke>.unmodifiable(after);
+
+  final List<Stroke> _before;
+  final List<Stroke> _after;
+
+  void _swap(List<Stroke> strokes, List<Stroke> to) {
+    final byId = {for (final s in to) s.id: s};
+    for (var i = 0; i < strokes.length; i++) {
+      final replacement = byId[strokes[i].id];
+      if (replacement != null) strokes[i] = replacement;
+    }
+  }
+
+  @override
+  void apply(List<Stroke> strokes) => _swap(strokes, _after);
+
+  @override
+  void revert(List<Stroke> strokes) => _swap(strokes, _before);
+}

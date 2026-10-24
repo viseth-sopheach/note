@@ -204,10 +204,11 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     final m = _transform.value;
     final scale = m.storage[0];
     final ty = m.storage[13];
-    final moved =
-        (ty - _lastTy).abs() > 0.5 || (scale - _lastScale).abs() > 0.001;
+    final scaleChanged = (scale - _lastScale).abs() > 0.001;
+    final moved = (ty - _lastTy).abs() > 0.5 || scaleChanged;
     _lastTy = ty;
     _lastScale = scale;
+    if (scaleChanged && _active.hasSelection) _active.refreshView();
     final scaledH = _contentHeight * scale;
     final fits = scaledH + 2 * _margin <= _viewportH;
     final lowest = math.min(_margin, _viewportH - scaledH - _margin);
@@ -273,6 +274,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     );
     controller.snapSegments = () =>
         _measure.edgesRelativeTo(_paperOrigin(session.index));
+    controller.viewScale = _scale;
     return session;
   }
 
@@ -698,7 +700,11 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     final scaledW = _contentWidth * scale;
     final scaledH = _contentHeight * scale;
 
-    final targetX = scaledW <= _viewportW
+    // Center on the paper, not on the cell: the drawable bleed is symmetric,
+    // so the content center is the paper center. Pan freely only once the
+    // paper itself is wider than the viewport.
+    final paperFits = kPageSize.width * scale <= _viewportW;
+    final targetX = paperFits
         ? (_viewportW - scaledW) / 2
         : tx.clamp(_viewportW - scaledW - _margin, _margin).toDouble();
     final targetY = scaledH + 2 * _margin <= _viewportH
@@ -892,11 +898,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           label: 'Duplicate page',
         ),
       if (!_busy && _sessions.length > 1)
-        (
-          value: 'delete',
-          icon: Icons.delete_outline,
-          label: 'Delete page',
-        ),
+        (value: 'delete', icon: Icons.delete_outline, label: 'Delete page'),
       if (!_busy)
         (
           value: 'export',
@@ -985,10 +987,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
     final pdf = _pdf;
     if (pdf == null || session.index >= pdf.pages.length) {
-      return PaperView(
-        template: session.template,
-        dark: _darkPaper(session),
-      );
+      return PaperView(template: session.template, dark: _darkPaper(session));
     }
     return DecoratedBox(
       decoration: BoxDecoration(

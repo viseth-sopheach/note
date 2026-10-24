@@ -81,7 +81,7 @@ class CommittedInkPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.save();
     canvas.translate(origin.dx, origin.dy);
-    final moving = controller.isMovingSelection;
+    final moving = controller.isTransformingSelection;
     final selected = controller.selectedIds;
     for (final s in controller.strokes) {
       if (moving && selected.contains(s.id)) continue;

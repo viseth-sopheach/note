@@ -70,4 +70,38 @@ abstract final class StrokeSelection {
             ),
         ],
       );
+
+  /// Bounds of the points only, without stroke width. Null if empty.
+  static Bounds? pointBoundsOf(Iterable<Stroke> strokes) {
+    double? left, top, right, bottom;
+    for (final s in strokes) {
+      for (final p in s.points) {
+        left = left == null || p.x < left ? p.x : left;
+        top = top == null || p.y < top ? p.y : top;
+        right = right == null || p.x > right ? p.x : right;
+        bottom = bottom == null || p.y > bottom ? p.y : bottom;
+      }
+    }
+    if (left == null) return null;
+    return (left: left, top: top!, right: right!, bottom: bottom!);
+  }
+
+  /// Scales the points about (ax, ay). Width, color and pressure are kept.
+  static Stroke scaleAbout(
+    Stroke stroke,
+    double ax,
+    double ay,
+    double sx,
+    double sy,
+  ) => stroke.copyWith(
+    points: [
+      for (final p in stroke.points)
+        StrokePoint(
+          x: ax + (p.x - ax) * sx,
+          y: ay + (p.y - ay) * sy,
+          pressure: p.pressure,
+          timestampMs: p.timestampMs,
+        ),
+    ],
+  );
 }
