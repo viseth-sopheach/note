@@ -21,6 +21,7 @@ class DrawingSurface extends StatefulWidget {
     this.origin = Offset.zero,
     this.bounds,
     this.isClaimed,
+    this.onTap,
   });
 
   final DrawingController controller;
@@ -36,6 +37,9 @@ class DrawingSurface extends StatefulWidget {
   /// starts.
   final bool Function(Offset paperPoint)? isClaimed;
 
+  /// Called on a quick tap. Return true to consume it (no dot is drawn).
+  final bool Function(Offset paperPoint)? onTap;
+
   @override
   State<DrawingSurface> createState() => _DrawingSurfaceState();
 }
@@ -43,6 +47,9 @@ class DrawingSurface extends StatefulWidget {
 class _DrawingSurfaceState extends State<DrawingSurface> {
   final Set<int> _touches = {};
   int? _drawingPointer;
+
+  Offset? _downPos;
+  int _downMs = 0;
 
   DrawingController get _c => widget.controller;
 
@@ -103,7 +110,11 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
       pressure: _pressure(e),
       timeMs: e.timeStamp.inMilliseconds,
     );
-    if (started) _drawingPointer = e.pointer;
+    if (started) {
+      _drawingPointer = e.pointer;
+      _downPos = raw;
+      _downMs = e.timeStamp.inMilliseconds;
+    }
   }
 
   void _move(PointerMoveEvent e) {
@@ -120,9 +131,21 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
 
   void _up(PointerUpEvent e) {
     _touches.remove(e.pointer);
-    if (e.pointer == _drawingPointer) _drawingPointer = null;
+    final wasDrawing = e.pointer == _drawingPointer;
+    if (wasDrawing) _drawingPointer = null;
 
-    // Critical: Clamp end coordinates to maintain proper bounds integrity
+    final down = _downPos;
+    _downPos = null;
+    if (wasDrawing &&
+        down != null &&
+        widget.onTap != null &&
+        (_local(e) - down).distance <= 6 &&
+        e.timeStamp.inMilliseconds - _downMs <= 350 &&
+        widget.onTap!(_local(e))) {
+      _c.cancelStroke(e.pointer);
+      return;
+    }
+
     final p = _clamped(e);
     _c.endStroke(
       pointer: e.pointer,

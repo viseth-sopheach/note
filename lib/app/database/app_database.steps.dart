@@ -582,12 +582,115 @@ final class Schema6 extends i0.VersionedSchema {
   );
 }
 
+final class Schema7 extends i0.VersionedSchema {
+  Schema7({required super.database}) : super(version: 7);
+  @override
+  late final List<i1.DatabaseSchemaEntity> entities = [
+    folders,
+    notebooks,
+    pages,
+    idxFoldersParentId,
+    idxNotebooksFolderId,
+  ];
+  late final Shape0 folders = Shape0(
+    source: i0.VersionedTable(
+      entityName: 'folders',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['PRIMARY KEY(id)'],
+      columns: [_column_0, _column_1, _column_2, _column_3],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape4 notebooks = Shape4(
+    source: i0.VersionedTable(
+      entityName: 'notebooks',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['PRIMARY KEY(id)'],
+      columns: [
+        _column_0,
+        _column_4,
+        _column_5,
+        _column_6,
+        _column_7,
+        _column_3,
+        _column_8,
+        _column_13,
+      ],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape6 pages = Shape6(
+    source: i0.VersionedTable(
+      entityName: 'pages',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['PRIMARY KEY(id)', 'UNIQUE(notebook_id, page_index)'],
+      columns: [
+        _column_0,
+        _column_9,
+        _column_10,
+        _column_11,
+        _column_12,
+        _column_14,
+        _column_8,
+        _column_15,
+        _column_16,
+      ],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  final i1.Index idxFoldersParentId = i1.Index(
+    'idx_folders_parent_id',
+    'CREATE INDEX idx_folders_parent_id ON folders (parent_id)',
+  );
+  final i1.Index idxNotebooksFolderId = i1.Index(
+    'idx_notebooks_folder_id',
+    'CREATE INDEX idx_notebooks_folder_id ON notebooks (folder_id)',
+  );
+}
+
+class Shape6 extends i0.VersionedTable {
+  Shape6({required super.source, required super.alias}) : super.aliased();
+  i1.GeneratedColumn<String> get id =>
+      columnsByName['id']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get notebookId =>
+      columnsByName['notebook_id']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get pageIndex =>
+      columnsByName['page_index']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<i2.Uint8List> get strokes =>
+      columnsByName['strokes']! as i1.GeneratedColumn<i2.Uint8List>;
+  i1.GeneratedColumn<String> get template =>
+      columnsByName['template']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get imagePath =>
+      columnsByName['image_path']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get updatedAt =>
+      columnsByName['updated_at']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get images =>
+      columnsByName['images']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get texts =>
+      columnsByName['texts']! as i1.GeneratedColumn<String>;
+}
+
+i1.GeneratedColumn<String> _column_16(String aliasedName) =>
+    i1.GeneratedColumn<String>(
+      'texts',
+      aliasedName,
+      true,
+      type: i1.DriftSqlType.string,
+      $customConstraints: 'NULL',
+    );
 i0.MigrationStepWithVersion migrationSteps({
   required Future<void> Function(i1.Migrator m, Schema2 schema) from1To2,
   required Future<void> Function(i1.Migrator m, Schema3 schema) from2To3,
   required Future<void> Function(i1.Migrator m, Schema4 schema) from3To4,
   required Future<void> Function(i1.Migrator m, Schema5 schema) from4To5,
   required Future<void> Function(i1.Migrator m, Schema6 schema) from5To6,
+  required Future<void> Function(i1.Migrator m, Schema7 schema) from6To7,
 }) {
   return (currentVersion, database) async {
     switch (currentVersion) {
@@ -616,6 +719,11 @@ i0.MigrationStepWithVersion migrationSteps({
         final migrator = i1.Migrator(database, schema);
         await from5To6(migrator, schema);
         return 6;
+      case 6:
+        final schema = Schema7(database: database);
+        final migrator = i1.Migrator(database, schema);
+        await from6To7(migrator, schema);
+        return 7;
       default:
         throw ArgumentError.value('Unknown migration from $currentVersion');
     }
@@ -628,6 +736,7 @@ i1.OnUpgrade stepByStep({
   required Future<void> Function(i1.Migrator m, Schema4 schema) from3To4,
   required Future<void> Function(i1.Migrator m, Schema5 schema) from4To5,
   required Future<void> Function(i1.Migrator m, Schema6 schema) from5To6,
+  required Future<void> Function(i1.Migrator m, Schema7 schema) from6To7,
 }) => i0.VersionedSchema.stepByStepHelper(
   step: migrationSteps(
     from1To2: from1To2,
@@ -635,5 +744,6 @@ i1.OnUpgrade stepByStep({
     from3To4: from3To4,
     from4To5: from4To5,
     from5To6: from5To6,
+    from6To7: from6To7,
   ),
 );

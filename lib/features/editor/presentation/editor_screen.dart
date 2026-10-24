@@ -34,6 +34,7 @@ import '../application/drawing_controller.dart';
 import '../application/editor_providers.dart';
 import '../application/measure_controller.dart';
 import '../application/page_images_controller.dart';
+import '../application/page_texts_controller.dart';
 import '../application/tool_settings.dart';
 import '../domain/page_repository.dart';
 import '../domain/stroke_tool.dart';
@@ -42,6 +43,7 @@ import 'drawing/drawing_surface.dart';
 import 'drawing/image_layer.dart';
 import 'drawing/ink_layers.dart';
 import 'drawing/selection_layer.dart';
+import 'drawing/text_layer.dart';
 import 'editor_stack.dart';
 import 'measure/measure_overlay.dart';
 import 'paper/page_metrics.dart';
@@ -99,6 +101,7 @@ class _PageSession {
     required this.template,
     required this.imagePath,
     required this.images,
+    required this.texts,
     required this.autosave,
   });
 
@@ -108,11 +111,13 @@ class _PageSession {
   final PaperTemplate template;
   final String? imagePath;
   final PageImagesController images;
+  final PageTextsController texts;
   AutosaveController autosave;
 
   void close() {
     unawaited(autosave.dispose());
     unawaited(images.close());
+    unawaited(texts.close());
     controller.dispose();
   }
 }
@@ -167,6 +172,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   bool _failed = false;
   bool _busy = false;
   bool _fitted = false;
+  bool _textMode = false;
   int _activeIndex = 0;
   double _viewportW = 600;
   double _viewportH = 600;
@@ -251,6 +257,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       widget.notebookId,
       pageIndex: index,
     );
+    final pageTexts = await _repository.loadTexts(
+      widget.notebookId,
+      pageIndex: index,
+    );
     final controller = DrawingController(
       settings: _settings,
       undoLimit: ref.read(appSettingsProvider).undoLimit,
@@ -269,6 +279,13 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         pageIndex: index,
         pageSize: kPageSize,
         initial: pageImages,
+      ),
+      texts: PageTextsController(
+        repository: _repository,
+        notebookId: widget.notebookId,
+        pageIndex: index,
+        pageSize: kPageSize,
+        initial: pageTexts,
       ),
       autosave: _newAutosave(controller, index),
     );
@@ -359,6 +376,32 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     );
   }
 
+  // ---- Text tool ----
+
+  void _setTextMode(bool on) {
+    if (_textMode == on) return;
+    if (on) {
+      _active.clearSelection();
+    } else {
+      for (final s in _sessions) {
+        s.texts.select(null);
+      }
+    }
+    setState(() => _textMode = on);
+  }
+
+  void _toggleTextTool() => _setTextMode(!_textMode);
+
+  void _createText(_PageSession session, Offset paperPoint) {
+    if (_busy || !(Offset.zero & kPageSize).contains(paperPoint)) return;
+    final saved = ref.read(appSettingsProvider);
+    final color = _settings.tool == StrokeTool.pen
+        ? _settings.colorValue
+        : saved.penColorValue;
+    _setActive(session.index);
+    session.texts.add(at: paperPoint, colorValue: color);
+  }
+
   // ---- Page actions ----
 
   /// Runs a page change while input and page buttons are disabled.
@@ -390,10 +433,17 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   /// Saves every page. Returns false when something could not be saved.
   Future<bool> _flushAll() async {
     await Future.wait([
-      for (final s in _sessions) ...[s.autosave.flush(), s.images.flush()],
+      for (final s in _sessions) ...[
+        s.autosave.flush(),
+        s.images.flush(),
+        s.texts.flush(),
+      ],
     ]);
     return _sessions.every(
-      (s) => !s.autosave.hasUnsavedChanges && !s.images.hasUnsavedChanges,
+      (s) =>
+          !s.autosave.hasUnsavedChanges &&
+          !s.images.hasUnsavedChanges &&
+          !s.texts.hasUnsavedChanges,
     );
   }
 
@@ -402,6 +452,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     if (session.index == index) return;
     await session.autosave.dispose();
     await session.images.rebind(index);
+    await session.texts.rebind(index);
     session.index = index;
     session.autosave = _newAutosave(session.controller, index);
   }
@@ -596,6 +647,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         strokes: source.controller.strokes,
         imagePath: source.imagePath,
         images: source.images.images,
+        texts: source.texts.texts,
       );
       final copy = await _openPage(target);
       final updated = [..._sessions]..insert(target, copy);
@@ -781,6 +833,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       return;
     }
     _active.clearSelection();
+    _sessions[_activeIndex].texts.select(null);
     setState(() => _activeIndex = index);
   }
 
@@ -809,6 +862,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     for (final s in _sessions) {
       unawaited(s.autosave.flush());
       unawaited(s.images.flush());
+      unawaited(s.texts.flush());
     }
   }
 
@@ -1027,12 +1081,28 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           origin: kPaperOrigin,
           bounds: Offset.zero & kPageSize,
           isClaimed: (point) {
-            final claimed = session.images.claims(
+            if (_textMode) return true;
+            final selectTool = session.controller.tool == StrokeTool.select;
+            final textHit = session.texts.claims(
               point,
-              selectToolActive: session.controller.tool == StrokeTool.select,
+              selectToolActive: selectTool,
             );
-            if (!claimed) session.images.select(null);
-            return claimed;
+            final imageHit =
+                !textHit &&
+                session.images.claims(point, selectToolActive: selectTool);
+            if (!textHit) session.texts.select(null);
+            if (!imageHit) session.images.select(null);
+            return textHit || imageHit;
+          },
+          onTap: (point) {
+            final t = session.controller.tool;
+            if (t != StrokeTool.pen && t != StrokeTool.highlighter) {
+              return false;
+            }
+            final img = session.images.imageAt(point);
+            if (img == null) return false;
+            session.images.select(img.id);
+            return true;
           },
           child: Stack(
             children: [
@@ -1043,6 +1113,17 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                   drawing: session.controller,
                   scale: _scale,
                   origin: kPaperOrigin,
+                ),
+              ),
+              Positioned.fill(
+                child: TextLayer(
+                  controller: session.texts,
+                  drawing: session.controller,
+                  scale: _scale,
+                  origin: kPaperOrigin,
+                  textMode: _textMode,
+                  darkPaper: dark,
+                  onCreate: (p) => _createText(session, p),
                 ),
               ),
               Positioned.fill(
@@ -1115,6 +1196,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     final anyDrawing = Listenable.merge([
       for (final s in _sessions) s.controller,
       for (final s in _sessions) s.images,
+      for (final s in _sessions) s.texts,
       _measure,
     ]);
 
@@ -1150,7 +1232,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                               _sessions.any(
                                 (s) =>
                                     s.controller.isDrawing ||
-                                    s.images.interacting,
+                                    s.images.interacting ||
+                                    s.texts.interacting,
                               ) ||
                               _measure.interacting;
                           return InteractiveViewer(
@@ -1230,6 +1313,9 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           onDeletePage: _sessions.length > 1
               ? () => unawaited(_deletePage())
               : null,
+          textActive: _textMode,
+          onTextTool: _toggleTextTool,
+          onToolPicked: () => _setTextMode(false),
         ),
         SizedBox(
           height: 2,

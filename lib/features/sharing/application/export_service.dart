@@ -54,6 +54,33 @@ class ExportService {
         );
       }
 
+      for (final t in await _pages.loadTexts(notebookId, pageIndex: i)) {
+        if (t.text.trim().isEmpty) continue;
+        overlays.add(
+          pw.Positioned(
+            left: (t.x + 6) * _s,
+            top: (t.y + 6) * _s,
+            child: pw.SizedBox(
+              width: (t.width - 12) * _s,
+              child: pw.Text(
+                t.text,
+                style: pw.TextStyle(
+                  fontSize: t.fontSize * _s,
+                  color: PdfColor.fromInt(
+                    0xFF000000 | (t.colorValue & 0xFFFFFF),
+                  ),
+                ),
+                textAlign: switch (t.align) {
+                  1 => pw.TextAlign.center,
+                  2 => pw.TextAlign.right,
+                  _ => pw.TextAlign.left,
+                },
+              ),
+            ),
+          ),
+        );
+      }
+
       doc.addPage(
         pw.Page(
           pageFormat: const PdfPageFormat(_w, _h),

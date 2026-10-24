@@ -33,6 +33,9 @@ class FloatingToolbar extends StatefulWidget {
     required this.onComingSoon,
     required this.onDuplicatePage,
     required this.onDeletePage,
+    required this.textActive,
+    required this.onTextTool,
+    required this.onToolPicked,
     this.busy = false,
   });
 
@@ -54,6 +57,12 @@ class FloatingToolbar extends StatefulWidget {
   /// Null hides the delete item (only one page left).
   final VoidCallback? onDeletePage;
   final bool busy;
+
+  final bool textActive;
+  final VoidCallback onTextTool;
+
+  /// Called before any drawing tool is selected (leaves the text tool).
+  final VoidCallback onToolPicked;
 
   @override
   State<FloatingToolbar> createState() => _FloatingToolbarState();
@@ -245,8 +254,11 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
     Widget tool(StrokeTool t, IconData icon, String tip) => GlassIconButton(
       tooltip: tip,
       icon: Icon(icon),
-      selected: _c.tool == t,
-      onPressed: () => _c.selectTool(t),
+      selected: !widget.textActive && _c.tool == t,
+      onPressed: () {
+        widget.onToolPicked();
+        _c.selectTool(t);
+      },
     );
 
     return [
@@ -255,19 +267,24 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
         tool: StrokeTool.pen,
         icon: Icons.edit_outlined,
         tooltip: 'Pen',
+        textActive: widget.textActive,
+        onPicked: widget.onToolPicked,
       ),
       _InkToolButton(
         controller: _c,
         tool: StrokeTool.highlighter,
         icon: Icons.highlight_outlined,
         tooltip: 'Highlighter',
+        textActive: widget.textActive,
+        onPicked: widget.onToolPicked,
       ),
       tool(StrokeTool.eraser, Icons.cleaning_services_outlined, 'Eraser'),
       tool(StrokeTool.select, Icons.gesture, 'Lasso select'),
       GlassIconButton(
         tooltip: 'Text box',
         icon: const Icon(Icons.text_fields),
-        onPressed: () => widget.onComingSoon('Text box'),
+        selected: widget.textActive,
+        onPressed: widget.onTextTool,
       ),
       GlassIconButton(
         tooltip: 'AI assistant',
@@ -295,12 +312,16 @@ class _InkToolButton extends StatefulWidget {
     required this.tool,
     required this.icon,
     required this.tooltip,
+    required this.textActive,
+    required this.onPicked,
   });
 
   final DrawingController controller;
   final StrokeTool tool;
   final IconData icon;
   final String tooltip;
+  final bool textActive;
+  final VoidCallback onPicked;
 
   @override
   State<_InkToolButton> createState() => _InkToolButtonState();
@@ -312,7 +333,7 @@ class _InkToolButtonState extends State<_InkToolButton> {
   @override
   Widget build(BuildContext context) {
     final c = widget.controller;
-    final selected = c.tool == widget.tool;
+    final selected = !widget.textActive && c.tool == widget.tool;
 
     return MenuAnchor(
       controller: _menu,
@@ -330,6 +351,7 @@ class _InkToolButtonState extends State<_InkToolButton> {
         selected: selected,
         onPressed: () {
           if (!selected) {
+            widget.onPicked();
             c.selectTool(widget.tool);
           } else {
             _menu.isOpen ? _menu.close() : _menu.open();

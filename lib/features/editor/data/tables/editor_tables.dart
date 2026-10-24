@@ -27,6 +27,9 @@ class PageRows extends Table {
   /// JSON list of images placed on the page (see PageImage), or null.
   TextColumn get images => text().nullable()();
 
+  /// JSON list of text boxes placed on the page (see PageText), or null.
+  TextColumn get texts => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 

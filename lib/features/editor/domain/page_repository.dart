@@ -1,4 +1,5 @@
 import '../../library/domain/paper_template.dart';
+import 'page_text.dart';
 import 'stroke.dart';
 import 'page_image.dart';
 
@@ -34,6 +35,16 @@ abstract interface class PageRepository {
     int pageIndex = 0,
   });
 
+  /// Text boxes placed on the page, or an empty list.
+  Future<List<PageText>> loadTexts(String notebookId, {int pageIndex = 0});
+
+  /// Replaces the text boxes of the page. Keeps strokes, images and template.
+  Future<void> saveTexts(
+    String notebookId,
+    List<PageText> texts, {
+    int pageIndex = 0,
+  });
+
   /// Inserts a page at [pageIndex]; pages at or after it move down by one.
   /// Throws [ArgumentError] when [pageIndex] is negative.
   Future<void> insertPage(
@@ -43,6 +54,7 @@ abstract interface class PageRepository {
     List<Stroke> strokes = const [],
     String? imagePath,
     List<PageImage> images = const [],
+    List<PageText> texts = const [],
   });
 
   /// Deletes the page; later pages move up by one. Missing page is a no-op.

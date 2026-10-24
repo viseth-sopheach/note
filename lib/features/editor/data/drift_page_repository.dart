@@ -5,6 +5,7 @@ import '../../../app/database/app_database.dart';
 import '../../library/domain/paper_template.dart';
 import '../domain/page_image.dart';
 import '../domain/page_repository.dart';
+import '../domain/page_text.dart';
 import '../domain/stroke.dart';
 import '../domain/stroke_codec.dart';
 
@@ -70,7 +71,9 @@ class DriftPageRepository implements PageRepository {
                     t.notebookId.equals(notebookId) &
                     t.pageIndex.equals(pageIndex),
               ))
-              .write(PageRowsCompanion(images: Value(json), updatedAt: Value(now)));
+              .write(
+                PageRowsCompanion(images: Value(json), updatedAt: Value(now)),
+              );
       if (updated > 0 || json == null) return;
 
       await _db
@@ -83,6 +86,48 @@ class DriftPageRepository implements PageRepository {
               strokes: StrokeCodec.encode(const []),
               updatedAt: now,
               images: Value(json),
+            ),
+          );
+    });
+  }
+
+  @override
+  Future<List<PageText>> loadTexts(
+    String notebookId, {
+    int pageIndex = 0,
+  }) async => PageText.decodeList((await _row(notebookId, pageIndex))?.texts);
+
+  @override
+  Future<void> saveTexts(
+    String notebookId,
+    List<PageText> texts, {
+    int pageIndex = 0,
+  }) {
+    final json = texts.isEmpty ? null : PageText.encodeList(texts);
+    final now = _clock();
+
+    return _db.transaction(() async {
+      final updated =
+          await (_db.update(_db.pageRows)..where(
+                (t) =>
+                    t.notebookId.equals(notebookId) &
+                    t.pageIndex.equals(pageIndex),
+              ))
+              .write(
+                PageRowsCompanion(texts: Value(json), updatedAt: Value(now)),
+              );
+      if (updated > 0 || json == null) return;
+
+      await _db
+          .into(_db.pageRows)
+          .insert(
+            PageRowsCompanion.insert(
+              id: _uuid.v4(),
+              notebookId: notebookId,
+              pageIndex: pageIndex,
+              strokes: StrokeCodec.encode(const []),
+              updatedAt: now,
+              texts: Value(json),
             ),
           );
     });
@@ -144,6 +189,7 @@ class DriftPageRepository implements PageRepository {
     List<Stroke> strokes = const [],
     String? imagePath,
     List<PageImage> images = const [],
+    List<PageText> texts = const [],
   }) async {
     if (pageIndex < 0) {
       throw ArgumentError.value(pageIndex, 'pageIndex', 'Must not be negative');
@@ -165,7 +211,10 @@ class DriftPageRepository implements PageRepository {
               updatedAt: now,
               template: Value(template),
               imagePath: Value(imagePath),
-              images: Value(images.isEmpty ? null : PageImage.encodeList(images)),
+              images: Value(
+                images.isEmpty ? null : PageImage.encodeList(images),
+              ),
+              texts: Value(texts.isEmpty ? null : PageText.encodeList(texts)),
             ),
           );
     });

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import '../../library/domain/paper_template.dart';
 import '../domain/page_image.dart';
 import '../domain/page_repository.dart';
+import '../domain/page_text.dart';
 import '../domain/stroke.dart';
 import '../domain/stroke_codec.dart';
 
@@ -13,12 +14,14 @@ class _StoredPage {
     this.template, [
     this.imagePath,
     this.images = const [],
+    this.texts = const [],
   ]);
 
   final Uint8List bytes;
   final PaperTemplate? template;
   final String? imagePath;
   final List<PageImage> images;
+  final List<PageText> texts;
 }
 
 class InMemoryPageRepository implements PageRepository {
@@ -57,6 +60,12 @@ class InMemoryPageRepository implements PageRepository {
   }) async => _notebooks[notebookId]?[pageIndex]?.images ?? const [];
 
   @override
+  Future<List<PageText>> loadTexts(
+    String notebookId, {
+    int pageIndex = 0,
+  }) async => _notebooks[notebookId]?[pageIndex]?.texts ?? const [];
+
+  @override
   Future<void> saveStrokes(
     String notebookId,
     List<Stroke> strokes, {
@@ -69,6 +78,7 @@ class InMemoryPageRepository implements PageRepository {
       old?.template,
       old?.imagePath,
       old?.images ?? const [],
+      old?.texts ?? const [],
     );
     saveCount++;
   }
@@ -87,6 +97,25 @@ class InMemoryPageRepository implements PageRepository {
       old?.template,
       old?.imagePath,
       List<PageImage>.of(images),
+      old?.texts ?? const [],
+    );
+  }
+
+  @override
+  Future<void> saveTexts(
+    String notebookId,
+    List<PageText> texts, {
+    int pageIndex = 0,
+  }) async {
+    final pages = _pagesOf(notebookId);
+    final old = pages[pageIndex];
+    if (old == null && texts.isEmpty) return;
+    pages[pageIndex] = _StoredPage(
+      old?.bytes ?? StrokeCodec.encode(const []),
+      old?.template,
+      old?.imagePath,
+      old?.images ?? const [],
+      List<PageText>.of(texts),
     );
   }
 
@@ -105,6 +134,7 @@ class InMemoryPageRepository implements PageRepository {
     List<Stroke> strokes = const [],
     String? imagePath,
     List<PageImage> images = const [],
+    List<PageText> texts = const [],
   }) async {
     if (pageIndex < 0) {
       throw ArgumentError.value(pageIndex, 'pageIndex', 'Must not be negative');
@@ -120,6 +150,7 @@ class InMemoryPageRepository implements PageRepository {
       template,
       imagePath,
       List<PageImage>.of(images),
+      List<PageText>.of(texts),
     );
     _notebooks[notebookId] = shifted;
   }
