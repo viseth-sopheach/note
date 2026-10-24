@@ -38,4 +38,14 @@ abstract final class SmartStroke {
     }
     return x;
   }
+
+  static ({List<StrokePoint> points, ShapeKind? kind})? refineDetailed(
+    List<StrokePoint> points,
+  ) {
+    if (!isCandidate(points)) return null;
+    final shape = ShapeRecognizer.recognize(points);
+    if (shape != null) return (points: shape.points, kind: shape.kind);
+    final smooth = CurveSmoother.smooth(points);
+    return smooth == null ? null : (points: smooth, kind: null);
+  }
 }

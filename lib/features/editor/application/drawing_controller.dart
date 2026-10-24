@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../domain/command_history.dart';
 import '../domain/drawing_command.dart';
 import '../domain/selection_handle.dart';
+import '../domain/shape_center.dart';
 import '../domain/shape_geometry.dart';
 import '../domain/shape_recognizer.dart';
 import '../domain/smart_stroke.dart';
@@ -24,7 +25,7 @@ class _Signal extends ChangeNotifier {
   void ping() => notifyListeners();
 }
 
-enum _Mode { none, draw, erase, lasso, move, shape, resize }
+enum _Mode { none, draw, erase, lasso, move, shape, resize, endpoint }
 
 /// Holds the strokes of one page, the stroke being drawn and the current
 /// selection. Tool, color and width come from [settings], which can be
@@ -42,8 +43,9 @@ class DrawingController extends ChangeNotifier {
     double minDistance = 0.5,
     ToolSettings? settings,
     int undoLimit = 200,
-    this.holdDuration = const Duration(milliseconds: 1000),
+    this.holdDuration = const Duration(milliseconds: 700),
     this.refineDelay = const Duration(milliseconds: 700),
+    this.autoRefine = false,
   }) : _newId = idGenerator ?? (() => const Uuid().v4()),
        _recorder = StrokeRecorder(minDistance: minDistance),
        _history = CommandHistory(limit: undoLimit),
@@ -56,7 +58,7 @@ class DrawingController extends ChangeNotifier {
   /// Eraser radius in document units.
   static const double eraserRadius = 10;
 
-  /// Extra area around the selection that still grabs it, in document units.
+  /// Extra area around the selection that still grabs it, in screen px.
   static const double _grabSlop = 8;
 
   /// A stroke that starts this close to a ruler edge snaps onto it.
@@ -67,7 +69,9 @@ class DrawingController extends ChangeNotifier {
   static const double holdTolerance = 3;
 
   static const double framePad = 8;
-  static const double handleHitPx = 18;
+  static const double handleHitPx = 14; // half size: 28 px target
+  static const double handleDiameterPx = 10;
+  static const double minFramePx = 24;
   static const double tapSlopPx = 6;
   static const double minShapeSide = 12;
 
@@ -76,6 +80,10 @@ class DrawingController extends ChangeNotifier {
 
   /// Pause after a stroke ends before it is recognized or smoothed.
   final Duration refineDelay;
+
+  /// Smooth or snap strokes automatically after lifting. Off: shapes only
+  /// snap when the pointer is held.
+  final bool autoRefine;
 
   /// Called once when a held stroke was turned into a clean shape.
   void Function()? onShapeRecognized;
@@ -129,6 +137,12 @@ class DrawingController extends ChangeNotifier {
   double _pressX = 0, _pressY = 0, _downX = 0, _downY = 0;
   double _rsx = 1, _rsy = 1, _rax = 0, _ray = 0;
   bool _deselectedOnDown = false;
+  bool _lockAspect = false;
+
+  // Endpoint drag state.
+  bool _epMovesEnd = true;
+  double _epAx = 0, _epAy = 0, _epMx = 0, _epMy = 0;
+  double _epA = 1, _epB = 0;
 
   int? _activePointer;
   int _originMs = 0;
@@ -200,17 +214,24 @@ class DrawingController extends ChangeNotifier {
   Iterable<Stroke> get selectedStrokes =>
       _strokes.where((s) => _selected.contains(s.id));
 
-  bool get isResizingSelection => _mode == _Mode.resize;
+  bool get isResizingSelection =>
+      _mode == _Mode.resize || _mode == _Mode.endpoint;
 
   bool get isTransformingSelection =>
-      _mode == _Mode.move || _mode == _Mode.resize;
+      _mode == _Mode.move || _mode == _Mode.resize || _mode == _Mode.endpoint;
+
+  SelectionHandle? get activeHandle => _handle;
 
   double get _scale => (viewScale?.call() ?? 1.0).clamp(0.05, 20.0).toDouble();
 
+  /// Frame padding in document units (constant on screen).
+  double get framePadDoc => framePad / _scale;
+
   void refreshView() => _live.ping();
 
-  /// Live bounds of the selected points (follows move and resize), or null.
-  Bounds? get selectionFrame {
+  // ---- Frame, preview, handles ----
+
+  Bounds? get _rawFrame {
     if (_selected.isEmpty) return null;
     if (_mode == _Mode.resize) {
       final b = _resizeBox;
@@ -232,23 +253,100 @@ class DrawingController extends ChangeNotifier {
     );
   }
 
-  /// Points of [s] as they look during a resize drag.
-  List<StrokePoint> previewPoints(Stroke s) => _mode == _Mode.resize
-      ? StrokeSelection.scaleAbout(s, _rax, _ray, _rsx, _rsy).points
-      : s.points;
+  /// Live selection bounds, never thinner than [minFramePx] on screen.
+  Bounds? get selectionFrame {
+    final f = _rawFrame;
+    if (f == null) return null;
+    final min = minFramePx / _scale;
+    var l = f.left, r = f.right, t = f.top, b = f.bottom;
+    if (r - l < min) {
+      final c = (l + r) / 2;
+      l = c - min / 2;
+      r = c + min / 2;
+    }
+    if (b - t < min) {
+      final c = (t + b) / 2;
+      t = c - min / 2;
+      b = c + min / 2;
+    }
+    return (left: l, top: t, right: r, bottom: b);
+  }
 
-  /// Handle positions around the selection (document units).
+  Stroke? get _linearStroke {
+    if (_selected.length != 1) return null;
+    for (final s in _strokes) {
+      if (_selected.contains(s.id)) {
+        return StrokeSelection.linearEnds(s) == null ? null : s;
+      }
+    }
+    return null;
+  }
+
+  /// Live endpoints when the selection is one line or open freehand stroke.
+  ({Vertex start, Vertex end})? get linearEnds {
+    final s = _linearStroke;
+    if (s == null) return null;
+    final e = StrokeSelection.linearEnds(s)!;
+    switch (_mode) {
+      case _Mode.move:
+        return (
+          start: (x: e.start.x + _dx, y: e.start.y + _dy),
+          end: (x: e.end.x + _dx, y: e.end.y + _dy),
+        );
+      case _Mode.endpoint:
+        final m = _epMap(_epMx, _epMy);
+        return _epMovesEnd ? (start: e.start, end: m) : (start: m, end: e.end);
+      default:
+        return e;
+    }
+  }
+
+  Vertex _epMap(double x, double y) {
+    final dx = x - _epAx, dy = y - _epAy;
+    return (x: _epAx + _epA * dx - _epB * dy, y: _epAy + _epB * dx + _epA * dy);
+  }
+
+  List<StrokePoint> previewPoints(Stroke s) => switch (_mode) {
+    _Mode.resize => StrokeSelection.scaleAbout(
+      s,
+      _rax,
+      _ray,
+      _rsx,
+      _rsy,
+    ).points,
+    _Mode.endpoint => StrokeSelection.similarityAbout(
+      s,
+      _epAx,
+      _epAy,
+      _epA,
+      _epB,
+    ).points,
+    _ => s.points,
+  };
+
+  /// Two endpoint handles for lines and freehand strokes, up to eight box
+  /// handles for everything else (document units).
   List<HandleSpot> get handleSpots {
+    final ends = linearEnds;
+    if (ends != null) {
+      return [
+        (handle: SelectionHandle.start, x: ends.start.x, y: ends.start.y),
+        (handle: SelectionHandle.end, x: ends.end.x, y: ends.end.y),
+      ];
+    }
+    final raw = _rawFrame;
     final f = selectionFrame;
-    if (f == null) return const [];
-    final l = f.left - framePad, r = f.right + framePad;
-    final t = f.top - framePad, b = f.bottom + framePad;
-    final okX = f.right - f.left >= 1;
-    final okY = f.bottom - f.top >= 1;
+    if (raw == null || f == null) return const [];
+    final pad = framePadDoc;
+    final l = f.left - pad, r = f.right + pad;
+    final t = f.top - pad, b = f.bottom + pad;
+    final okX = raw.right - raw.left >= 1;
+    final okY = raw.bottom - raw.top >= 1;
     final wide = (r - l) * _scale >= 72;
     final tall = (b - t) * _scale >= 72;
     final out = <HandleSpot>[];
     for (final h in SelectionHandle.values) {
+      if (h.isEndpoint) continue;
       if (!h.isCorner) {
         if (h.fy == 0 && !(okX && tall)) continue;
         if (h.fx == 0 && !(okY && wide)) continue;
@@ -544,6 +642,9 @@ class DrawingController extends ChangeNotifier {
       case _Mode.resize:
         _updateResize(x, y);
         _live.ping();
+      case _Mode.endpoint:
+        _updateEndpoint(x, y);
+        _live.ping();
       case _Mode.draw:
         // A snapped shape stays as it is until the pointer is lifted.
         if (_recognized != null) return;
@@ -602,6 +703,24 @@ class DrawingController extends ChangeNotifier {
         notifyListeners();
         _live.ping();
 
+      case _Mode.endpoint:
+        _updateEndpoint(x, y);
+        final ea = _epA, eb = _epB, eax = _epAx, eay = _epAy;
+        final eBefore = selectedStrokes.toList();
+        _finish();
+        if ((ea - 1).abs() > 0.001 || eb.abs() > 0.001) {
+          _history.execute(
+            ReplaceStrokesCommand(eBefore, [
+              for (final s in eBefore)
+                StrokeSelection.similarityAbout(s, eax, eay, ea, eb),
+            ]),
+            _strokes,
+          );
+          _revision++;
+        }
+        notifyListeners();
+        _live.ping();
+
       case _Mode.lasso:
         _lasso.add((x: x, y: y));
         _selected.clear();
@@ -611,6 +730,7 @@ class DrawingController extends ChangeNotifier {
         } else {
           _selected.addAll(StrokeSelection.insideLasso(_strokes, _lasso));
         }
+        _expandSelection();
         _lasso.clear();
         _finish();
         notifyListeners();
@@ -640,7 +760,18 @@ class DrawingController extends ChangeNotifier {
             width: _settings.width,
             points: _shape,
           );
-          _history.execute(AddStrokeCommand(stroke), _strokes);
+          final dot = _settings.tool == StrokeTool.ellipse
+              ? ShapeCenter.dotFor(stroke)
+              : null;
+          _history.execute(
+            dot == null
+                ? AddStrokeCommand(stroke)
+                : CompositeCommand([
+                    AddStrokeCommand(stroke),
+                    AddStrokeCommand(dot),
+                  ]),
+            _strokes,
+          );
           _revision++;
         }
         _shape.clear();
@@ -658,6 +789,7 @@ class DrawingController extends ChangeNotifier {
             _recorder.cancel();
             _selected.clear();
             if (hit != null) _selected.add(hit);
+            _expandSelection();
             _finish();
             notifyListeners();
             _live.ping();
@@ -676,9 +808,11 @@ class DrawingController extends ChangeNotifier {
           );
         }
         var stroke = _recorder.end();
+        Stroke? dot;
         if (recognized != null) {
           // Same id, tool, color and width: only the geometry is cleaned.
           stroke = stroke.copyWith(points: recognized.points);
+          if (_isEllipseKind(recognized.kind)) dot = ShapeCenter.dotFor(stroke);
         } else if (_snap != null && stroke.points.length > 2) {
           // Snapped to the ruler: keep only the two ends of the line.
           stroke = stroke.copyWith(
@@ -686,11 +820,20 @@ class DrawingController extends ChangeNotifier {
           );
         }
         final refine =
+            autoRefine &&
             recognized == null &&
             _snap == null &&
             _settings.shapeRecognition &&
             SmartStroke.isCandidate(stroke.points);
-        _history.execute(AddStrokeCommand(stroke), _strokes);
+        _history.execute(
+          dot == null
+              ? AddStrokeCommand(stroke)
+              : CompositeCommand([
+                  AddStrokeCommand(stroke),
+                  AddStrokeCommand(dot),
+                ]),
+          _strokes,
+        );
         _revision++;
         _finish();
         if (refine) _scheduleRefine(stroke.id);
@@ -715,6 +858,7 @@ class DrawingController extends ChangeNotifier {
         _dx = 0;
         _dy = 0;
       case _Mode.resize:
+      case _Mode.endpoint:
         break;
       case _Mode.shape:
         _shape.clear();
@@ -738,6 +882,9 @@ class DrawingController extends ChangeNotifier {
     _rsx = 1;
     _rsy = 1;
     _deselectedOnDown = false;
+    _epA = 1;
+    _epB = 0;
+    _lockAspect = false;
   }
 
   void _beginSelect(double x, double y) {
@@ -753,9 +900,20 @@ class DrawingController extends ChangeNotifier {
   }
 
   bool _inFrame(double x, double y) {
+    final slop = (framePad + _grabSlop) / _scale;
+    final line = _linearStroke;
+    if (line != null) {
+      return StrokeHitTest.hitsSegment(
+        line,
+        ax: x,
+        ay: y,
+        bx: x,
+        by: y,
+        radius: slop,
+      );
+    }
     final f = selectionFrame;
     if (f == null) return false;
-    const slop = framePad + _grabSlop;
     return x >= f.left - slop &&
         x <= f.right + slop &&
         y >= f.top - slop &&
@@ -776,11 +934,16 @@ class DrawingController extends ChangeNotifier {
     return best;
   }
 
-  /// Handle -> resize, inside the frame -> move. False when neither applies.
+  /// Handle -> resize or endpoint drag, inside the frame -> move. False
+  /// when neither applies.
   bool _tryBeginSelectionGesture(double x, double y) {
     final handle = _handleAt(x, y);
     if (handle != null) {
-      _beginResize(handle, x, y);
+      if (handle.isEndpoint) {
+        _beginEndpoint(handle, x, y);
+      } else {
+        _beginResize(handle, x, y);
+      }
       return true;
     }
     if (_inFrame(x, y)) {
@@ -794,6 +957,58 @@ class DrawingController extends ChangeNotifier {
     return false;
   }
 
+  void _expandSelection() {
+    if (_selected.isEmpty) return;
+    final all = ShapeCenter.withCompanions(_strokes, _selected);
+    _selected
+      ..clear()
+      ..addAll(all);
+  }
+
+  void _beginEndpoint(SelectionHandle h, double x, double y) {
+    final e = StrokeSelection.linearEnds(_linearStroke!)!;
+    _epMovesEnd = h == SelectionHandle.end;
+    final moving = _epMovesEnd ? e.end : e.start;
+    final anchor = _epMovesEnd ? e.start : e.end;
+    _mode = _Mode.endpoint;
+    _handle = h;
+    _epAx = anchor.x;
+    _epAy = anchor.y;
+    _epMx = moving.x;
+    _epMy = moving.y;
+    _epA = 1;
+    _epB = 0;
+    _pressX = x;
+    _pressY = y;
+  }
+
+  /// Rotates and scales the stroke about the fixed end so the dragged end
+  /// follows the pointer. A line just moves its end. Snaps to 45 degrees
+  /// when close, and to 15 degrees while Shift is held.
+  void _updateEndpoint(double x, double y) {
+    final ux = _epMx - _epAx, uy = _epMy - _epAy;
+    final ul2 = ux * ux + uy * uy;
+    if (ul2 < 1e-9) return;
+    var vx = _epMx + (x - _pressX) - _epAx;
+    var vy = _epMy + (y - _pressY) - _epAy;
+    var len = math.sqrt(vx * vx + vy * vy);
+    if (len < 1e-6) {
+      vx = ux;
+      vy = uy;
+      len = math.sqrt(ul2);
+    }
+    var ang = math.atan2(vy, vx);
+    final shift = HardwareKeyboard.instance.isShiftPressed;
+    final step = shift ? math.pi / 12 : math.pi / 4;
+    final snapped = (ang / step).roundToDouble() * step;
+    if (shift || (ang - snapped).abs() <= 0.04) ang = snapped;
+    len = math.max(len, 8 / _scale);
+    vx = len * math.cos(ang);
+    vy = len * math.sin(ang);
+    _epA = (vx * ux + vy * uy) / ul2;
+    _epB = (vy * ux - vx * uy) / ul2;
+  }
+
   void _beginResize(SelectionHandle h, double x, double y) {
     final b = StrokeSelection.pointBoundsOf(selectedStrokes)!;
     _mode = _Mode.resize;
@@ -805,6 +1020,17 @@ class DrawingController extends ChangeNotifier {
     _rsy = 1;
     _rax = h.fx > 0 ? b.left : (h.fx < 0 ? b.right : (b.left + b.right) / 2);
     _ray = h.fy > 0 ? b.top : (h.fy < 0 ? b.bottom : (b.top + b.bottom) / 2);
+
+    // Squares and circles keep their aspect ratio by default when dragged
+    // by a corner; Shift temporarily unlocks them.
+    final solid = selectedStrokes.where((s) => !ShapeCenter.isDot(s)).toList();
+    final bw = b.right - b.left, bh = b.bottom - b.top;
+    _lockAspect =
+        solid.length == 1 &&
+        StrokeSelection.isClosed(solid.first) &&
+        bw >= 1 &&
+        bh >= 1 &&
+        (bw - bh).abs() <= 0.03 * math.max(bw, bh);
   }
 
   void _updateResize(double x, double y) {
@@ -823,7 +1049,9 @@ class DrawingController extends ChangeNotifier {
     var sx = h.fx != 0 && okX ? math.max((w + h.fx * dx) / w, lowX) : 1.0;
     var sy = h.fy != 0 && okY ? math.max((ht + h.fy * dy) / ht, lowY) : 1.0;
 
-    if (HardwareKeyboard.instance.isShiftPressed) {
+    final shift = HardwareKeyboard.instance.isShiftPressed;
+    final uniform = h.isCorner ? shift != _lockAspect : shift;
+    if (uniform) {
       final u = math.max(
         (sx - 1).abs() >= (sy - 1).abs() ? sx : sy,
         math.max(lowX, lowY),
@@ -880,10 +1108,15 @@ class DrawingController extends ChangeNotifier {
     final i = _strokes.indexWhere((s) => s.id == id);
     if (i < 0) return;
     final before = _strokes[i];
-    final points = SmartStroke.refine(before.points);
-    if (points == null) return;
+    final refined = SmartStroke.refineDetailed(before.points);
+    if (refined == null) return;
+    final after = before.copyWith(points: refined.points);
+    final dot = _isEllipseKind(refined.kind) ? ShapeCenter.dotFor(after) : null;
+    final replace = ReplaceStrokesCommand([before], [after]);
     _history.execute(
-      ReplaceStrokesCommand([before], [before.copyWith(points: points)]),
+      dot == null
+          ? replace
+          : CompositeCommand([replace, AddStrokeCommand(dot)]),
       _strokes,
     );
     _revision++;
@@ -914,6 +1147,9 @@ class DrawingController extends ChangeNotifier {
     _lastY = y;
     return changed;
   }
+
+  static bool _isEllipseKind(ShapeKind? k) =>
+      k == ShapeKind.circle || k == ShapeKind.ellipse;
 
   @override
   void dispose() {

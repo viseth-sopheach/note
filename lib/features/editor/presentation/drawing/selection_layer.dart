@@ -4,8 +4,8 @@ import '../../application/drawing_controller.dart';
 import '../paper/paper_colors.dart';
 import 'ink_renderer.dart';
 
-/// Lasso, selection box and the strokes being moved.
-class SelectionLayer extends StatelessWidget {
+/// Lasso, selection line or box, handles and the strokes being transformed.
+class SelectionLayer extends StatefulWidget {
   const SelectionLayer({
     super.key,
     required this.controller,
@@ -18,11 +18,63 @@ class SelectionLayer extends StatelessWidget {
   final bool darkPaper;
 
   @override
+  State<SelectionLayer> createState() => _SelectionLayerState();
+}
+
+class _SelectionLayerState extends State<SelectionLayer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _appear = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 180),
+    value: 1,
+  );
+  String _key = '';
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onChange);
+  }
+
+  @override
+  void didUpdateWidget(SelectionLayer old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_onChange);
+      widget.controller.addListener(_onChange);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onChange);
+    _appear.dispose();
+    super.dispose();
+  }
+
+  void _onChange() {
+    final key = (widget.controller.selectedIds.toList()..sort()).join('|');
+    if (key == _key) return;
+    _key = key;
+    if (key.isEmpty) return;
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+      _appear.value = 1;
+    } else {
+      _appear.forward(from: 0);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return IgnorePointer(
       child: RepaintBoundary(
         child: CustomPaint(
-          painter: SelectionPainter(controller, origin, darkPaper),
+          painter: SelectionPainter(
+            widget.controller,
+            widget.origin,
+            widget.darkPaper,
+            _appear,
+          ),
           size: Size.infinite,
         ),
       ),
@@ -35,11 +87,13 @@ class SelectionPainter extends CustomPainter {
     this.controller, [
     this.origin = Offset.zero,
     this.darkPaper = false,
-  ]) : super(repaint: Listenable.merge([controller, controller.live]));
+    this.appear,
+  ]) : super(repaint: Listenable.merge([controller, controller.live, ?appear]));
 
   final DrawingController controller;
   final Offset origin;
   final bool darkPaper;
+  final Animation<double>? appear;
 
   static const Color _accent = Color(0xFF0A84FF);
 
@@ -89,42 +143,86 @@ class SelectionPainter extends CustomPainter {
       canvas.restore();
     }
 
-    final f = controller.selectionFrame;
-    if (f == null) return;
-
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromLTRB(f.left, f.top, f.right, f.bottom)
-          .inflate(DrawingController.framePad),
-      const Radius.circular(10),
-    );
-    canvas.drawRRect(rect, Paint()..color = _accent.withValues(alpha: 0.08));
-    canvas.drawRRect(
-      rect,
-      Paint()
-        ..color = _accent
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
-    );
-
-    // Handles keep a constant size on screen at any zoom.
     final k = 1 / (controller.viewScale?.call() ?? 1.0).clamp(0.05, 20.0);
-    for (final spot in controller.handleSpots) {
-      final c = Offset(spot.x, spot.y);
-      canvas.drawCircle(c, 7 * k, Paint()..color = const Color(0xFFFFFFFF));
-      canvas.drawCircle(
-        c,
-        7 * k,
+    final t = Curves.easeOutCubic.transform(
+      (appear?.value ?? 1.0).clamp(0.0, 1.0),
+    );
+
+    final ends = controller.linearEnds;
+    if (ends != null) {
+      canvas.drawLine(
+        Offset(ends.start.x, ends.start.y),
+        Offset(ends.end.x, ends.end.y),
         Paint()
-          ..color = _accent
+          ..color = _accent.withValues(alpha: 0.5 * t)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2 * k,
+          ..strokeWidth = 1.5 * k
+          ..strokeCap = StrokeCap.round,
+      );
+    } else {
+      final f = controller.selectionFrame;
+      if (f == null) return;
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTRB(
+          f.left,
+          f.top,
+          f.right,
+          f.bottom,
+        ).inflate(controller.framePadDoc),
+        Radius.circular(10 * k),
+      );
+      canvas.drawRRect(
+        rect,
+        Paint()..color = _accent.withValues(alpha: 0.08 * t),
+      );
+      canvas.drawRRect(
+        rect,
+        Paint()
+          ..color = _accent.withValues(alpha: t)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5 * k,
       );
     }
+
+    final active = controller.activeHandle;
+    for (final spot in controller.handleSpots) {
+      _drawHandle(canvas, Offset(spot.x, spot.y), k, t, spot.handle == active);
+    }
+  }
+
+  void _drawHandle(Canvas canvas, Offset c, double k, double t, bool active) {
+    final r =
+        DrawingController.handleDiameterPx /
+        2 *
+        k *
+        (0.6 + 0.4 * t) *
+        (active ? 1.25 : 1.0);
+    canvas.drawCircle(
+      c + Offset(0, 1 * k),
+      r + 0.5 * k,
+      Paint()
+        ..color = Color.fromRGBO(0, 0, 0, 0.28 * t)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2 * k),
+    );
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()..color = const Color(0xFFFFFFFF).withValues(alpha: t),
+    );
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..color = _accent.withValues(alpha: t)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2 * k,
+    );
   }
 
   @override
   bool shouldRepaint(SelectionPainter oldDelegate) =>
       oldDelegate.controller != controller ||
       oldDelegate.origin != origin ||
-      oldDelegate.darkPaper != darkPaper;
+      oldDelegate.darkPaper != darkPaper ||
+      oldDelegate.appear != appear;
 }

@@ -11,6 +11,7 @@ void main() {
       idGenerator: () => 'id',
       refineDelay: const Duration(milliseconds: 20),
       holdDuration: const Duration(seconds: 30),
+      autoRefine: true,
     ),
   );
   tearDown(() => c.dispose());

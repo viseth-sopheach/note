@@ -5,7 +5,17 @@ import 'stroke_point.dart';
 typedef _P = ({double x, double y});
 typedef _Box = ({double left, double top, double right, double bottom});
 
-enum ShapeKind { line, arrow, triangle, rectangle, square, circle, ellipse }
+enum ShapeKind {
+  line,
+  arrow,
+  triangle,
+  rectangle,
+  square,
+  circle,
+  ellipse,
+  star,
+  polygon,
+}
 
 /// A clean shape ready to be stored as a normal stroke.
 final class RecognizedShape {
@@ -193,6 +203,9 @@ abstract final class ShapeRecognizer {
     final h = box.bottom - box.top;
     if (math.min(w, h) < diag * 0.1) return null;
 
+    final star = _fitStar(ring, diag);
+    if (star != null) return star;
+
     final cx = (box.left + box.right) / 2;
     final cy = (box.top + box.bottom) / 2;
     final rx = w / 2;
@@ -205,9 +218,9 @@ abstract final class ShapeRecognizer {
 
     final preferPolygon = polyError <= _polygonMaxError && ellipseError > 0.07;
     if (ellipseError <= _ellipseMaxError && !preferPolygon) {
-      return _ellipse(cx, cy, rx, ry);
+      return _fitPolygon(ring, diag) ?? _ellipse(cx, cy, rx, ry);
     }
-    if (polyError > _polygonMaxError) return null;
+    if (polyError > _polygonMaxError) return _fitPolygon(ring, diag);
 
     if (rect != null && rect.error == polyError) {
       final square =
@@ -345,6 +358,167 @@ abstract final class ShapeRecognizer {
       return _TriFit(error: math.sqrt(sum / ring.length) / diag, vertices: v);
     }
     return null;
+  }
+
+  // ---- Star and polygon ----
+
+  static RecognizedShape? _fitStar(List<_P> ring, double diag) {
+    for (final k in const [0.03, 0.045, 0.065]) {
+      final v = _simplifyClosed(ring, k * diag);
+      final star = v.length == 10
+          ? _outlineStar(v)
+          : (v.length == 5 ? _pentagram(v) : null);
+      if (star != null) return star;
+    }
+    return null;
+  }
+
+  static RecognizedShape? _outlineStar(List<_P> v) {
+    final c = _centroid(v);
+    final turns = _turns(v, c);
+    final sign = turns.first >= 0 ? 1.0 : -1.0;
+    for (final t in turns) {
+      if (t * sign <= 0 || (t.abs() - math.pi / 5).abs() > 0.45) return null;
+    }
+    final r = [for (final p in v) _dist(p, c)];
+    double avg(int parity) {
+      var s = 0.0;
+      for (var i = parity; i < 10; i += 2) {
+        s += r[i];
+      }
+      return s / 5;
+    }
+
+    final even = avg(0), odd = avg(1);
+    final outerParity = even >= odd ? 0 : 1;
+    final outer = math.max(even, odd), inner = math.min(even, odd);
+    final ratio = inner / outer;
+    if (ratio < 0.3 || ratio > 0.75) return null;
+    for (var i = 0; i < 10; i++) {
+      final ref = i % 2 == outerParity ? outer : inner;
+      if ((r[i] - ref).abs() > 0.3 * ref) return null;
+    }
+    final a0 = math.atan2(v[outerParity].y - c.y, v[outerParity].x - c.x);
+    final pts = <_P>[
+      for (var i = 0; i < 10; i++)
+        (
+          x:
+              c.x +
+              (i % 2 == 0 ? outer : inner) *
+                  math.cos(a0 + sign * i * math.pi / 5),
+          y:
+              c.y +
+              (i % 2 == 0 ? outer : inner) *
+                  math.sin(a0 + sign * i * math.pi / 5),
+        ),
+    ];
+    return RecognizedShape(ShapeKind.star, _corners(pts, close: true));
+  }
+
+  /// Five-point star drawn in one stroke (the pentagram).
+  static RecognizedShape? _pentagram(List<_P> v) {
+    final c = _centroid(v);
+    final turns = _turns(v, c);
+    final sign = turns.first >= 0 ? 1.0 : -1.0;
+    for (final t in turns) {
+      if (t * sign <= 0 || (t.abs() - 4 * math.pi / 5).abs() > 0.45) {
+        return null;
+      }
+    }
+    final r = [for (final p in v) _dist(p, c)];
+    final mean = _avg(r);
+    if ((r.reduce(math.max) - r.reduce(math.min)) > 0.25 * mean) return null;
+    final a0 = math.atan2(v[0].y - c.y, v[0].x - c.x);
+    final pts = <_P>[
+      for (var i = 0; i < 5; i++)
+        (
+          x: c.x + mean * math.cos(a0 + sign * i * 4 * math.pi / 5),
+          y: c.y + mean * math.sin(a0 + sign * i * 4 * math.pi / 5),
+        ),
+    ];
+    return RecognizedShape(ShapeKind.star, _corners(pts, close: true));
+  }
+
+  /// 5 to 8 straight edges. Circles are rejected because their chords
+  /// bulge away from the stroke.
+  static RecognizedShape? _fitPolygon(List<_P> ring, double diag) {
+    for (final k in const [0.025, 0.035, 0.05, 0.07]) {
+      final v = _simplifyClosed(ring, k * diag);
+      final n = v.length;
+      if (n < 5 || n > 8) continue;
+      var sum = 0.0, shortest = double.infinity;
+      for (var i = 0; i < n; i++) {
+        final e = _dist(v[i], v[(i + 1) % n]);
+        sum += e;
+        shortest = math.min(shortest, e);
+      }
+      final mean = sum / n;
+      if (shortest < 0.35 * mean) continue;
+      var worst = 0.0;
+      for (final p in ring) {
+        var d = double.infinity;
+        for (var i = 0; i < n; i++) {
+          d = math.min(d, _distToSegment(p, v[i], v[(i + 1) % n]));
+        }
+        worst = math.max(worst, d);
+      }
+      if (worst > 0.07 * mean) continue;
+      return RecognizedShape(
+        ShapeKind.polygon,
+        _corners(_regularized(v), close: true),
+      );
+    }
+    return null;
+  }
+
+  static List<_P> _regularized(List<_P> v) {
+    final c = _centroid(v);
+    final r = [for (final p in v) _dist(p, c)];
+    final mean = _avg(r);
+    if (mean == 0 || (r.reduce(math.max) - r.reduce(math.min)) > 0.14 * mean) {
+      return v;
+    }
+    var area = 0.0;
+    for (var i = 0; i < v.length; i++) {
+      final a = v[i], b = v[(i + 1) % v.length];
+      area += a.x * b.y - b.x * a.y;
+    }
+    final dir = area >= 0 ? 1.0 : -1.0;
+    final a0 = math.atan2(v[0].y - c.y, v[0].x - c.x);
+    return [
+      for (var i = 0; i < v.length; i++)
+        (
+          x: c.x + mean * math.cos(a0 + dir * 2 * math.pi * i / v.length),
+          y: c.y + mean * math.sin(a0 + dir * 2 * math.pi * i / v.length),
+        ),
+    ];
+  }
+
+  static _P _centroid(List<_P> v) {
+    var x = 0.0, y = 0.0;
+    for (final p in v) {
+      x += p.x;
+      y += p.y;
+    }
+    return (x: x / v.length, y: y / v.length);
+  }
+
+  static List<double> _turns(List<_P> v, _P c) {
+    final a = [for (final p in v) math.atan2(p.y - c.y, p.x - c.x)];
+    return [
+      for (var i = 0; i < a.length; i++) _wrapPi(a[(i + 1) % a.length] - a[i]),
+    ];
+  }
+
+  static double _wrapPi(double x) {
+    var r = x;
+    while (r > math.pi) {
+      r -= 2 * math.pi;
+    }
+    while (r < -math.pi) {
+      r += 2 * math.pi;
+    }
+    return r;
   }
 
   // ---- Geometry helpers ----

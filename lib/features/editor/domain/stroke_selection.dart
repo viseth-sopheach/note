@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'stroke.dart';
 import 'stroke_hit_test.dart';
 import 'stroke_point.dart';
@@ -99,6 +101,64 @@ abstract final class StrokeSelection {
         StrokePoint(
           x: ax + (p.x - ax) * sx,
           y: ay + (p.y - ay) * sy,
+          pressure: p.pressure,
+          timestampMs: p.timestampMs,
+        ),
+    ],
+  );
+
+  static double _gap(StrokePoint a, StrokePoint b) {
+    final dx = a.x - b.x, dy = a.y - b.y;
+    return math.sqrt(dx * dx + dy * dy);
+  }
+
+  /// Open stroke whose ends are far apart relative to its length.
+  static bool isClosed(Stroke s) {
+    final p = s.points;
+    if (p.length < 3) return false;
+    var path = 0.0;
+    for (var i = 1; i < p.length; i++) {
+      path += _gap(p[i - 1], p[i]);
+    }
+    return path > 0 && _gap(p.first, p.last) <= 0.15 * path;
+  }
+
+  /// Start and end of a line, arrow or open freehand stroke; null for
+  /// closed shapes, dots and compact scribbles. For arrows the end is the
+  /// tip (the farthest point), otherwise the last point.
+  static ({Vertex start, Vertex end})? linearEnds(Stroke s) {
+    final p = s.points;
+    if (p.length < 2 || isClosed(s)) return null;
+    final a = p.first;
+    var path = 0.0, far = 0.0;
+    var farIndex = 0;
+    for (var i = 1; i < p.length; i++) {
+      path += _gap(p[i - 1], p[i]);
+      final d = _gap(a, p[i]);
+      if (d > far) {
+        far = d;
+        farIndex = i;
+      }
+    }
+    if (path <= 0 || far < 0.3 * path) return null;
+    final end = _gap(a, p.last) >= 0.9 * far ? p.last : p[farIndex];
+    return (start: (x: a.x, y: a.y), end: (x: end.x, y: end.y));
+  }
+
+  /// Rotates and scales the points about (ax, ay) by the complex factor
+  /// a + bi. Width, color and pressure are kept.
+  static Stroke similarityAbout(
+    Stroke stroke,
+    double ax,
+    double ay,
+    double a,
+    double b,
+  ) => stroke.copyWith(
+    points: [
+      for (final p in stroke.points)
+        StrokePoint(
+          x: ax + a * (p.x - ax) - b * (p.y - ay),
+          y: ay + b * (p.x - ax) + a * (p.y - ay),
           pressure: p.pressure,
           timestampMs: p.timestampMs,
         ),

@@ -69,6 +69,14 @@ List<_P> _arrow() {
   ];
 }
 
+List<_P> _regular(int n, double r) => [
+  for (var i = 0; i < n; i++)
+    (
+      300 + r * math.cos(-math.pi / 2 + 2 * math.pi * i / n),
+      300 + r * math.sin(-math.pi / 2 + 2 * math.pi * i / n),
+    ),
+];
+
 List<StrokePoint> _pts(List<_P> p) => [
   for (final q in p) StrokePoint(x: q.$1, y: q.$2),
 ];
@@ -112,6 +120,36 @@ void main() {
     });
 
     test('arrow', () => expect(_kind(_arrow()), ShapeKind.arrow));
+
+    test(
+      'pentagon',
+      () => expect(_kind(_polygon(_regular(5, 120))), ShapeKind.polygon),
+    );
+    test(
+      'hexagon',
+      () => expect(_kind(_polygon(_regular(6, 120))), ShapeKind.polygon),
+    );
+    test('outline star', () {
+      final v = [
+        for (var i = 0; i < 10; i++)
+          (
+            300 +
+                (i.isEven ? 140 : 56) *
+                    math.cos(-math.pi / 2 + i * math.pi / 5),
+            300 +
+                (i.isEven ? 140 : 56) *
+                    math.sin(-math.pi / 2 + i * math.pi / 5),
+          ),
+      ];
+      expect(_kind(_polygon(v, perSide: 30)), ShapeKind.star);
+    });
+    test('one-stroke pentagram', () {
+      final p = _regular(5, 130);
+      expect(
+        _kind(_polygon([p[0], p[2], p[4], p[1], p[3]], perSide: 50)),
+        ShapeKind.star,
+      );
+    });
 
     test('scribbles and tiny strokes are not recognized', () {
       final scribble = <_P>[];
@@ -164,8 +202,9 @@ void main() {
       expect(c.recognizedShape, ShapeKind.circle);
       lift(path.last);
 
-      expect(c.strokes, hasLength(1));
-      expect(c.strokes.single.points, hasLength(73));
+      expect(c.strokes, hasLength(2)); // circle + center dot
+      expect(c.strokes.first.points, hasLength(73));
+      expect(c.strokes.last.id, endsWith(':c'));
     });
 
     test('an unrecognized stroke keeps the original points', () async {

@@ -96,3 +96,25 @@ class ReplaceStrokesCommand implements DrawingCommand {
   @override
   void revert(List<Stroke> strokes) => _swap(strokes, _before);
 }
+
+/// Several commands as one undo step.
+class CompositeCommand implements DrawingCommand {
+  CompositeCommand(List<DrawingCommand> commands)
+    : _commands = List<DrawingCommand>.unmodifiable(commands);
+
+  final List<DrawingCommand> _commands;
+
+  @override
+  void apply(List<Stroke> strokes) {
+    for (final c in _commands) {
+      c.apply(strokes);
+    }
+  }
+
+  @override
+  void revert(List<Stroke> strokes) {
+    for (final c in _commands.reversed) {
+      c.revert(strokes);
+    }
+  }
+}
