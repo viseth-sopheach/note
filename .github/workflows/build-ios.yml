@@ -1,41 +1,65 @@
-
 name: Build iOS IPA
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build:
+    name: Build unsigned IPA
     runs-on: macos-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
+      - name: Show Flutter version
+        run: flutter --version
+
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build iOS
+      - name: Build iOS (no code signing)
         run: flutter build ios --release --no-codesign
 
       - name: Package IPA
         run: |
-          mkdir Payload
-          cp -R build/ios/iphoneos/Runner.app Payload/
-          ditto -c -k --sequesterRsrc --keepParent Payload app.ipa
+          set -euo pipefail
+          APP_PATH="build/ios/iphoneos/Runner.app"
+          test -d "$APP_PATH" || { echo "Runner.app not found"; exit 1; }
 
-      - name: Upload IPA
+          rm -rf Payload VisethNote-unsigned.ipa
+          mkdir Payload
+          cp -R "$APP_PATH" Payload/Runner.app
+
+          # Remove any stray signature/metadata files
+          find Payload -name ".DS_Store" -delete
+          rm -rf Payload/Runner.app/_CodeSignature
+
+          # zip -y keeps symlinks; ditto would also work
+          zip -qry VisethNote-unsigned.ipa Payload
+
+          unzip -l VisethNote-unsigned.ipa | head -n 20
+
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: unsigned-ipa
-          path: app.ipa
+          name: VisethNote-unsigned-ipa
+          path: VisethNote-unsigned.ipa
           if-no-files-found: error
+          retention-days: 30
