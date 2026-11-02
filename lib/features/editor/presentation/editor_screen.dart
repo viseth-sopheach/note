@@ -46,6 +46,7 @@ import 'drawing/selection_layer.dart';
 import 'drawing/text_layer.dart';
 import 'editor_stack.dart';
 import 'gestures/two_finger_double_tap.dart';
+import 'gestures/two_finger_scroll_guard.dart';
 import 'measure/measure_overlay.dart';
 import 'paper/page_metrics.dart';
 import 'paper/paper_painter.dart';
@@ -167,6 +168,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
   final ValueNotifier<bool> _scrolling = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _atBottom = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _zoomAllowed = ValueNotifier<bool>(true);
 
   Timer? _idleTimer;
 
@@ -1209,6 +1211,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
     _scrolling.dispose();
     _atBottom.dispose();
+    _zoomAllowed.dispose();
 
     for (final s in _sessions) {
       s.close();
@@ -1625,37 +1628,45 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
                     return Stack(
                       children: [
-                        ListenableBuilder(
-                          listenable: anyDrawing,
-                          child: pages,
-                          builder: (context, child) {
-                            final busyInput =
-                                _sessions.any(
-                                  (s) =>
-                                      s.controller.isDrawing ||
-                                      s.images.interacting ||
-                                      s.texts.interacting,
-                                ) ||
-                                _measure.interacting;
+                        TwoFingerScrollGuard(
+                          zoomEnabled: _zoomAllowed,
+                          child: ListenableBuilder(
+                            listenable: anyDrawing,
+                            child: pages,
+                            builder: (context, child) {
+                              final busyInput =
+                                  _sessions.any(
+                                    (s) =>
+                                        s.controller.isDrawing ||
+                                        s.images.interacting ||
+                                        s.texts.interacting,
+                                  ) ||
+                                  _measure.interacting;
 
-                            return InteractiveViewer(
-                              transformationController: _transform,
-                              constrained: false,
-                              alignment: Alignment.topLeft,
-                              minScale: 0.25,
-                              maxScale: 4,
-                              scaleFactor: 1000,
-                              boundaryMargin: const EdgeInsets.all(
-                                double.infinity,
-                              ),
-                              panEnabled: !busyInput,
-                              scaleEnabled: true,
-                              onInteractionStart: (_) {
-                                _view.stop();
-                              },
-                              child: child!,
-                            );
-                          },
+                              return ValueListenableBuilder<bool>(
+                                valueListenable: _zoomAllowed,
+                                child: child,
+                                builder: (context, zoomAllowed, pagesChild) =>
+                                    InteractiveViewer(
+                                      transformationController: _transform,
+                                      constrained: false,
+                                      alignment: Alignment.topLeft,
+                                      minScale: 0.25,
+                                      maxScale: 4,
+                                      scaleFactor: 1000,
+                                      boundaryMargin: const EdgeInsets.all(
+                                        double.infinity,
+                                      ),
+                                      panEnabled: !busyInput,
+                                      scaleEnabled: zoomAllowed,
+                                      onInteractionStart: (_) {
+                                        _view.stop();
+                                      },
+                                      child: pagesChild!,
+                                    ),
+                              );
+                            },
+                          ),
                         ),
                         Positioned.fill(
                           child: Listener(
