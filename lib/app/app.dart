@@ -29,7 +29,7 @@ class NoteApp extends ConsumerWidget {
     final seed = Color(accent);
 
     return MaterialApp.router(
-      title: 'VisethNote',
+      title: 'Viseth',
       theme: AppTheme.build(Brightness.light, seed: seed, compact: compact),
       darkTheme: AppTheme.build(Brightness.dark, seed: seed, compact: compact),
       themeMode: _toThemeMode(mode),

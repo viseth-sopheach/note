@@ -43,7 +43,7 @@ jobs:
           APP_PATH="build/ios/iphoneos/Runner.app"
           test -d "$APP_PATH" || { echo "Runner.app not found"; exit 1; }
 
-          rm -rf Payload VisethNote-unsigned.ipa
+          rm -rf Payload Viseth-unsigned.ipa
           mkdir Payload
           cp -R "$APP_PATH" Payload/Runner.app
 
@@ -52,14 +52,14 @@ jobs:
           rm -rf Payload/Runner.app/_CodeSignature
 
           # zip -y keeps symlinks; ditto would also work
-          zip -qry VisethNote-unsigned.ipa Payload
+          zip -qry Viseth-unsigned.ipa Payload
 
-          unzip -l VisethNote-unsigned.ipa | head -n 20
+          unzip -l Viseth-unsigned.ipa | head -n 20
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VisethNote-unsigned-ipa
-          path: VisethNote-unsigned.ipa
+          name: Viseth-unsigned-ipa
+          path: Viseth-unsigned.ipa
           if-no-files-found: error
           retention-days: 30

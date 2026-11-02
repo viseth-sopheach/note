@@ -12,7 +12,7 @@ class AboutSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final info = ref.watch(packageInfoProvider);
-    final name = info.value?.appName ?? 'VisethNote';
+    final name = info.value?.appName ?? 'Viseth';
 
     final version = info.when(
       data: (i) => '${i.version} (${i.buildNumber})',
