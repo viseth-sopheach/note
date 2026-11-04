@@ -394,6 +394,73 @@ class DrawingController extends ChangeNotifier {
     _live.ping();
   }
 
+  // ---- Copy / duplicate / paste ----
+
+  static const double duplicateOffset = 24;
+  static List<Stroke> _clipboard = const [];
+  static int _pasteStep = 0;
+
+  static bool get hasClipboard => _clipboard.isNotEmpty;
+
+  void copySelection() {
+    if (isDrawing || _selected.isEmpty) return;
+    _clipboard = List<Stroke>.of(selectedStrokes);
+    _pasteStep = 0;
+    notifyListeners();
+  }
+
+  void pasteClipboard() {
+    if (isDrawing || _clipboard.isEmpty) return;
+    final d = duplicateOffset * (++_pasteStep);
+    _insertCopies(_clipboard, d, d);
+  }
+
+  void duplicateSelection() {
+    if (isDrawing || _selected.isEmpty) return;
+    _insertCopies(selectedStrokes.toList(), duplicateOffset, duplicateOffset);
+  }
+
+  void _insertCopies(List<Stroke> source, double dx, double dy) {
+    if (source.isEmpty) return;
+    _cancelRefine();
+
+    final idMap = <String, String>{};
+    for (final s in source) {
+      if (!ShapeCenter.isDot(s)) idMap[s.id] = _newId();
+    }
+
+    final copies = <Stroke>[];
+    for (final s in source) {
+      final String id;
+      if (ShapeCenter.isDot(s)) {
+        id = ShapeCenter.dotId(idMap[ShapeCenter.ownerOf(s.id)] ?? _newId());
+      } else {
+        id = idMap[s.id]!;
+      }
+      final moved = StrokeSelection.translate(s, dx, dy);
+      copies.add(
+        Stroke(
+          id: id,
+          tool: moved.tool,
+          colorValue: moved.colorValue,
+          width: moved.width,
+          points: moved.points,
+        ),
+      );
+    }
+
+    _history.execute(
+      CompositeCommand([for (final c in copies) AddStrokeCommand(c)]),
+      _strokes,
+    );
+    _revision++;
+    _selected
+      ..clear()
+      ..addAll(copies.map((c) => c.id));
+    notifyListeners();
+    _live.ping();
+  }
+
   // ---- History ----
 
   void undo() {

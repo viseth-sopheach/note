@@ -52,6 +52,7 @@ import 'paper/page_metrics.dart';
 import 'paper/paper_painter.dart';
 import 'paper/paper_view.dart';
 import 'toolbar/floating_toolbar.dart';
+import 'toolbar/selection_action_bar.dart';
 import 'widgets/web_scrollbar.dart';
 
 class EditorScreen extends ConsumerStatefulWidget {
@@ -1550,6 +1551,73 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   }
 
   // ------------------------------------------------------------
+  // Selection action bar
+  // ------------------------------------------------------------
+
+  Widget _selectionBar() {
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        _transform,
+        for (final s in _sessions) s.controller,
+      ]),
+      builder: (context, _) {
+        _PageSession? owner;
+        for (final s in _sessions) {
+          if (s.controller.hasSelection) {
+            owner = s;
+            break;
+          }
+        }
+        if (owner == null || _busy) return const SizedBox.shrink();
+
+        final c = owner.controller;
+        final f = c.selectionFrame;
+        if (f == null || c.isDrawing || c.isTransformingSelection) {
+          return const SizedBox.shrink();
+        }
+
+        final m = _transform.value;
+        final k = m.storage[0];
+        final o = _paperOrigin(owner.index);
+        final pad = c.framePadDoc;
+
+        final left = (o.dx + f.left - pad) * k + m.storage[12];
+        final right = (o.dx + f.right + pad) * k + m.storage[12];
+        final top = (o.dy + f.top - pad) * k + m.storage[13];
+        final bottom = (o.dy + f.bottom + pad) * k + m.storage[13];
+
+        final paste = DrawingController.hasClipboard;
+        final w = SelectionActionBar.widthFor(paste: paste);
+        const h = SelectionActionBar.height;
+        const gap = 18.0;
+        const minY = 72.0;
+
+        final x = ((left + right) / 2 - w / 2)
+            .clamp(8.0, math.max(8.0, _viewportW - w - 24))
+            .toDouble();
+        var y = top - h - gap;
+        if (y < minY) y = bottom + gap;
+        y = y.clamp(minY, math.max(minY, _viewportH - h - 8)).toDouble();
+
+        return Stack(
+          children: [
+            Positioned(
+              left: x,
+              top: y,
+              child: SelectionActionBar(
+                onCopy: c.copySelection,
+                onDuplicate: c.duplicateSelection,
+                onDelete: c.deleteSelection,
+                onPaste: paste ? c.pasteClipboard : null,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ------------------------------------------------------------
   // Main UI
   // ------------------------------------------------------------
 
@@ -1689,6 +1757,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
               },
             ),
           ),
+          Positioned.fill(child: _selectionBar()),
         ],
       ),
     );
