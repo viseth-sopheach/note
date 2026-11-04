@@ -36,8 +36,8 @@ abstract final class ShapeRecognizer {
   static const double minDiagonal = 40;
 
   static const double _closeRatio = 0.16;
-  static const double _lineMaxDeviation = 0.06;
-  static const double _maxStretch = 1.12;
+  static const double _lineMaxDeviation = 0.08;
+  static const double _maxStretch = 1.15;
   static const double _axisSnap = 0.07; // radians, about 4 degrees
   static const double _ellipseMaxError = 0.10;
   static const double _polygonMaxError = 0.045;
@@ -60,7 +60,43 @@ abstract final class ShapeRecognizer {
     if (_dist(pts.first, pts.last) <= _closeRatio * length) {
       return _closed(pts, diag);
     }
-    return _line(pts, length) ?? _arrow(pts, length);
+    return _arrow(pts, length) ?? _line(pts, length);
+  }
+
+  /// Hold-to-snap needs a stroke at least this big (document units).
+  static const double confidentMinDiagonal = 80;
+  static const double _arrowMinDiagonal = 60;
+
+  static RecognizedShape? recognizeConfident(List<StrokePoint> input) {
+    final pts = _clean(input);
+    if (pts.length < 6) return null;
+    final box = _bounds(pts);
+    final diag = math.sqrt(
+      math.pow(box.right - box.left, 2) + math.pow(box.bottom - box.top, 2),
+    );
+    if (diag < _arrowMinDiagonal) return null;
+
+    final shape = recognize(input);
+    if (shape == null) return null;
+
+    final open = shape.kind == ShapeKind.arrow || shape.kind == ShapeKind.line;
+    if (diag < (open ? _arrowMinDiagonal : confidentMinDiagonal)) return null;
+    final maxMean = open ? 0.05 : 0.03;
+    final maxPeak = open ? 0.12 : 0.09;
+
+    final outline = _clean(shape.points);
+    if (outline.length < 2) return null;
+    var sum = 0.0, peak = 0.0;
+    for (final p in pts) {
+      var d = double.infinity;
+      for (var i = 1; i < outline.length; i++) {
+        d = math.min(d, _distToSegment(p, outline[i - 1], outline[i]));
+      }
+      sum += d;
+      peak = math.max(peak, d);
+    }
+    final mean = sum / pts.length;
+    return mean <= maxMean * diag && peak <= maxPeak * diag ? shape : null;
   }
 
   // ---- Open shapes ----
@@ -76,8 +112,8 @@ abstract final class ShapeRecognizer {
     return RecognizedShape(ShapeKind.line, _plain([a, _snapEnd(a, b)]));
   }
 
-  /// One-stroke arrow: a straight shaft, then one or two strokes of the
-  /// head drawn back from the tip.
+  /// One-stroke arrow: a straight shaft, then one or two wing strokes drawn
+  /// back from the tip. A single wing is mirrored into a symmetric head.
   static RecognizedShape? _arrow(List<_P> pts, double length) {
     final a = pts.first;
     var best = 0.0;
@@ -95,60 +131,149 @@ abstract final class ShapeRecognizer {
 
     final tip = pts[tipIndex];
     final shaft = _dist(a, tip);
-    if (shaft == 0) return null;
+    if (shaft < minDiagonal) return null;
 
     final shaftPoints = pts.sublist(0, tipIndex + 1);
     for (final p in shaftPoints) {
-      if (_distToLine(p, a, tip) > shaft * 0.08) return null;
+      if (_distToLine(p, a, tip) > shaft * 0.10) return null;
     }
     final shaftPath = _pathLength(shaftPoints);
     if (shaftPath > shaft * _maxStretch) return null;
     final headPath = length - shaftPath;
-    if (headPath < shaft * 0.15 || headPath > shaft * 1.2) return null;
+    if (headPath < shaft * 0.12 || headPath > shaft * 1.5) return null;
 
     final tips = _wingTips(pts.sublist(tipIndex), tip, shaft);
     if (tips.isEmpty || tips.length > 2) return null;
 
-    final sx = a.x - tip.x;
-    final sy = a.y - tip.y;
+    final wings = _wings(tips, a, tip, shaft);
+    if (wings == null) return null;
+    return _buildArrow(a, tip, wings.length, wings.angle);
+  }
+
+  /// Validates wing end points and returns their average length and angle.
+  static ({double length, double angle})? _wings(
+    List<_P> ends,
+    _P tail,
+    _P tip,
+    double shaft,
+  ) {
+    final sx = tail.x - tip.x;
+    final sy = tail.y - tip.y;
     final sl = math.sqrt(sx * sx + sy * sy);
+    if (sl == 0) return null;
     final lengths = <double>[];
     final angles = <double>[];
     final sides = <bool>[];
-    for (final t in tips) {
-      final vx = t.x - tip.x;
-      final vy = t.y - tip.y;
+    for (final e in ends) {
+      final vx = e.x - tip.x;
+      final vy = e.y - tip.y;
       final vl = math.sqrt(vx * vx + vy * vy);
-      if (vl == 0 || vl > shaft * 0.5) return null;
+      if (vl == 0 || vl > shaft * 0.6) return null;
       final c = (vx * sx + vy * sy) / (vl * sl);
       // Wings must point backwards, neither along the shaft nor sideways.
-      if (c < 0.26 || c > 0.98) return null;
+      if (c < 0.15 || c > 0.99) return null;
       lengths.add(vl);
       angles.add(math.acos(c));
       sides.add(sx * vy - sy * vx > 0);
     }
-    if (tips.length == 2 && sides[0] == sides[1]) return null;
+    if (ends.length == 2 && sides[0] == sides[1]) return null;
+    return (length: _avg(lengths), angle: _avg(angles));
+  }
 
-    final end = _snapEnd(a, tip);
-    final dx = a.x - end.x;
-    final dy = a.y - end.y;
+  /// Straight shaft (snapped to 0/45/90 degrees when close) and two
+  /// symmetric wings.
+  static RecognizedShape _buildArrow(
+    _P tail,
+    _P tipRaw,
+    double wingLen,
+    double angle,
+  ) {
+    final end = _snapEnd(tail, tipRaw);
+    final dx = tail.x - end.x;
+    final dy = tail.y - end.y;
     final dl = math.sqrt(dx * dx + dy * dy);
     final ux = dx / dl;
     final uy = dy / dl;
-
-    final wing = _avg(lengths).clamp(10.0, shaft * 0.3).toDouble();
-    final angle = _avg(angles)
-        .clamp(22 * math.pi / 180, 38 * math.pi / 180)
-        .toDouble();
+    final wing = wingLen.clamp(10.0, math.max(10.0, dl * 0.3)).toDouble();
+    final a = angle.clamp(22 * math.pi / 180, 38 * math.pi / 180).toDouble();
     _P wingEnd(double turn) => (
       x: end.x + wing * (ux * math.cos(turn) - uy * math.sin(turn)),
       y: end.y + wing * (ux * math.sin(turn) + uy * math.cos(turn)),
     );
-
     return RecognizedShape(
       ShapeKind.arrow,
-      _corners([a, end, wingEnd(angle), end, wingEnd(-angle)]),
+      _corners([tail, end, wingEnd(a), end, wingEnd(-a)]),
     );
+  }
+
+  static double _nearest(List<_P> pts, _P target) {
+    var d = double.infinity;
+    for (final p in pts) {
+      d = math.min(d, _dist(p, target));
+    }
+    return d;
+  }
+
+  /// Shaft stroke followed by one chevron stroke, or by two wing strokes.
+  /// [strokes] is in drawing order; the first one is the shaft.
+  static const double arrowMinShaft = 90;
+
+  static RecognizedShape? recognizeArrowStrokes(
+    List<List<StrokePoint>> strokes,
+  ) {
+    if (strokes.length < 2 || strokes.length > 3) return null;
+    final shaftPts = _clean(strokes.first);
+    if (shaftPts.length < 3) return null;
+    final a = shaftPts.first;
+    final b = shaftPts.last;
+    final shaft = _dist(a, b);
+    if (shaft < arrowMinShaft) return null;
+    if (_pathLength(shaftPts) > shaft * _maxStretch) return null;
+    for (final p in shaftPts) {
+      if (_distToLine(p, a, b) > shaft * 0.08) return null;
+    }
+
+    final heads = [for (final s in strokes.skip(1)) _clean(s)];
+    if (heads.any((h) => h.length < 2)) return null;
+
+    var cx = 0.0, cy = 0.0, n = 0;
+    for (final h in heads) {
+      for (final p in h) {
+        cx += p.x;
+        cy += p.y;
+        n++;
+      }
+    }
+    final centre = (x: cx / n, y: cy / n);
+    final tipIsB = _dist(b, centre) <= _dist(a, centre);
+    final tip = tipIsB ? b : a;
+    final tail = tipIsB ? a : b;
+    final reach = math.max(16.0, shaft * 0.18);
+
+    final ends = <_P>[];
+    for (final h in heads) {
+      final hl = _pathLength(h);
+      if (hl < shaft * 0.08 || hl > shaft * 0.9) return null;
+      if (_nearest(h, tip) > reach) return null;
+      final v = _rdp(h, math.max(3.0, hl * 0.08));
+      if (v.length == 2) {
+        final nearFirst = _dist(v.first, tip) <= _dist(v.last, tip);
+        if (_dist(nearFirst ? v.first : v.last, tip) > reach) return null;
+        ends.add(nearFirst ? v.last : v.first);
+      } else if (v.length == 3) {
+        if (_dist(v[1], tip) > reach) return null;
+        ends
+          ..add(v[0])
+          ..add(v[2]);
+      } else {
+        return null;
+      }
+    }
+    if (ends.isEmpty || ends.length > 2) return null;
+
+    final wings = _wings(ends, tail, tip, shaft);
+    if (wings == null) return null;
+    return _buildArrow(tail, tip, wings.length, wings.angle);
   }
 
   /// Far points of the head, one per stroke that leaves the tip and comes

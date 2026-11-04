@@ -131,6 +131,11 @@ class DrawingController extends ChangeNotifier {
   int _holdCount = 0;
   RecognizedShape? _recognized;
 
+  // Recent finished pen strokes, for shaft + arrowhead merging.
+  final Stopwatch _clock = Stopwatch()..start();
+  final List<({String id, int at})> _recent = [];
+  static const int _mergeWindowMs = 2500;
+
   Timer? _refineTimer;
   SelectionHandle? _handle;
   Bounds? _resizeBox;
@@ -494,7 +499,7 @@ class DrawingController extends ChangeNotifier {
     final count = _holdCount < 1
         ? 1
         : (_holdCount > points.length ? points.length : _holdCount);
-    final shape = ShapeRecognizer.recognize(points.sublist(0, count));
+    final shape = ShapeRecognizer.recognizeConfident(points.sublist(0, count));
     if (shape == null) return; // Keep the original stroke.
 
     _recognized = shape;
@@ -573,13 +578,26 @@ class DrawingController extends ChangeNotifier {
         return true;
 
       case StrokeTool.line:
-        return _beginShape(x, y, snapToRuler: true);
+        return _grabSelection(x, y) || _beginShape(x, y, snapToRuler: true);
 
       case StrokeTool.rectangle:
       case StrokeTool.ellipse:
       case StrokeTool.triangle:
-        return _beginShape(x, y, snapToRuler: false);
+        return _grabSelection(x, y) || _beginShape(x, y, snapToRuler: false);
     }
+  }
+
+  /// Starts a move/resize when the pointer is on the current selection.
+  /// Otherwise clears the selection and returns false.
+  bool _grabSelection(double x, double y) {
+    if (_selected.isEmpty) return false;
+    if (_tryBeginSelectionGesture(x, y)) {
+      notifyListeners();
+      _live.ping();
+      return true;
+    }
+    _selected.clear();
+    return false;
   }
 
   bool _beginShape(double x, double y, {required bool snapToRuler}) {
@@ -773,6 +791,10 @@ class DrawingController extends ChangeNotifier {
             _strokes,
           );
           _revision++;
+          _selected
+            ..clear()
+            ..add(stroke.id);
+          _expandSelection();
         }
         _shape.clear();
         _finish();
@@ -819,22 +841,37 @@ class DrawingController extends ChangeNotifier {
             points: [stroke.points.first, stroke.points.last],
           );
         }
+        final merge = recognized == null && _snap == null
+            ? _findArrowMerge(stroke)
+            : null;
         final refine =
             autoRefine &&
             recognized == null &&
             _snap == null &&
+            merge == null &&
             _settings.shapeRecognition &&
             SmartStroke.isCandidate(stroke.points);
-        _history.execute(
-          dot == null
-              ? AddStrokeCommand(stroke)
-              : CompositeCommand([
-                  AddStrokeCommand(stroke),
-                  AddStrokeCommand(dot),
-                ]),
-          _strokes,
-        );
-        _revision++;
+        if (merge != null) {
+          _applyArrowMerge(stroke, merge);
+        } else {
+          _history.execute(
+            dot == null
+                ? AddStrokeCommand(stroke)
+                : CompositeCommand([
+                    AddStrokeCommand(stroke),
+                    AddStrokeCommand(dot),
+                  ]),
+            _strokes,
+          );
+          _revision++;
+          if (recognized != null) {
+            _selected
+              ..clear()
+              ..add(stroke.id);
+            _expandSelection();
+          }
+          if (stroke.tool == StrokeTool.pen) _remember(stroke.id);
+        }
         _finish();
         if (refine) _scheduleRefine(stroke.id);
         notifyListeners();
@@ -1088,6 +1125,71 @@ class DrawingController extends ChangeNotifier {
       }
     }
     return null;
+  }
+
+  /// Finds earlier strokes that, together with [latest], form an arrow.
+  ({List<Stroke> parts, RecognizedShape shape})? _findArrowMerge(
+    Stroke latest,
+  ) {
+    if (!_settings.shapeRecognition || latest.tool != StrokeTool.pen) {
+      return null;
+    }
+    final now = _clock.elapsedMilliseconds;
+    final prior = <Stroke>[];
+    for (final r in _recent.reversed) {
+      if (now - r.at > _mergeWindowMs) break;
+      final i = _strokes.indexWhere((s) => s.id == r.id);
+      if (i < 0) break;
+      final s = _strokes[i];
+      if (s.tool != latest.tool ||
+          s.colorValue != latest.colorValue ||
+          s.width != latest.width ||
+          ShapeCenter.isDot(s)) {
+        break;
+      }
+      prior.insert(0, s);
+      if (prior.length == 2) break;
+    }
+    for (var n = prior.length; n >= 1; n--) {
+      final parts = prior.sublist(prior.length - n);
+      final shape = ShapeRecognizer.recognizeArrowStrokes([
+        for (final s in parts) s.points,
+        latest.points,
+      ]);
+      if (shape != null) return (parts: parts, shape: shape);
+    }
+    return null;
+  }
+
+  void _applyArrowMerge(
+    Stroke latest,
+    ({List<Stroke> parts, RecognizedShape shape}) merge,
+  ) {
+    final ids = {for (final s in merge.parts) s.id};
+    final remove = RemoveStrokesCommand();
+    for (var i = _strokes.length - 1; i >= 0; i--) {
+      if (ids.contains(_strokes[i].id)) remove.take(_strokes, i);
+    }
+    final arrow = Stroke(
+      id: _newId(),
+      tool: latest.tool,
+      colorValue: latest.colorValue,
+      width: latest.width,
+      points: merge.shape.points,
+    );
+    _strokes.add(arrow);
+    _history.record(CompositeCommand([remove, AddStrokeCommand(arrow)]));
+    _revision++;
+    _recent.clear();
+    _selected
+      ..clear()
+      ..add(arrow.id);
+    onShapeRecognized?.call();
+  }
+
+  void _remember(String id) {
+    _recent.add((id: id, at: _clock.elapsedMilliseconds));
+    if (_recent.length > 3) _recent.removeAt(0);
   }
 
   // ---- Auto recognition after the stroke ----

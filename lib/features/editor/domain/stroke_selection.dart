@@ -123,26 +123,27 @@ abstract final class StrokeSelection {
     return path > 0 && _gap(p.first, p.last) <= 0.15 * path;
   }
 
-  /// Start and end of a line, arrow or open freehand stroke; null for
-  /// closed shapes, dots and compact scribbles. For arrows the end is the
-  /// tip (the farthest point), otherwise the last point.
+  /// Start and end of a straight line; null for everything else (closed
+  /// shapes, dots, arrows, curves and handwriting), which use box handles.
   static ({Vertex start, Vertex end})? linearEnds(Stroke s) {
     final p = s.points;
     if (p.length < 2 || isClosed(s)) return null;
-    final a = p.first;
-    var path = 0.0, far = 0.0;
-    var farIndex = 0;
+    final a = p.first, b = p.last;
+    final dx = b.x - a.x, dy = b.y - a.y;
+    final chord = math.sqrt(dx * dx + dy * dy);
+    if (chord <= 0) return null;
+
+    var path = 0.0;
     for (var i = 1; i < p.length; i++) {
       path += _gap(p[i - 1], p[i]);
-      final d = _gap(a, p[i]);
-      if (d > far) {
-        far = d;
-        farIndex = i;
-      }
     }
-    if (path <= 0 || far < 0.3 * path) return null;
-    final end = _gap(a, p.last) >= 0.9 * far ? p.last : p[farIndex];
-    return (start: (x: a.x, y: a.y), end: (x: end.x, y: end.y));
+    if (path > chord * 1.12) return null;
+
+    for (final q in p) {
+      final dev = ((q.x - a.x) * dy - (q.y - a.y) * dx).abs() / chord;
+      if (dev > chord * 0.06) return null;
+    }
+    return (start: (x: a.x, y: a.y), end: (x: b.x, y: b.y));
   }
 
   /// Rotates and scales the points about (ax, ay) by the complex factor

@@ -16,9 +16,22 @@ void main() {
   });
   tearDown(() => c.dispose());
 
-  void drag(double x0, double y0, double x1, double y1, {int p = 1, int t = 0}) {
+  void drag(
+    double x0,
+    double y0,
+    double x1,
+    double y1, {
+    int p = 1,
+    int t = 0,
+  }) {
     c.beginStroke(pointer: p, x: x0, y: y0, pressure: 1, timeMs: t);
-    c.extendStroke(pointer: p, x: (x0 + x1) / 2, y: (y0 + y1) / 2, pressure: 1, timeMs: t + 8);
+    c.extendStroke(
+      pointer: p,
+      x: (x0 + x1) / 2,
+      y: (y0 + y1) / 2,
+      pressure: 1,
+      timeMs: t + 8,
+    );
     c.endStroke(pointer: p, x: x1, y: y1, pressure: 1, timeMs: t + 16);
   }
 
@@ -42,19 +55,27 @@ void main() {
   test('a line has two endpoint handles', () {
     drag(0, 0, 200, 0);
     tap(100, 0);
-    expect(c.handleSpots.map((s) => s.handle).toSet(),
-        {SelectionHandle.start, SelectionHandle.end});
+    expect(c.handleSpots.map((s) => s.handle).toSet(), {
+      SelectionHandle.start,
+      SelectionHandle.end,
+    });
   });
 
   test('an open freehand stroke has two endpoint handles', () {
     c.beginStroke(pointer: 1, x: 100, y: 300, pressure: 1, timeMs: 0);
     for (var i = 1; i < 40; i++) {
-      c.extendStroke(pointer: 1, x: 100 + 5.0 * i,
-          y: 300 - 120 * math.sin(math.pi * i / 40), pressure: 1, timeMs: i * 8);
+      c.extendStroke(
+        pointer: 1,
+        x: 100 + 5.0 * i,
+        y: 300 - 120 * math.sin(math.pi * i / 40),
+        pressure: 1,
+        timeMs: i * 8,
+      );
     }
     c.endStroke(pointer: 1, x: 300, y: 300, pressure: 1, timeMs: 400);
     tap(200, 180);
-    expect(c.handleSpots, hasLength(2));
+    expect(c.handleSpots, hasLength(8));
+    expect(c.handleSpots.any((s) => s.handle.isEndpoint), isFalse);
   });
 
   test('a rectangle keeps box handles', () {
@@ -68,9 +89,15 @@ void main() {
   test('selection frame is at least 24 px, at any zoom', () {
     drag(0, 0, 200, 0);
     tap(100, 0);
-    expect(c.selectionFrame!.bottom - c.selectionFrame!.top, greaterThanOrEqualTo(24));
+    expect(
+      c.selectionFrame!.bottom - c.selectionFrame!.top,
+      greaterThanOrEqualTo(24),
+    );
     c.viewScale = () => 2;
-    expect(c.selectionFrame!.bottom - c.selectionFrame!.top, greaterThanOrEqualTo(12));
+    expect(
+      c.selectionFrame!.bottom - c.selectionFrame!.top,
+      greaterThanOrEqualTo(12),
+    );
   });
 
   test('hit targets keep their screen size when zoomed', () {
@@ -141,8 +168,13 @@ void main() {
     d.beginStroke(pointer: 1, x: 300 + 100, y: 300, pressure: 1, timeMs: 0);
     for (var i = 1; i < 120; i++) {
       final a = 2 * math.pi * i / 119;
-      d.extendStroke(pointer: 1, x: 300 + 100 * math.cos(a),
-          y: 300 + 100 * math.sin(a), pressure: 1, timeMs: i * 8);
+      d.extendStroke(
+        pointer: 1,
+        x: 300 + 100 * math.cos(a),
+        y: 300 + 100 * math.sin(a),
+        pressure: 1,
+        timeMs: i * 8,
+      );
     }
     d.endStroke(pointer: 1, x: 400, y: 300, pressure: 1, timeMs: 1000);
     final count = d.strokes.single.points.length;
