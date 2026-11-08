@@ -19,6 +19,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../app/glass/glass_dialog.dart';
 import '../../../app/glass/glass_list_tile.dart';
+import '../../../app/glass/glass_menu.dart';
 import '../../../app/glass/glass_theme.dart';
 import '../../../app/routes.dart';
 import '../../library/application/library_providers.dart';
@@ -1482,19 +1483,26 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           },
           onTap: (point) {
             final t = session.controller.tool;
-
             if (t != StrokeTool.pen && t != StrokeTool.highlighter) {
               return false;
             }
-
+            if (session.controller.selectAt(
+              point.dx,
+              point.dy,
+              shapesOnly: true,
+            )) {
+              session.images.select(null);
+              session.texts.select(null);
+              _setActive(session.index);
+              return true;
+            }
             final img = session.images.imageAt(point);
-
             if (img == null) return false;
-
             session.images.select(img.id);
-
             return true;
           },
+          onLongPress: (paper, global) =>
+              _showPasteMenu(session, paper, global),
           child: Stack(
             children: [
               Positioned(left: kBleedX, top: kBleedY, child: _paper(session)),
@@ -1549,6 +1557,34 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         ),
       ),
     );
+  }
+
+  // ------------------------------------------------------------
+  // Paste menu (long press)
+  // ------------------------------------------------------------
+
+  Future<void> _showPasteMenu(
+    _PageSession session,
+    Offset paper,
+    Offset global,
+  ) async {
+    if (_busy || !DrawingController.hasClipboard) return;
+    unawaited(HapticFeedback.mediumImpact());
+    final v = await showGlassMenu<String>(
+      context: context,
+      position: global,
+      items: const [
+        GlassMenuItem(
+          value: 'paste',
+          icon: Icons.content_paste_outlined,
+          label: 'Paste',
+        ),
+      ],
+    );
+    if (v == 'paste' && mounted) {
+      _setActive(session.index);
+      session.controller.pasteAt(paper.dx, paper.dy);
+    }
   }
 
   // ------------------------------------------------------------

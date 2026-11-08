@@ -296,6 +296,7 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
         tool(StrokeTool.rectangle, Icons.rectangle_outlined, 'Rectangle'),
         tool(StrokeTool.ellipse, Icons.circle_outlined, 'Ellipse'),
         tool(StrokeTool.triangle, Icons.change_history_outlined, 'Triangle'),
+        tool(StrokeTool.arrow, Icons.arrow_right_alt, 'Arrow'),
       ],
       GlassIconButton(
         tooltip: _expanded ? 'Fewer tools' : 'More tools',

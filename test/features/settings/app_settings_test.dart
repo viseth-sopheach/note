@@ -81,6 +81,7 @@ void main() {
         'rectangle',
         'ellipse',
         'triangle',
+        'arrow',
       ],
     })).load();
 

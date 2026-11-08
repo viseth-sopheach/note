@@ -124,12 +124,21 @@ abstract final class StrokeSelection {
     return path > 0 && _gap(p.first, p.last) <= 0.15 * path;
   }
 
-  /// Start and end of a Line shape; null for everything else.
+  /// Start and end of a Line or Arrow (tail and tip); null for others.
   static ({Vertex start, Vertex end})? linearEnds(Stroke s) {
-    if (s.shape != ShapeKind.line) return null;
     final p = s.points;
-    if (p.length < 2) return null;
-    final a = p.first, b = p.last;
+    final StrokePoint a, b;
+    if (s.shape == ShapeKind.line) {
+      if (p.length < 2) return null;
+      a = p.first;
+      b = p.last;
+    } else if (s.shape == ShapeKind.arrow) {
+      if (p.length != 10) return null;
+      a = p[0];
+      b = p[2];
+    } else {
+      return null;
+    }
     if (a.x == b.x && a.y == b.y) return null;
     return (start: (x: a.x, y: a.y), end: (x: b.x, y: b.y));
   }

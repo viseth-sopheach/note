@@ -11,7 +11,8 @@ import 'stroke_tool.dart';
 /// Layout (little endian):
 ///   u8 version, u32 strokeCount, then per stroke:
 ///   u8 idLength, id (utf8), u8 tool index,
-///   [v2 only] u8 shape (0 line, 1 rectangle, 2 ellipse, 3 triangle, 255 none),
+///   [v2 only] u8 shape (0 line, 1 rectangle, 2 ellipse, 3 triangle,
+///     4 arrow, 255 none),
 ///   u32 color, f32 width, u32 pointCount,
 ///   then per point: f32 x, f32 y, f32 pressure, u32 timeMs.
 ///
@@ -26,6 +27,7 @@ abstract final class StrokeCodec {
     ShapeKind.rectangle || ShapeKind.square => 1,
     ShapeKind.ellipse || ShapeKind.circle => 2,
     ShapeKind.triangle => 3,
+    ShapeKind.arrow => 4,
     _ => _noShape,
   };
 
@@ -34,6 +36,7 @@ abstract final class StrokeCodec {
     1 => ShapeKind.rectangle,
     2 => ShapeKind.ellipse,
     3 => ShapeKind.triangle,
+    4 => ShapeKind.arrow,
     _ => null,
   };
 

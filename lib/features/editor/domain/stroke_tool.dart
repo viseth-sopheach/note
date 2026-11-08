@@ -6,7 +6,8 @@ enum StrokeTool {
   line,
   rectangle,
   ellipse,
-  triangle;
+  triangle,
+  arrow;
 
   bool get isShape => index >= StrokeTool.line.index;
 }

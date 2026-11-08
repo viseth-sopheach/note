@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../../application/drawing_controller.dart';
+import '../../domain/selection_handle.dart';
 import '../paper/paper_colors.dart';
 import 'ink_renderer.dart';
 
@@ -155,7 +158,8 @@ class SelectionPainter extends CustomPainter {
 
     final ends = controller.linearEnds;
     if (ends != null) {
-      // Line: only the thin line and two endpoint circles.
+      // Line/Arrow: only the thin line and two endpoint circles, plus a
+      // rotate handle offset from the midpoint.
       canvas.drawLine(
         Offset(ends.start.x, ends.start.y),
         Offset(ends.end.x, ends.end.y),
@@ -165,14 +169,17 @@ class SelectionPainter extends CustomPainter {
           ..strokeWidth = 1.5 * k
           ..strokeCap = StrokeCap.round,
       );
+      final mid = Offset(
+        (ends.start.x + ends.end.x) / 2,
+        (ends.start.y + ends.end.y) / 2,
+      );
       for (final spot in controller.handleSpots) {
-        _drawEndpoint(
-          canvas,
-          Offset(spot.x, spot.y),
-          k,
-          t,
-          spot.handle == active,
-        );
+        final at = Offset(spot.x, spot.y);
+        if (spot.handle == SelectionHandle.rotate) {
+          _drawRotate(canvas, mid, at, k, t, spot.handle == active);
+        } else {
+          _drawEndpoint(canvas, at, k, t, spot.handle == active);
+        }
       }
       return;
     }
@@ -199,18 +206,27 @@ class SelectionPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5 * k,
     );
+    final topCenter = Offset(
+      (f.left + f.right) / 2,
+      f.top - controller.framePadDoc,
+    );
     for (final spot in controller.handleSpots) {
-      _drawHandle(canvas, Offset(spot.x, spot.y), k, t, spot.handle == active);
+      final at = Offset(spot.x, spot.y);
+      if (spot.handle == SelectionHandle.rotate) {
+        _drawRotate(canvas, topCenter, at, k, t, spot.handle == active);
+      } else {
+        _drawHandle(canvas, at, k, t, spot.handle == active);
+      }
     }
   }
 
-  /// Thin outline of the selectable shape under the mouse.
+  /// Thin outline of the stroke under the mouse.
   void _paintHover(Canvas canvas, double k) {
     final id = controller.hoverId;
     if (id == null || controller.isDrawing) return;
     if (controller.selectedIds.contains(id)) return;
     for (final s in controller.strokes) {
-      if (s.id != id || s.shape == null || s.points.length < 2) continue;
+      if (s.id != id || s.points.length < 2) continue;
       final path = Path()..moveTo(s.points.first.x, s.points.first.y);
       for (final p in s.points.skip(1)) {
         path.lineTo(p.x, p.y);
@@ -275,6 +291,56 @@ class SelectionPainter extends CustomPainter {
         ..color = _accent.withValues(alpha: t)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2 * k,
+    );
+  }
+
+  void _drawRotate(
+    Canvas canvas,
+    Offset anchor,
+    Offset c,
+    double k,
+    double t,
+    bool active,
+  ) {
+    final r = 10 * k * (0.6 + 0.4 * t) * (active ? 1.25 : 1.0);
+    canvas.drawLine(
+      anchor,
+      c,
+      Paint()
+        ..color = _accent.withValues(alpha: 0.6 * t)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5 * k,
+    );
+    canvas.drawCircle(
+      c + Offset(0, 1 * k),
+      r + 0.5 * k,
+      Paint()
+        ..color = Color.fromRGBO(0, 0, 0, 0.28 * t)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2 * k),
+    );
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()..color = const Color(0xFFFFFFFF).withValues(alpha: t),
+    );
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..color = _accent.withValues(alpha: t)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2 * k,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(center: c, radius: r * 0.5),
+      -math.pi * 0.15,
+      math.pi * 1.5,
+      false,
+      Paint()
+        ..color = _accent.withValues(alpha: t)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.75 * k
+        ..strokeCap = StrokeCap.round,
     );
   }
 

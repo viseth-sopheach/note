@@ -223,7 +223,7 @@ abstract final class ShapeRecognizer {
   ) {
     if (strokes.length < 2 || strokes.length > 3) return null;
     final shaftPts = _clean(strokes.first);
-    if (shaftPts.length < 3) return null;
+    if (shaftPts.length < 2) return null;
     final a = shaftPts.first;
     final b = shaftPts.last;
     final shaft = _dist(a, b);

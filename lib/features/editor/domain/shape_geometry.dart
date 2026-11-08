@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'arrow_shape.dart';
 import 'stroke_point.dart';
 import 'stroke_tool.dart';
 
@@ -26,7 +27,7 @@ abstract final class ShapeGeometry {
     var dx = x1 - x0;
     var dy = y1 - y0;
     if (constrain) {
-      if (tool == StrokeTool.line) {
+      if (tool == StrokeTool.line || tool == StrokeTool.arrow) {
         final len = math.sqrt(dx * dx + dy * dy);
         final a = (math.atan2(dy, dx) / _lineStep).roundToDouble() * _lineStep;
         dx = len * math.cos(a);
@@ -70,6 +71,8 @@ abstract final class ShapeGeometry {
               y: cy + ry * math.sin(2 * math.pi * i / _ellipseSteps),
             ),
         ];
+      case StrokeTool.arrow:
+        return ArrowShape.build((x: x0, y: y0), (x: ex, y: ey));
       default:
         return [StrokePoint(x: x0, y: y0), StrokePoint(x: ex, y: ey)];
     }

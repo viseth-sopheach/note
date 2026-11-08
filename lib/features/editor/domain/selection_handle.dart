@@ -8,7 +8,8 @@ enum SelectionHandle {
   bottomLeft(-1, 1),
   left(-1, 0),
   start(0, 0),
-  end(0, 0);
+  end(0, 0),
+  rotate(0, 0);
 
   const SelectionHandle(this.fx, this.fy);
 
@@ -17,6 +18,7 @@ enum SelectionHandle {
 
   bool get isCorner => fx != 0 && fy != 0;
   bool get isEndpoint => this == start || this == end;
+  bool get isRotate => this == rotate;
 }
 
 typedef HandleSpot = ({SelectionHandle handle, double x, double y});

@@ -22,6 +22,7 @@ class ToolbarSettingsScreen extends ConsumerWidget {
     StrokeTool.rectangle => 'Rectangle',
     StrokeTool.ellipse => 'Ellipse',
     StrokeTool.triangle => 'Triangle',
+    StrokeTool.arrow => 'Arrow',
   };
 
   @override

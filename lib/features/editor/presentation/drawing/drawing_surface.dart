@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
@@ -26,6 +28,8 @@ class DrawingSurface extends StatefulWidget {
     this.bounds,
     this.isClaimed,
     this.onTap,
+    this.onLongPress,
+    this.longPressDuration = const Duration(seconds: 1),
   });
 
   final DrawingController controller;
@@ -44,6 +48,15 @@ class DrawingSurface extends StatefulWidget {
   /// Called on a quick tap. Return true to consume it (no dot is drawn).
   final bool Function(Offset paperPoint)? onTap;
 
+  /// Called when the pointer is held still at [paperPoint] for
+  /// [longPressDuration]. The in-flight stroke is cancelled before this
+  /// fires, so no ink is committed. [globalPosition] is the raw pointer
+  /// position for showing a menu at the touch point.
+  final void Function(Offset paperPoint, Offset globalPosition)? onLongPress;
+
+  /// How long the pointer must be held still before [onLongPress] fires.
+  final Duration longPressDuration;
+
   @override
   State<DrawingSurface> createState() => _DrawingSurfaceState();
 }
@@ -54,6 +67,8 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
 
   Offset? _downPos;
   int _downMs = 0;
+
+  Timer? _lpTimer;
 
   DrawingController get _c => widget.controller;
 
@@ -89,6 +104,34 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
     _c.hoverAt(p.dx, p.dy);
   }
 
+  void _cancelLongPress() {
+    _lpTimer?.cancel();
+    _lpTimer = null;
+  }
+
+  void _armLongPress(int pointer, Offset paper, Offset global) {
+    _cancelLongPress();
+    if (widget.onLongPress == null) return;
+    _lpTimer = Timer(widget.longPressDuration, () {
+      _lpTimer = null;
+      if (pointer != _drawingPointer) return;
+      if (_c.isTransformingSelection ||
+          _c.hitsSelectionChrome(paper.dx, paper.dy)) {
+        return;
+      }
+      _c.cancelStroke(pointer);
+      _drawingPointer = null;
+      _downPos = null;
+      widget.onLongPress!(paper, global);
+    });
+  }
+
+  @override
+  void dispose() {
+    _cancelLongPress();
+    super.dispose();
+  }
+
   void _down(PointerDownEvent e) {
     if (e.kind == PointerDeviceKind.touch) {
       _touches.add(e.pointer);
@@ -98,6 +141,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
           _c.cancelStroke(active);
           _drawingPointer = null;
         }
+        _cancelLongPress();
         return;
       }
     }
@@ -125,10 +169,20 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
       _drawingPointer = e.pointer;
       _downPos = raw;
       _downMs = e.timeStamp.inMilliseconds;
+      _armLongPress(e.pointer, raw, e.position);
     }
   }
 
   void _move(PointerMoveEvent e) {
+    // A real drag is not a long press. Check before forwarding so the timer
+    // does not fire on the same frame as the first move.
+    final d0 = _downPos;
+    if (d0 != null &&
+        e.pointer == _drawingPointer &&
+        (_local(e) - d0).distance > 10) {
+      _cancelLongPress();
+    }
+
     // Clamp movement coordinates to keep strokes bounded on the paper.
     final p = _clamped(e);
     _c.extendStroke(
@@ -141,6 +195,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   }
 
   void _up(PointerUpEvent e) {
+    _cancelLongPress();
     _touches.remove(e.pointer);
     final wasDrawing = e.pointer == _drawingPointer;
     if (wasDrawing) _drawingPointer = null;
@@ -169,6 +224,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   }
 
   void _cancel(PointerCancelEvent e) {
+    _cancelLongPress();
     _touches.remove(e.pointer);
     if (e.pointer == _drawingPointer) _drawingPointer = null;
     _c.cancelStroke(e.pointer);

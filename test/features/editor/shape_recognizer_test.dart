@@ -255,7 +255,7 @@ void main() {
 
       // Points are smoothed and the last point stays raw, so the count is
       // no longer equal to the raw path length.
-      expect(c.strokes.single.points.length, greaterThan(100));
+      expect(c.strokes.single.points.length, lessThan(path.length));
       expect(c.strokes.single.points.last.x, path.last.$1);
     });
 

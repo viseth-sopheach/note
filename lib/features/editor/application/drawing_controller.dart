@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:uuid/uuid.dart';
 
+import '../domain/arrow_shape.dart';
 import '../domain/command_history.dart';
 import '../domain/drawing_command.dart';
 import '../domain/pen_filter.dart';
@@ -19,6 +20,7 @@ import '../domain/stroke_hit_test.dart';
 import '../domain/stroke_point.dart';
 import '../domain/stroke_recorder.dart';
 import '../domain/stroke_selection.dart';
+import '../domain/stroke_simplifier.dart';
 import '../domain/stroke_tool.dart';
 import 'tool_settings.dart';
 
@@ -26,15 +28,15 @@ class _Signal extends ChangeNotifier {
   void ping() => notifyListeners();
 }
 
-enum _Mode { none, draw, erase, lasso, move, shape, resize, endpoint }
+enum _Mode { none, draw, erase, lasso, move, shape, resize, endpoint, rotate }
 
 /// Holds the strokes of one page, the stroke being drawn and the current
 /// selection. Tool, color and width come from [settings], which can be
 /// shared by the controllers of several pages.
 ///
 /// Only strokes with a non-null [Stroke.shape] (line, rectangle, ellipse,
-/// triangle) can be hovered, selected, copied or transformed. Freehand
-/// strokes never enter the selection.
+/// triangle, arrow) can be hovered, selected, copied or transformed.
+/// Freehand strokes never enter the selection.
 ///
 /// Coordinates are relative to the paper corner and may be negative or
 /// larger than the page (drawing outside the paper).
@@ -79,6 +81,10 @@ class DrawingController extends ChangeNotifier {
   static const double minFramePx = 24;
   static const double tapSlopPx = 6;
   static const double minShapeSide = 12;
+
+  /// Distance of the rotate handle from the selection, in screen px.
+  static const double rotateOffsetPx = 30;
+  static const double _rotateSnap = math.pi / 12;
 
   /// How long the pointer must rest at the end of a stroke to snap it.
   final Duration holdDuration;
@@ -157,9 +163,13 @@ class DrawingController extends ChangeNotifier {
   double _epMx = 0, _epMy = 0; // dragged end when the drag began
   double _epTx = 0, _epTy = 0; // dragged end now
 
+  // Rotation state.
+  double _rcx = 0, _rcy = 0, _rotStart = 0, _rot = 0;
+
   int? _activePointer;
   int _originMs = 0;
   int _revision = 0;
+  int _inkEpoch = 0;
 
   ToolSettings get settings => _settings;
   StrokeTool get tool => _settings.tool;
@@ -173,15 +183,18 @@ class DrawingController extends ChangeNotifier {
 
   // ---- Shape rules ----
 
-  /// Only the four basic shapes can be hovered, selected or transformed.
-  bool _selectable(Stroke s) => s.shape != null;
+  /// Every stored stroke can be hit-tested. Only shapes (or their center
+  /// dots) are selectable via tap or lasso, gated by [_expandSelection] and
+  /// the `shape == null` checks at the call sites.
+  bool _selectable(Stroke s) => !ShapeCenter.isDot(s);
 
   static ShapeKind? _stored(ShapeKind? k) => switch (k) {
     ShapeKind.line => ShapeKind.line,
     ShapeKind.rectangle || ShapeKind.square => ShapeKind.rectangle,
     ShapeKind.circle || ShapeKind.ellipse => ShapeKind.ellipse,
     ShapeKind.triangle => ShapeKind.triangle,
-    _ => null, // arrow, star, polygon
+    ShapeKind.arrow => ShapeKind.arrow,
+    _ => null, // star, polygon
   };
 
   static ShapeKind? _fromTool(StrokeTool t) => switch (t) {
@@ -189,6 +202,7 @@ class DrawingController extends ChangeNotifier {
     StrokeTool.rectangle => ShapeKind.rectangle,
     StrokeTool.ellipse => ShapeKind.ellipse,
     StrokeTool.triangle => ShapeKind.triangle,
+    StrokeTool.arrow => ShapeKind.arrow,
     _ => null,
   };
 
@@ -236,6 +250,10 @@ class DrawingController extends ChangeNotifier {
   /// [replaceStrokes] does not change it.
   int get revision => _revision;
 
+  /// Changes on every change to the strokes, including loading a page.
+  /// Unlike [revision], it is safe to use as a render-cache key.
+  int get inkEpoch => _inkEpoch + _revision;
+
   // ---- Hover ----
 
   /// Id of the selectable shape under the mouse, or null.
@@ -258,6 +276,50 @@ class DrawingController extends ChangeNotifier {
     _live.ping();
   }
 
+  /// Selects the top-most stroke under (x, y). With [shapesOnly], only
+  /// non-freehand strokes are eligible. Returns true when a stroke was
+  /// selected. Does nothing while a stroke is being drawn.
+  bool selectAt(double x, double y, {bool shapesOnly = false}) {
+    if (isDrawing) return false;
+    final radius = 10 / _scale;
+    for (var i = _strokes.length - 1; i >= 0; i--) {
+      final s = _strokes[i];
+      if (!_selectable(s)) continue;
+      if (shapesOnly && s.shape == null) continue;
+      if (StrokeHitTest.hitsSegment(
+        s,
+        ax: x,
+        ay: y,
+        bx: x,
+        by: y,
+        radius: radius,
+      )) {
+        _selected
+          ..clear()
+          ..add(s.id);
+        _expandSelection();
+        notifyListeners();
+        _live.ping();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Pastes the clipboard so its bounding-box center lands on (x, y).
+  /// Does nothing while drawing, when the clipboard is empty, or when the
+  /// clipboard has no points.
+  void pasteAt(double x, double y) {
+    if (isDrawing || _clipboard.isEmpty) return;
+    final b = StrokeSelection.pointBoundsOf(_clipboard);
+    if (b == null) return;
+    _insertCopies(
+      _clipboard,
+      x - (b.left + b.right) / 2,
+      y - (b.top + b.bottom) / 2,
+    );
+  }
+
   // ---- Selection state ----
 
   Set<String> get selectedIds => UnmodifiableSetView(_selected);
@@ -265,6 +327,8 @@ class DrawingController extends ChangeNotifier {
   bool get hasSelection => _selected.isNotEmpty;
 
   bool get isMovingSelection => _mode == _Mode.move;
+
+  bool get isRotatingSelection => _mode == _Mode.rotate;
 
   /// Lasso path being drawn; empty when idle.
   List<Vertex> get lasso => UnmodifiableListView(_lasso);
@@ -280,7 +344,10 @@ class DrawingController extends ChangeNotifier {
       _mode == _Mode.resize || _mode == _Mode.endpoint;
 
   bool get isTransformingSelection =>
-      _mode == _Mode.move || _mode == _Mode.resize || _mode == _Mode.endpoint;
+      _mode == _Mode.move ||
+      _mode == _Mode.resize ||
+      _mode == _Mode.endpoint ||
+      _mode == _Mode.rotate;
 
   SelectionHandle? get activeHandle => _handle;
 
@@ -295,6 +362,13 @@ class DrawingController extends ChangeNotifier {
 
   Bounds? get _rawFrame {
     if (_selected.isEmpty) return null;
+    if (_mode == _Mode.rotate) {
+      final c = math.cos(_rot), s = math.sin(_rot);
+      return StrokeSelection.pointBoundsOf([
+        for (final st in selectedStrokes)
+          StrokeSelection.similarityAbout(st, _rcx, _rcy, c, s),
+      ]);
+    }
     if (_mode == _Mode.resize) {
       final b = _resizeBox;
       if (b == null) return null;
@@ -334,7 +408,8 @@ class DrawingController extends ChangeNotifier {
     return (left: l, top: t, right: r, bottom: b);
   }
 
-  /// The selected stroke when exactly one non-dot Line shape is selected.
+  /// The selected stroke when exactly one non-dot Line/Arrow shape is
+  /// selected.
   Stroke? get _linearStroke {
     if (_selected.length != 1) return null;
     for (final s in _strokes) {
@@ -346,7 +421,7 @@ class DrawingController extends ChangeNotifier {
     return null;
   }
 
-  /// Live endpoints when the selection is one Line shape.
+  /// Live endpoints when the selection is one Line or Arrow shape.
   ({Vertex start, Vertex end})? get linearEnds {
     final s = _linearStroke;
     if (s == null) return null;
@@ -360,13 +435,30 @@ class DrawingController extends ChangeNotifier {
       case _Mode.endpoint:
         final Vertex t = (x: _epTx, y: _epTy);
         return _epMovesEnd ? (start: e.start, end: t) : (start: t, end: e.end);
+      case _Mode.rotate:
+        final c = math.cos(_rot), s = math.sin(_rot);
+        Vertex rot(Vertex v) => (
+          x: _rcx + c * (v.x - _rcx) - s * (v.y - _rcy),
+          y: _rcy + s * (v.x - _rcx) + c * (v.y - _rcy),
+        );
+        return (start: rot(e.start), end: rot(e.end));
       default:
         return e;
     }
   }
 
-  /// Exactly two points: the fixed end and the moved end.
+  /// Endpoint drag for a line or arrow. Lines move just the dragged end;
+  /// arrows are rebuilt in place so barbs stay proportional.
   List<StrokePoint> _linePoints(Stroke s, bool movesEnd, double x, double y) {
+    if (s.shape == ShapeKind.arrow) {
+      final e = StrokeSelection.linearEnds(s)!;
+      final Vertex moved = (x: x, y: y);
+      return ArrowShape.rebuild(
+        s.points,
+        tail: movesEnd ? e.start : moved,
+        tip: movesEnd ? moved : e.end,
+      );
+    }
     final a = s.points.first, b = s.points.last;
     return movesEnd
         ? [
@@ -398,17 +490,44 @@ class DrawingController extends ChangeNotifier {
       _rsy,
     ).points,
     _Mode.endpoint => _linePoints(s, _epMovesEnd, _epTx, _epTy),
+    _Mode.rotate => StrokeSelection.similarityAbout(
+      s,
+      _rcx,
+      _rcy,
+      math.cos(_rot),
+      math.sin(_rot),
+    ).points,
     _ => s.points,
   };
 
-  /// Two endpoint handles for lines, up to eight box handles for the other
-  /// shapes (document units).
+  /// Rotate handle sits on the inside of the segment's normal, at a fixed
+  /// screen offset from the midpoint.
+  ({double x, double y})? _lineRotateSpot(({Vertex start, Vertex end}) e) {
+    final dx = e.end.x - e.start.x, dy = e.end.y - e.start.y;
+    final len = math.sqrt(dx * dx + dy * dy);
+    if (len < 1e-6) return null;
+    var nx = -dy / len, ny = dx / len;
+    if (ny > 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    final off = rotateOffsetPx / _scale;
+    return (
+      x: (e.start.x + e.end.x) / 2 + nx * off,
+      y: (e.start.y + e.end.y) / 2 + ny * off,
+    );
+  }
+
+  /// Endpoint handles plus rotate for lines and arrows; up to eight box
+  /// handles plus rotate for other shapes (document units).
   List<HandleSpot> get handleSpots {
     final ends = linearEnds;
     if (ends != null) {
+      final rs = _lineRotateSpot(ends);
       return [
         (handle: SelectionHandle.start, x: ends.start.x, y: ends.start.y),
         (handle: SelectionHandle.end, x: ends.end.x, y: ends.end.y),
+        if (rs != null) (handle: SelectionHandle.rotate, x: rs.x, y: rs.y),
       ];
     }
     final raw = _rawFrame;
@@ -423,7 +542,7 @@ class DrawingController extends ChangeNotifier {
     final tall = (b - t) * _scale >= 72;
     final out = <HandleSpot>[];
     for (final h in SelectionHandle.values) {
-      if (h.isEndpoint) continue;
+      if (h.isEndpoint || h.isRotate) continue;
       if (!h.isCorner) {
         if (h.fy == 0 && !(okX && tall)) continue;
         if (h.fx == 0 && !(okY && wide)) continue;
@@ -434,6 +553,11 @@ class DrawingController extends ChangeNotifier {
         y: h.fy < 0 ? t : (h.fy > 0 ? b : (t + b) / 2),
       ));
     }
+    out.add((
+      handle: SelectionHandle.rotate,
+      x: (l + r) / 2,
+      y: t - rotateOffsetPx / _scale,
+    ));
     return out;
   }
 
@@ -567,6 +691,7 @@ class DrawingController extends ChangeNotifier {
   /// Replaces all strokes, for example after loading a page.
   void replaceStrokes(List<Stroke> strokes) {
     _cancelRefine();
+    _inkEpoch++;
     if (isDrawing) return;
     _strokes
       ..clear()
@@ -697,9 +822,16 @@ class DrawingController extends ChangeNotifier {
 
       case StrokeTool.pen:
       case StrokeTool.highlighter:
-        // A pen/highlighter down never grabs the selection or its handles.
-        // Any existing selection is simply cleared.
-        if (_selected.isNotEmpty) _selected.clear();
+        // A pen/highlighter down on a handle grabs the selection; on ink
+        // or empty space it just clears the selection and starts drawing.
+        if (_selected.isNotEmpty) {
+          if (_handleAt(x, y) != null && _tryBeginSelectionGesture(x, y)) {
+            notifyListeners();
+            _live.ping();
+            return true;
+          }
+          _selected.clear();
+        }
         _mode = _Mode.draw;
         _originMs = timeMs;
         _snap = _findSnap(x, y);
@@ -723,6 +855,7 @@ class DrawingController extends ChangeNotifier {
         return true;
 
       case StrokeTool.line:
+      case StrokeTool.arrow:
         return _grabSelection(x, y) || _beginShape(x, y, snapToRuler: true);
 
       case StrokeTool.rectangle:
@@ -808,6 +941,9 @@ class DrawingController extends ChangeNotifier {
       case _Mode.endpoint:
         _updateEndpoint(x, y);
         _live.ping();
+      case _Mode.rotate:
+        _updateRotate(x, y);
+        _live.ping();
       case _Mode.draw:
         // A snapped shape stays as it is until the pointer is lifted.
         if (_recognized != null) return;
@@ -858,6 +994,25 @@ class DrawingController extends ChangeNotifier {
             ReplaceStrokesCommand(before, [
               for (final s in before)
                 StrokeSelection.scaleAbout(s, ax, ay, sx, sy),
+            ]),
+            _strokes,
+          );
+          _revision++;
+        }
+        notifyListeners();
+        _live.ping();
+
+      case _Mode.rotate:
+        _updateRotate(x, y);
+        final angle = _rot, cx = _rcx, cy = _rcy;
+        final rBefore = selectedStrokes.toList();
+        _finish();
+        if (angle.abs() > 0.002) {
+          final c = math.cos(angle), s = math.sin(angle);
+          _history.execute(
+            ReplaceStrokesCommand(rBefore, [
+              for (final st in rBefore)
+                StrokeSelection.similarityAbout(st, cx, cy, c, s),
             ]),
             _strokes,
           );
@@ -1000,6 +1155,14 @@ class DrawingController extends ChangeNotifier {
         if (merge != null) {
           _applyArrowMerge(stroke, merge);
         } else {
+          // Freehand pen ink is simplified once, at lift, so editing and
+          // PDF export work with far fewer points. Snapped and recognized
+          // shapes are already clean.
+          if (recognized == null && _snap == null) {
+            stroke = stroke.copyWith(
+              points: StrokeSimplifier.rdp(stroke.points),
+            );
+          }
           _history.execute(
             dot == null
                 ? AddStrokeCommand(stroke)
@@ -1042,6 +1205,7 @@ class DrawingController extends ChangeNotifier {
         _dy = 0;
       case _Mode.resize:
       case _Mode.endpoint:
+      case _Mode.rotate:
         break;
       case _Mode.shape:
         _shape.clear();
@@ -1064,6 +1228,7 @@ class DrawingController extends ChangeNotifier {
     _resizeBox = null;
     _rsx = 1;
     _rsy = 1;
+    _rot = 0;
     _deselectedOnDown = false;
     _lockAspect = false;
   }
@@ -1115,13 +1280,15 @@ class DrawingController extends ChangeNotifier {
     return best;
   }
 
-  /// Handle -> resize or endpoint drag, inside the frame -> move. False
+  /// Handle -> resize / endpoint / rotate, inside the frame -> move. False
   /// when neither applies.
   bool _tryBeginSelectionGesture(double x, double y) {
     final handle = _handleAt(x, y);
     if (handle != null) {
       if (handle.isEndpoint) {
         _beginEndpoint(handle, x, y);
+      } else if (handle.isRotate) {
+        _beginRotate(x, y);
       } else {
         _beginResize(handle, x, y);
       }
@@ -1163,8 +1330,8 @@ class DrawingController extends ChangeNotifier {
     _pressY = y;
   }
 
-  /// Moves only the dragged end of a line; the other end stays fixed.
-  /// Snaps to 15 degrees only while Shift is held.
+  /// Moves only the dragged end of a line (and rebuilds arrows about the
+  /// fixed end); snaps to 15 degrees only while Shift is held.
   void _updateEndpoint(double x, double y) {
     var tx = _epMx + (x - _pressX);
     var ty = _epMy + (y - _pressY);
@@ -1184,6 +1351,34 @@ class DrawingController extends ChangeNotifier {
     if (len < 8 / _scale) return; // never collapse the line
     _epTx = tx;
     _epTy = ty;
+  }
+
+  void _beginRotate(double x, double y) {
+    final b = StrokeSelection.pointBoundsOf(selectedStrokes)!;
+    _mode = _Mode.rotate;
+    _handle = SelectionHandle.rotate;
+    _rcx = (b.left + b.right) / 2;
+    _rcy = (b.top + b.bottom) / 2;
+    _rotStart = math.atan2(y - _rcy, x - _rcx);
+    _rot = 0;
+  }
+
+  /// Snaps to 15 degrees near a step, or always while Shift is held.
+  void _updateRotate(double x, double y) {
+    if ((x - _rcx).abs() < 1e-6 && (y - _rcy).abs() < 1e-6) return;
+    var d = math.atan2(y - _rcy, x - _rcx) - _rotStart;
+    while (d > math.pi) {
+      d -= 2 * math.pi;
+    }
+    while (d < -math.pi) {
+      d += 2 * math.pi;
+    }
+    final snapped = (d / _rotateSnap).roundToDouble() * _rotateSnap;
+    if (HardwareKeyboard.instance.isShiftPressed ||
+        (d - snapped).abs() <= 0.05) {
+      d = snapped;
+    }
+    _rot = d;
   }
 
   void _beginResize(SelectionHandle h, double x, double y) {
@@ -1256,6 +1451,7 @@ class DrawingController extends ChangeNotifier {
     for (var i = _strokes.length - 1; i >= 0; i--) {
       final s = _strokes[i];
       if (!_selectable(s)) continue;
+      if (s.shape == null) continue;
       if (StrokeHitTest.hitsSegment(
         s,
         ax: x,
@@ -1313,19 +1509,21 @@ class DrawingController extends ChangeNotifier {
     for (var i = _strokes.length - 1; i >= 0; i--) {
       if (ids.contains(_strokes[i].id)) remove.take(_strokes, i);
     }
-    // An arrow is not one of the four selectable shapes: shape stays null.
     final arrow = Stroke(
       id: _newId(),
       tool: latest.tool,
       colorValue: latest.colorValue,
       width: latest.width,
       points: merge.shape.points,
+      shape: ShapeKind.arrow,
     );
     _strokes.add(arrow);
     _history.record(CompositeCommand([remove, AddStrokeCommand(arrow)]));
     _revision++;
     _recent.clear();
-    _selected.clear();
+    _selected
+      ..clear()
+      ..add(arrow.id);
     onShapeRecognized?.call();
   }
 
