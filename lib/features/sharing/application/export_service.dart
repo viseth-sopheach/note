@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import '../../editor/domain/ink_geometry.dart';
 import '../../editor/domain/page_repository.dart';
 import '../../editor/domain/stroke.dart';
 import '../../editor/domain/stroke_tool.dart';
@@ -126,16 +127,47 @@ class ExportService {
         canvas.drawEllipse(pt.x * _s, size.y - pt.y * _s, width / 2, width / 2);
         canvas.fillPath();
       } else {
-        canvas.setStrokeColor(color);
-        canvas.setLineWidth(width);
-        canvas.setLineCap(PdfLineCap.round);
-        canvas.setLineJoin(PdfLineJoin.round);
-        final first = stroke.points.first;
-        canvas.moveTo(first.x * _s, size.y - first.y * _s);
-        for (final pt in stroke.points.skip(1)) {
-          canvas.lineTo(pt.x * _s, size.y - pt.y * _s);
+        // Same variable-width outline the canvas paints on screen, so the
+        // exported PDF matches what the user sees. Highlighters stay a plain
+        // uniform-width polyline (their ink is flat by design).
+        final outline =
+            highlighter || !InkGeometry.usesVariableWidth(stroke.points)
+            ? null
+            : InkGeometry.build(
+                stroke.points,
+                stroke.width,
+                seed: InkGeometry.seedFor(stroke.id),
+              );
+        if (outline != null) {
+          canvas.setFillColor(color);
+          canvas.moveTo(
+            outline.left.first.x * _s,
+            size.y - outline.left.first.y * _s,
+          );
+          for (final v in outline.left.skip(1)) {
+            canvas.lineTo(v.x * _s, size.y - v.y * _s);
+          }
+          for (final v in outline.right.reversed) {
+            canvas.lineTo(v.x * _s, size.y - v.y * _s);
+          }
+          canvas.closePath();
+          canvas.fillPath();
+          for (final c in [outline.start, outline.end]) {
+            canvas.drawEllipse(c.x * _s, size.y - c.y * _s, c.r * _s, c.r * _s);
+            canvas.fillPath();
+          }
+        } else {
+          canvas.setStrokeColor(color);
+          canvas.setLineWidth(width);
+          canvas.setLineCap(PdfLineCap.round);
+          canvas.setLineJoin(PdfLineJoin.round);
+          final first = stroke.points.first;
+          canvas.moveTo(first.x * _s, size.y - first.y * _s);
+          for (final pt in stroke.points.skip(1)) {
+            canvas.lineTo(pt.x * _s, size.y - pt.y * _s);
+          }
+          canvas.strokePath();
         }
-        canvas.strokePath();
       }
       canvas.restoreContext();
     }

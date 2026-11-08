@@ -45,6 +45,7 @@ import 'drawing/ink_layers.dart';
 import 'drawing/selection_layer.dart';
 import 'drawing/text_layer.dart';
 import 'editor_stack.dart';
+import 'gestures/one_finger_double_tap.dart';
 import 'gestures/two_finger_double_tap.dart';
 import 'gestures/two_finger_scroll_guard.dart';
 import 'measure/measure_overlay.dart';
@@ -1666,10 +1667,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     ]);
 
     // ----------------------------------------------------------
-    // Updated canvas with two-finger double-tap and scrollbars
+    // Updated canvas with double-tap gestures and scrollbars
     // ----------------------------------------------------------
 
-    final canvas = TwoFingerDoubleTap(
+    final fitCanvas = TwoFingerDoubleTap(
       onDoubleTap: _fitToWidth,
       child: Stack(
         children: [
@@ -1760,6 +1761,14 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           Positioned.fill(child: _selectionBar()),
         ],
       ),
+    );
+
+    final canvas = OneFingerDoubleTap(
+      onDoubleTap: () {
+        _active.undo();
+        unawaited(HapticFeedback.selectionClick());
+      },
+      child: fitCanvas,
     );
 
     // ----------------------------------------------------------

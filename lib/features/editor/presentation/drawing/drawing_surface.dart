@@ -12,6 +12,10 @@ import '../../application/drawing_controller.dart';
 /// When [allowTouch] is false, finger touch is ignored so it can pan and
 /// zoom the page. When it is true, one finger draws and a second finger
 /// cancels the stroke so pinch zoom still works.
+///
+/// Every pointer is reported with full pressure (1.0). Pen width is driven
+/// by [DrawingController] settings, not by raw device pressure, so the ink
+/// is identical for mouse, stylus and finger.
 class DrawingSurface extends StatefulWidget {
   const DrawingSurface({
     super.key,
@@ -71,11 +75,18 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
       e.kind == PointerDeviceKind.stylus ||
       (widget.allowTouch && e.kind == PointerDeviceKind.touch);
 
-  static double _pressure(PointerEvent e) {
-    if (e.kind != PointerDeviceKind.stylus) return 1.0;
-    final range = e.pressureMax - e.pressureMin;
-    if (range <= 0) return 1.0;
-    return ((e.pressure - e.pressureMin) / range).clamp(0.0, 1.0);
+  /// Always report full pressure. Pen width is a user setting, not a
+  /// function of device pressure, so every input kind draws the same line.
+  static double _pressure(PointerEvent e) => 1.0;
+
+  void _hover(PointerHoverEvent e) {
+    final p = _local(e);
+    final b = widget.bounds;
+    if (b != null && !b.contains(p)) {
+      _c.clearHover();
+      return;
+    }
+    _c.hoverAt(p.dx, p.dy);
   }
 
   void _down(PointerDownEvent e) {
@@ -96,7 +107,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
       return;
     }
 
-    // Critical: Reject strokes that start outside the defined bounds
+    // Reject strokes that start outside the defined bounds.
     final raw = _local(e);
     if (widget.isClaimed?.call(raw) ?? false) return;
     final b = widget.bounds;
@@ -118,7 +129,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   }
 
   void _move(PointerMoveEvent e) {
-    // Critical: Clamp movement coordinates to keep strokes bounded on the paper
+    // Clamp movement coordinates to keep strokes bounded on the paper.
     final p = _clamped(e);
     _c.extendStroke(
       pointer: e.pointer,
@@ -146,6 +157,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
       return;
     }
 
+    // endStroke turns a quick tap into a select / deselect with no dot.
     final p = _clamped(e);
     _c.endStroke(
       pointer: e.pointer,
@@ -170,7 +182,13 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
       onPointerMove: _move,
       onPointerUp: _up,
       onPointerCancel: _cancel,
-      child: widget.child,
+      child: MouseRegion(
+        onHover: _hover,
+        onExit: (_) => _c.clearHover(),
+        child: _child,
+      ),
     );
   }
+
+  Widget get _child => widget.child;
 }

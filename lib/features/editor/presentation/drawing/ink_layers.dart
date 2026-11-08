@@ -91,6 +91,8 @@ class CommittedInkPainter extends CustomPainter {
         tool: s.tool,
         colorValue: PaperColors.inkFor(s.colorValue, darkPaper: darkPaper),
         width: s.width,
+        strokeId: s.id,
+        cacheKey: s,
       );
     }
     canvas.restore();
@@ -127,6 +129,7 @@ class LiveInkPainter extends CustomPainter {
         darkPaper: darkPaper,
       ),
       width: controller.width,
+      strokeId: controller.liveStrokeId,
     );
     canvas.restore();
   }

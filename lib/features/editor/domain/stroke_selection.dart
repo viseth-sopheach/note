@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'shape_recognizer.dart' show ShapeKind;
 import 'stroke.dart';
 import 'stroke_hit_test.dart';
 import 'stroke_point.dart';
@@ -123,26 +124,13 @@ abstract final class StrokeSelection {
     return path > 0 && _gap(p.first, p.last) <= 0.15 * path;
   }
 
-  /// Start and end of a straight line; null for everything else (closed
-  /// shapes, dots, arrows, curves and handwriting), which use box handles.
+  /// Start and end of a Line shape; null for everything else.
   static ({Vertex start, Vertex end})? linearEnds(Stroke s) {
+    if (s.shape != ShapeKind.line) return null;
     final p = s.points;
-    if (p.length < 2 || isClosed(s)) return null;
+    if (p.length < 2) return null;
     final a = p.first, b = p.last;
-    final dx = b.x - a.x, dy = b.y - a.y;
-    final chord = math.sqrt(dx * dx + dy * dy);
-    if (chord <= 0) return null;
-
-    var path = 0.0;
-    for (var i = 1; i < p.length; i++) {
-      path += _gap(p[i - 1], p[i]);
-    }
-    if (path > chord * 1.12) return null;
-
-    for (final q in p) {
-      final dev = ((q.x - a.x) * dy - (q.y - a.y) * dx).abs() / chord;
-      if (dev > chord * 0.06) return null;
-    }
+    if (a.x == b.x && a.y == b.y) return null;
     return (start: (x: a.x, y: a.y), end: (x: b.x, y: b.y));
   }
 

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'shape_recognizer.dart' show ShapeKind;
 import 'stroke.dart';
 import 'stroke_point.dart';
 import 'stroke_tool.dart';
@@ -9,13 +10,32 @@ import 'stroke_tool.dart';
 ///
 /// Layout (little endian):
 ///   u8 version, u32 strokeCount, then per stroke:
-///   u8 idLength, id (utf8), u8 tool index, u32 color, f32 width,
-///   u32 pointCount, then per point: f32 x, f32 y, f32 pressure, u32 timeMs.
+///   u8 idLength, id (utf8), u8 tool index,
+///   [v2 only] u8 shape (0 line, 1 rectangle, 2 ellipse, 3 triangle, 255 none),
+///   u32 color, f32 width, u32 pointCount,
+///   then per point: f32 x, f32 y, f32 pressure, u32 timeMs.
 ///
 /// Never reorder StrokeTool values: the index is stored. Only append.
 abstract final class StrokeCodec {
-  static const int formatVersion = 1;
+  static const int formatVersion = 2;
   static const int _pointSize = 16;
+  static const int _noShape = 255;
+
+  static int _shapeByte(ShapeKind? s) => switch (s) {
+    ShapeKind.line => 0,
+    ShapeKind.rectangle || ShapeKind.square => 1,
+    ShapeKind.ellipse || ShapeKind.circle => 2,
+    ShapeKind.triangle => 3,
+    _ => _noShape,
+  };
+
+  static ShapeKind? _shapeFrom(int b) => switch (b) {
+    0 => ShapeKind.line,
+    1 => ShapeKind.rectangle,
+    2 => ShapeKind.ellipse,
+    3 => ShapeKind.triangle,
+    _ => null,
+  };
 
   static Uint8List encode(List<Stroke> strokes) {
     final ids = [for (final s in strokes) utf8.encode(s.id)];
@@ -25,7 +45,7 @@ abstract final class StrokeCodec {
       if (ids[i].length > 255) {
         throw ArgumentError.value(strokes[i].id, 'id', 'Id is too long');
       }
-      size += 1 + ids[i].length + 1 + 4 + 4 + 4;
+      size += 1 + ids[i].length + 1 + 1 + 4 + 4 + 4;
       size += strokes[i].points.length * _pointSize;
     }
 
@@ -47,6 +67,8 @@ abstract final class StrokeCodec {
       bytes.setRange(o, o + id.length, id);
       o += id.length;
       data.setUint8(o, s.tool.index);
+      o += 1;
+      data.setUint8(o, _shapeByte(s.shape));
       o += 1;
       data.setUint32(o, s.colorValue & 0xFFFFFFFF, Endian.little);
       o += 4;
@@ -86,7 +108,7 @@ abstract final class StrokeCodec {
 
     final version = data.getUint8(o);
     o += 1;
-    if (version != formatVersion) {
+    if (version != 1 && version != 2) {
       throw FormatException('Unsupported stroke format: $version');
     }
 
@@ -107,6 +129,12 @@ abstract final class StrokeCodec {
       o += 1;
       if (toolIndex >= StrokeTool.values.length) {
         throw FormatException('Unknown tool: $toolIndex');
+      }
+
+      ShapeKind? shape;
+      if (version >= 2) {
+        shape = _shapeFrom(data.getUint8(o));
+        o += 1;
       }
 
       final color = data.getUint32(o, Endian.little);
@@ -140,6 +168,7 @@ abstract final class StrokeCodec {
           colorValue: color,
           width: width,
           points: points,
+          shape: shape,
         ),
       );
     }

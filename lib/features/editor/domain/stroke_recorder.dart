@@ -6,7 +6,7 @@ import 'stroke_tool.dart';
 
 /// Collects points for one stroke at a time. No Flutter imports.
 final class StrokeRecorder {
-  StrokeRecorder({this.minDistance = 0.5});
+  StrokeRecorder({this.minDistance = 1.5});
 
   /// Points closer than this to the previous point (document units) are skipped.
   final double minDistance;
@@ -16,6 +16,11 @@ final class StrokeRecorder {
   StrokeTool _tool = StrokeTool.pen;
   int _colorValue = 0;
   double _width = 0;
+
+  /// Id of the stroke currently being recorded, or null when idle.
+  /// Stable for the whole life of the live stroke, so it can be used as a
+  /// cache key by the live ink renderer.
+  String? get id => _id;
 
   bool get isActive => _id != null;
 

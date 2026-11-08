@@ -1,7 +1,11 @@
+import 'shape_recognizer.dart' show ShapeKind;
 import 'stroke_point.dart';
 import 'stroke_tool.dart';
 
 /// One continuous pen or highlighter line. Immutable.
+///
+/// [shape] is non-null only for the four selectable basic shapes
+/// (line, rectangle, ellipse, triangle). Freehand strokes keep it null.
 final class Stroke {
   Stroke({
     required this.id,
@@ -9,7 +13,10 @@ final class Stroke {
     required this.colorValue,
     required this.width,
     required List<StrokePoint> points,
+    this.shape,
   }) : points = List<StrokePoint>.unmodifiable(points);
+
+  static const Object _keep = Object();
 
   final String id;
   final StrokeTool tool;
@@ -22,19 +29,25 @@ final class Stroke {
 
   final List<StrokePoint> points;
 
+  /// Only line, rectangle, ellipse or triangle, otherwise null.
+  final ShapeKind? shape;
+
   bool get isEmpty => points.isEmpty;
 
+  /// Pass `shape: null` to clear the shape; omit it to keep the current one.
   Stroke copyWith({
     StrokeTool? tool,
     int? colorValue,
     double? width,
     List<StrokePoint>? points,
+    Object? shape = _keep,
   }) => Stroke(
     id: id,
     tool: tool ?? this.tool,
     colorValue: colorValue ?? this.colorValue,
     width: width ?? this.width,
     points: points ?? this.points,
+    shape: identical(shape, _keep) ? this.shape : shape as ShapeKind?,
   );
 
   @override
@@ -44,6 +57,7 @@ final class Stroke {
         other.tool != tool ||
         other.colorValue != colorValue ||
         other.width != width ||
+        other.shape != shape ||
         other.points.length != points.length) {
       return false;
     }
@@ -55,5 +69,5 @@ final class Stroke {
 
   @override
   int get hashCode =>
-      Object.hash(id, tool, colorValue, width, Object.hashAll(points));
+      Object.hash(id, tool, colorValue, width, Object.hashAll(points), shape);
 }

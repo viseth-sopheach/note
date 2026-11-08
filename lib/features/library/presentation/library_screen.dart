@@ -313,9 +313,7 @@ class LibraryScreen extends ConsumerWidget {
                 notebookId: notebook.id,
                 title: notebook.title,
               );
-          await ref
-              .read(telegramServiceProvider)
-              .sendDocument(file, caption: notebook.title);
+          await ref.read(telegramServiceProvider).sendDocument(file);
           if (context.mounted) _toast(context, 'Sent to Telegram');
         });
     }

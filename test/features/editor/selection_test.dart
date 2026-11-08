@@ -13,9 +13,12 @@ void main() {
 
   tearDown(() => c.dispose());
 
+  // Only shapes are selectable, so test lines are Line shapes.
   void drawLine(double y) {
+    c.selectTool(StrokeTool.line);
     c.beginStroke(pointer: 1, x: 0, y: y, pressure: 1, timeMs: 0);
     c.endStroke(pointer: 1, x: 100, y: y, pressure: 1, timeMs: 16);
+    c.clearSelection();
   }
 
   // Lasso around the line at y = 0 only.
@@ -33,7 +36,7 @@ void main() {
     c.endStroke(pointer: 3, x: x2, y: y2, pressure: 1, timeMs: 202);
   }
 
-  test('a lasso selects only the strokes inside it', () {
+  test('a lasso selects only the shapes inside it', () {
     drawLine(0);
     drawLine(100);
 
@@ -41,6 +44,16 @@ void main() {
 
     expect(c.selectedIds, {'id0'});
     expect(c.isDrawing, isFalse);
+  });
+
+  test('a lasso never selects freehand strokes', () {
+    c.selectTool(StrokeTool.pen);
+    c.beginStroke(pointer: 1, x: 0, y: 0, pressure: 1, timeMs: 0);
+    c.endStroke(pointer: 1, x: 100, y: 0, pressure: 1, timeMs: 16);
+
+    lassoFirstLine();
+
+    expect(c.hasSelection, isFalse);
   });
 
   test('dragging the selection moves it as one undo step', () {

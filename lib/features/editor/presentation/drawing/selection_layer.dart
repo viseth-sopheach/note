@@ -4,7 +4,8 @@ import '../../application/drawing_controller.dart';
 import '../paper/paper_colors.dart';
 import 'ink_renderer.dart';
 
-/// Lasso, selection line or box, handles and the strokes being transformed.
+/// Lasso, hover outline, selection frame or line endpoints, handles and the
+/// strokes being transformed.
 class SelectionLayer extends StatefulWidget {
   const SelectionLayer({
     super.key,
@@ -106,6 +107,8 @@ class SelectionPainter extends CustomPainter {
   }
 
   void _paintContent(Canvas canvas) {
+    final k = 1 / (controller.viewScale?.call() ?? 1.0).clamp(0.05, 20.0);
+
     final lasso = controller.lasso;
     if (lasso.length > 1) {
       final path = Path()..moveTo(lasso.first.x, lasso.first.y);
@@ -126,6 +129,8 @@ class SelectionPainter extends CustomPainter {
       );
     }
 
+    _paintHover(canvas, k);
+
     if (!controller.hasSelection) return;
 
     if (controller.isTransformingSelection) {
@@ -143,13 +148,14 @@ class SelectionPainter extends CustomPainter {
       canvas.restore();
     }
 
-    final k = 1 / (controller.viewScale?.call() ?? 1.0).clamp(0.05, 20.0);
     final t = Curves.easeOutCubic.transform(
       (appear?.value ?? 1.0).clamp(0.0, 1.0),
     );
+    final active = controller.activeHandle;
 
     final ends = controller.linearEnds;
     if (ends != null) {
+      // Line: only the thin line and two endpoint circles.
       canvas.drawLine(
         Offset(ends.start.x, ends.start.y),
         Offset(ends.end.x, ends.end.y),
@@ -159,35 +165,88 @@ class SelectionPainter extends CustomPainter {
           ..strokeWidth = 1.5 * k
           ..strokeCap = StrokeCap.round,
       );
-    } else {
-      final f = controller.selectionFrame;
-      if (f == null) return;
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromLTRB(
-          f.left,
-          f.top,
-          f.right,
-          f.bottom,
-        ).inflate(controller.framePadDoc),
-        Radius.circular(10 * k),
-      );
-      canvas.drawRRect(
-        rect,
-        Paint()..color = _accent.withValues(alpha: 0.08 * t),
-      );
-      canvas.drawRRect(
-        rect,
-        Paint()
-          ..color = _accent.withValues(alpha: t)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5 * k,
-      );
+      for (final spot in controller.handleSpots) {
+        _drawEndpoint(
+          canvas,
+          Offset(spot.x, spot.y),
+          k,
+          t,
+          spot.handle == active,
+        );
+      }
+      return;
     }
 
-    final active = controller.activeHandle;
+    final f = controller.selectionFrame;
+    if (f == null) return;
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTRB(
+        f.left,
+        f.top,
+        f.right,
+        f.bottom,
+      ).inflate(controller.framePadDoc),
+      Radius.circular(10 * k),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()..color = _accent.withValues(alpha: 0.08 * t),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = _accent.withValues(alpha: t)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5 * k,
+    );
     for (final spot in controller.handleSpots) {
       _drawHandle(canvas, Offset(spot.x, spot.y), k, t, spot.handle == active);
     }
+  }
+
+  /// Thin outline of the selectable shape under the mouse.
+  void _paintHover(Canvas canvas, double k) {
+    final id = controller.hoverId;
+    if (id == null || controller.isDrawing) return;
+    if (controller.selectedIds.contains(id)) return;
+    for (final s in controller.strokes) {
+      if (s.id != id || s.shape == null || s.points.length < 2) continue;
+      final path = Path()..moveTo(s.points.first.x, s.points.first.y);
+      for (final p in s.points.skip(1)) {
+        path.lineTo(p.x, p.y);
+      }
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = _accent.withValues(alpha: 0.4)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = s.width + 3 * k
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..isAntiAlias = true,
+      );
+      return;
+    }
+  }
+
+  void _drawEndpoint(Canvas canvas, Offset c, double k, double t, bool active) {
+    final r = 6 * k * (0.6 + 0.4 * t) * (active ? 1.25 : 1.0);
+    canvas.drawCircle(
+      c + Offset(0, 1 * k),
+      r + 0.5 * k,
+      Paint()
+        ..color = Color.fromRGBO(0, 0, 0, 0.28 * t)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2 * k),
+    );
+    canvas.drawCircle(c, r, Paint()..color = _accent.withValues(alpha: t));
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..color = const Color(0xFFFFFFFF).withValues(alpha: t)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2 * k,
+    );
   }
 
   void _drawHandle(Canvas canvas, Offset c, double k, double t, bool active) {

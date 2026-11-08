@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../domain/command_history.dart';
 import '../domain/drawing_command.dart';
+import '../domain/pen_filter.dart';
 import '../domain/selection_handle.dart';
 import '../domain/shape_center.dart';
 import '../domain/shape_geometry.dart';
@@ -31,6 +32,10 @@ enum _Mode { none, draw, erase, lasso, move, shape, resize, endpoint }
 /// selection. Tool, color and width come from [settings], which can be
 /// shared by the controllers of several pages.
 ///
+/// Only strokes with a non-null [Stroke.shape] (line, rectangle, ellipse,
+/// triangle) can be hovered, selected, copied or transformed. Freehand
+/// strokes never enter the selection.
+///
 /// Coordinates are relative to the paper corner and may be negative or
 /// larger than the page (drawing outside the paper).
 ///
@@ -40,7 +45,7 @@ enum _Mode { none, draw, erase, lasso, move, shape, resize, endpoint }
 class DrawingController extends ChangeNotifier {
   DrawingController({
     String Function()? idGenerator,
-    double minDistance = 0.5,
+    double minDistance = 1.5,
     ToolSettings? settings,
     int undoLimit = 200,
     this.holdDuration = const Duration(milliseconds: 700),
@@ -101,6 +106,7 @@ class DrawingController extends ChangeNotifier {
   final _Signal _live = _Signal();
   final List<Stroke> _strokes = [];
   final CommandHistory _history;
+  final PenFilter _pen = PenFilter();
 
   late StrokeTool _seenTool;
 
@@ -111,6 +117,7 @@ class DrawingController extends ChangeNotifier {
 
   final List<Vertex> _lasso = [];
   final Set<String> _selected = {};
+  String? _hoverId;
   double _moveFromX = 0;
   double _moveFromY = 0;
   double _dx = 0;
@@ -144,10 +151,11 @@ class DrawingController extends ChangeNotifier {
   bool _deselectedOnDown = false;
   bool _lockAspect = false;
 
-  // Endpoint drag state.
+  // Line endpoint drag state.
   bool _epMovesEnd = true;
-  double _epAx = 0, _epAy = 0, _epMx = 0, _epMy = 0;
-  double _epA = 1, _epB = 0;
+  double _epAx = 0, _epAy = 0; // fixed end
+  double _epMx = 0, _epMy = 0; // dragged end when the drag began
+  double _epTx = 0, _epTy = 0; // dragged end now
 
   int? _activePointer;
   int _originMs = 0;
@@ -158,10 +166,37 @@ class DrawingController extends ChangeNotifier {
   int get colorValue => _settings.colorValue;
   double get width => _settings.width;
 
+  /// Id of the stroke currently being drawn, or null when idle.
+  /// Stable for the whole life of the live stroke, used as the live ink
+  /// cache key. Cleared by [StrokeRecorder.cancel] / [StrokeRecorder.end].
+  String? get liveStrokeId => _recorder.id;
+
+  // ---- Shape rules ----
+
+  /// Only the four basic shapes can be hovered, selected or transformed.
+  bool _selectable(Stroke s) => s.shape != null;
+
+  static ShapeKind? _stored(ShapeKind? k) => switch (k) {
+    ShapeKind.line => ShapeKind.line,
+    ShapeKind.rectangle || ShapeKind.square => ShapeKind.rectangle,
+    ShapeKind.circle || ShapeKind.ellipse => ShapeKind.ellipse,
+    ShapeKind.triangle => ShapeKind.triangle,
+    _ => null, // arrow, star, polygon
+  };
+
+  static ShapeKind? _fromTool(StrokeTool t) => switch (t) {
+    StrokeTool.line => ShapeKind.line,
+    StrokeTool.rectangle => ShapeKind.rectangle,
+    StrokeTool.ellipse => ShapeKind.ellipse,
+    StrokeTool.triangle => ShapeKind.triangle,
+    _ => null,
+  };
+
   void _onSettingsChanged() {
     if (_settings.tool != _seenTool) {
       _seenTool = _settings.tool;
       _selected.clear();
+      _hoverId = null;
     }
     notifyListeners();
     _live.ping();
@@ -200,6 +235,28 @@ class DrawingController extends ChangeNotifier {
   /// erasing, moving, deleting, undo or redo. Loading strokes with
   /// [replaceStrokes] does not change it.
   int get revision => _revision;
+
+  // ---- Hover ----
+
+  /// Id of the selectable shape under the mouse, or null.
+  String? get hoverId => _hoverId;
+
+  void hoverAt(double x, double y) {
+    if (isDrawing || _settings.tool == StrokeTool.eraser) {
+      clearHover();
+      return;
+    }
+    final id = _strokeAt(x, y);
+    if (id == _hoverId) return;
+    _hoverId = id;
+    _live.ping();
+  }
+
+  void clearHover() {
+    if (_hoverId == null) return;
+    _hoverId = null;
+    _live.ping();
+  }
 
   // ---- Selection state ----
 
@@ -277,17 +334,19 @@ class DrawingController extends ChangeNotifier {
     return (left: l, top: t, right: r, bottom: b);
   }
 
+  /// The selected stroke when exactly one non-dot Line shape is selected.
   Stroke? get _linearStroke {
     if (_selected.length != 1) return null;
     for (final s in _strokes) {
       if (_selected.contains(s.id)) {
+        if (ShapeCenter.isDot(s)) return null;
         return StrokeSelection.linearEnds(s) == null ? null : s;
       }
     }
     return null;
   }
 
-  /// Live endpoints when the selection is one line or open freehand stroke.
+  /// Live endpoints when the selection is one Line shape.
   ({Vertex start, Vertex end})? get linearEnds {
     final s = _linearStroke;
     if (s == null) return null;
@@ -299,16 +358,35 @@ class DrawingController extends ChangeNotifier {
           end: (x: e.end.x + _dx, y: e.end.y + _dy),
         );
       case _Mode.endpoint:
-        final m = _epMap(_epMx, _epMy);
-        return _epMovesEnd ? (start: e.start, end: m) : (start: m, end: e.end);
+        final Vertex t = (x: _epTx, y: _epTy);
+        return _epMovesEnd ? (start: e.start, end: t) : (start: t, end: e.end);
       default:
         return e;
     }
   }
 
-  Vertex _epMap(double x, double y) {
-    final dx = x - _epAx, dy = y - _epAy;
-    return (x: _epAx + _epA * dx - _epB * dy, y: _epAy + _epB * dx + _epA * dy);
+  /// Exactly two points: the fixed end and the moved end.
+  List<StrokePoint> _linePoints(Stroke s, bool movesEnd, double x, double y) {
+    final a = s.points.first, b = s.points.last;
+    return movesEnd
+        ? [
+            a,
+            StrokePoint(
+              x: x,
+              y: y,
+              pressure: b.pressure,
+              timestampMs: b.timestampMs,
+            ),
+          ]
+        : [
+            StrokePoint(
+              x: x,
+              y: y,
+              pressure: a.pressure,
+              timestampMs: a.timestampMs,
+            ),
+            b,
+          ];
   }
 
   List<StrokePoint> previewPoints(Stroke s) => switch (_mode) {
@@ -319,18 +397,12 @@ class DrawingController extends ChangeNotifier {
       _rsx,
       _rsy,
     ).points,
-    _Mode.endpoint => StrokeSelection.similarityAbout(
-      s,
-      _epAx,
-      _epAy,
-      _epA,
-      _epB,
-    ).points,
+    _Mode.endpoint => _linePoints(s, _epMovesEnd, _epTx, _epTy),
     _ => s.points,
   };
 
-  /// Two endpoint handles for lines and freehand strokes, up to eight box
-  /// handles for everything else (document units).
+  /// Two endpoint handles for lines, up to eight box handles for the other
+  /// shapes (document units).
   List<HandleSpot> get handleSpots {
     final ends = linearEnds;
     if (ends != null) {
@@ -402,9 +474,15 @@ class DrawingController extends ChangeNotifier {
 
   static bool get hasClipboard => _clipboard.isNotEmpty;
 
+  /// Selectable shapes plus the center dots that belong to them.
+  List<Stroke> _copyable() => [
+    for (final s in selectedStrokes)
+      if (_selectable(s) || ShapeCenter.isDot(s)) s,
+  ];
+
   void copySelection() {
     if (isDrawing || _selected.isEmpty) return;
-    _clipboard = List<Stroke>.of(selectedStrokes);
+    _clipboard = _copyable();
     _pasteStep = 0;
     notifyListeners();
   }
@@ -417,7 +495,7 @@ class DrawingController extends ChangeNotifier {
 
   void duplicateSelection() {
     if (isDrawing || _selected.isEmpty) return;
-    _insertCopies(selectedStrokes.toList(), duplicateOffset, duplicateOffset);
+    _insertCopies(_copyable(), duplicateOffset, duplicateOffset);
   }
 
   void _insertCopies(List<Stroke> source, double dx, double dy) {
@@ -445,6 +523,7 @@ class DrawingController extends ChangeNotifier {
           colorValue: moved.colorValue,
           width: moved.width,
           points: moved.points,
+          shape: moved.shape,
         ),
       );
     }
@@ -467,6 +546,7 @@ class DrawingController extends ChangeNotifier {
     _cancelRefine();
     if (!canUndo) return;
     _selected.clear();
+    _hoverId = null;
     _history.undo(_strokes);
     _revision++;
     notifyListeners();
@@ -477,6 +557,7 @@ class DrawingController extends ChangeNotifier {
     _cancelRefine();
     if (!canRedo) return;
     _selected.clear();
+    _hoverId = null;
     _history.redo(_strokes);
     _revision++;
     notifyListeners();
@@ -491,6 +572,7 @@ class DrawingController extends ChangeNotifier {
       ..clear()
       ..addAll(strokes);
     _selected.clear();
+    _hoverId = null;
     _history.clear();
     notifyListeners();
     _live.ping();
@@ -540,7 +622,7 @@ class DrawingController extends ChangeNotifier {
   }
 
   /// Restarts the timer only when the pointer really moved, so jitter of a
-  /// resting hand or stylus does not prevent the snap.
+  /// resting hand or stylus does not prevent the snap. Uses raw coordinates.
   void _trackHold(double x, double y) {
     if (!_holdArmed) return;
     final dx = x - _holdX;
@@ -594,6 +676,7 @@ class DrawingController extends ChangeNotifier {
     if (isDrawing) return false;
     _activePointer = pointer;
     _cancelRefine();
+    _hoverId = null;
     _downX = x;
     _downY = y;
     _deselectedOnDown = false;
@@ -614,19 +697,14 @@ class DrawingController extends ChangeNotifier {
 
       case StrokeTool.pen:
       case StrokeTool.highlighter:
-        if (_selected.isNotEmpty) {
-          if (_tryBeginSelectionGesture(x, y)) {
-            notifyListeners();
-            _live.ping();
-            return true;
-          }
-          _selected.clear();
-          _deselectedOnDown = true;
-        }
+        // A pen/highlighter down never grabs the selection or its handles.
+        // Any existing selection is simply cleared.
+        if (_selected.isNotEmpty) _selected.clear();
         _mode = _Mode.draw;
         _originMs = timeMs;
         _snap = _findSnap(x, y);
         final start = _snapPoint(x, y);
+        _pen.begin(start.x, start.y, 0);
         _recorder.begin(
           id: _newId(),
           tool: _settings.tool,
@@ -734,13 +812,13 @@ class DrawingController extends ChangeNotifier {
         // A snapped shape stays as it is until the pointer is lifted.
         if (_recognized != null) return;
         final p = _snapPoint(x, y);
+        final t = timeMs - _originMs;
+        // Smooth freehand input; ruler-snapped points are already straight.
+        final ({double x, double y}) s = _snap == null
+            ? _pen.apply(p.x, p.y, t)
+            : p;
         final kept = _recorder.add(
-          StrokePoint(
-            x: p.x,
-            y: p.y,
-            pressure: pressure,
-            timestampMs: timeMs - _originMs,
-          ),
+          StrokePoint(x: s.x, y: s.y, pressure: pressure, timestampMs: t),
         );
         if (kept) _live.ping();
         _trackHold(x, y);
@@ -790,15 +868,20 @@ class DrawingController extends ChangeNotifier {
 
       case _Mode.endpoint:
         _updateEndpoint(x, y);
-        final ea = _epA, eb = _epB, eax = _epAx, eay = _epAy;
+        final tx = _epTx, ty = _epTy;
+        final movesEnd = _epMovesEnd;
+        final moved = math.sqrt(
+          math.pow(tx - _epMx, 2) + math.pow(ty - _epMy, 2),
+        );
         final eBefore = selectedStrokes.toList();
         _finish();
-        if ((ea - 1).abs() > 0.001 || eb.abs() > 0.001) {
+        if (moved >= 0.5 && eBefore.length == 1) {
+          final s = eBefore.first;
           _history.execute(
-            ReplaceStrokesCommand(eBefore, [
-              for (final s in eBefore)
-                StrokeSelection.similarityAbout(s, eax, eay, ea, eb),
-            ]),
+            ReplaceStrokesCommand(
+              [s],
+              [s.copyWith(points: _linePoints(s, movesEnd, tx, ty))],
+            ),
             _strokes,
           );
           _revision++;
@@ -813,7 +896,11 @@ class DrawingController extends ChangeNotifier {
           final hit = _strokeAt(x, y);
           if (hit != null) _selected.add(hit);
         } else {
-          _selected.addAll(StrokeSelection.insideLasso(_strokes, _lasso));
+          final candidates = [
+            for (final s in _strokes)
+              if (_selectable(s)) s,
+          ];
+          _selected.addAll(StrokeSelection.insideLasso(candidates, _lasso));
         }
         _expandSelection();
         _lasso.clear();
@@ -844,6 +931,7 @@ class DrawingController extends ChangeNotifier {
             colorValue: _settings.colorValue,
             width: _settings.width,
             points: _shape,
+            shape: _fromTool(_settings.tool),
           );
           final dot = _settings.tool == StrokeTool.ellipse
               ? ShapeCenter.dotFor(stroke)
@@ -870,22 +958,9 @@ class DrawingController extends ChangeNotifier {
 
       case _Mode.draw:
         final recognized = _recognized;
-        if (recognized == null &&
-            _isNear(x, y, _downX, _downY) &&
-            timeMs - _originMs <= 400) {
-          final hit = _strokeAt(x, y);
-          if (hit != null || _deselectedOnDown) {
-            _recorder.cancel();
-            _selected.clear();
-            if (hit != null) _selected.add(hit);
-            _expandSelection();
-            _finish();
-            notifyListeners();
-            _live.ping();
-            break;
-          }
-        }
+
         if (recognized == null) {
+          // The last point stays raw.
           final p = _snapPoint(x, y);
           _recorder.add(
             StrokePoint(
@@ -900,12 +975,16 @@ class DrawingController extends ChangeNotifier {
         Stroke? dot;
         if (recognized != null) {
           // Same id, tool, color and width: only the geometry is cleaned.
-          stroke = stroke.copyWith(points: recognized.points);
+          stroke = stroke.copyWith(
+            points: recognized.points,
+            shape: _stored(recognized.kind),
+          );
           if (_isEllipseKind(recognized.kind)) dot = ShapeCenter.dotFor(stroke);
-        } else if (_snap != null && stroke.points.length > 2) {
-          // Snapped to the ruler: keep only the two ends of the line.
+        } else if (_snap != null && stroke.points.length >= 2) {
+          // Snapped to the ruler: a two-point Line shape.
           stroke = stroke.copyWith(
             points: [stroke.points.first, stroke.points.last],
+            shape: ShapeKind.line,
           );
         }
         final merge = recognized == null && _snap == null
@@ -931,7 +1010,7 @@ class DrawingController extends ChangeNotifier {
             _strokes,
           );
           _revision++;
-          if (recognized != null) {
+          if (recognized != null && stroke.shape != null) {
             _selected
               ..clear()
               ..add(stroke.id);
@@ -986,8 +1065,6 @@ class DrawingController extends ChangeNotifier {
     _rsx = 1;
     _rsy = 1;
     _deselectedOnDown = false;
-    _epA = 1;
-    _epB = 0;
     _lockAspect = false;
   }
 
@@ -1080,37 +1157,33 @@ class DrawingController extends ChangeNotifier {
     _epAy = anchor.y;
     _epMx = moving.x;
     _epMy = moving.y;
-    _epA = 1;
-    _epB = 0;
+    _epTx = moving.x;
+    _epTy = moving.y;
     _pressX = x;
     _pressY = y;
   }
 
-  /// Rotates and scales the stroke about the fixed end so the dragged end
-  /// follows the pointer. A line just moves its end. Snaps to 45 degrees
-  /// when close, and to 15 degrees while Shift is held.
+  /// Moves only the dragged end of a line; the other end stays fixed.
+  /// Snaps to 15 degrees only while Shift is held.
   void _updateEndpoint(double x, double y) {
-    final ux = _epMx - _epAx, uy = _epMy - _epAy;
-    final ul2 = ux * ux + uy * uy;
-    if (ul2 < 1e-9) return;
-    var vx = _epMx + (x - _pressX) - _epAx;
-    var vy = _epMy + (y - _pressY) - _epAy;
-    var len = math.sqrt(vx * vx + vy * vy);
-    if (len < 1e-6) {
-      vx = ux;
-      vy = uy;
-      len = math.sqrt(ul2);
+    var tx = _epMx + (x - _pressX);
+    var ty = _epMy + (y - _pressY);
+    var dx = tx - _epAx, dy = ty - _epAy;
+    var len = math.sqrt(dx * dx + dy * dy);
+    if (len < 1e-6) return;
+
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      const step = math.pi / 12;
+      final a = (math.atan2(dy, dx) / step).roundToDouble() * step;
+      tx = _epAx + len * math.cos(a);
+      ty = _epAy + len * math.sin(a);
+      dx = tx - _epAx;
+      dy = ty - _epAy;
+      len = math.sqrt(dx * dx + dy * dy);
     }
-    var ang = math.atan2(vy, vx);
-    final shift = HardwareKeyboard.instance.isShiftPressed;
-    final step = shift ? math.pi / 12 : math.pi / 4;
-    final snapped = (ang / step).roundToDouble() * step;
-    if (shift || (ang - snapped).abs() <= 0.04) ang = snapped;
-    len = math.max(len, 8 / _scale);
-    vx = len * math.cos(ang);
-    vy = len * math.sin(ang);
-    _epA = (vx * ux + vy * uy) / ul2;
-    _epB = (vy * ux - vx * uy) / ul2;
+    if (len < 8 / _scale) return; // never collapse the line
+    _epTx = tx;
+    _epTy = ty;
   }
 
   void _beginResize(SelectionHandle h, double x, double y) {
@@ -1176,19 +1249,22 @@ class DrawingController extends ChangeNotifier {
     return dx * dx + dy * dy <= slop * slop;
   }
 
-  /// Id of the top-most stroke under (x, y), or null.
+  /// Id of the top-most selectable shape under (x, y), or null. Freehand
+  /// strokes and ellipse center dots are skipped.
   String? _strokeAt(double x, double y) {
     final radius = 10 / _scale;
     for (var i = _strokes.length - 1; i >= 0; i--) {
+      final s = _strokes[i];
+      if (!_selectable(s)) continue;
       if (StrokeHitTest.hitsSegment(
-        _strokes[i],
+        s,
         ax: x,
         ay: y,
         bx: x,
         by: y,
         radius: radius,
       )) {
-        return _strokes[i].id;
+        return s.id;
       }
     }
     return null;
@@ -1237,6 +1313,7 @@ class DrawingController extends ChangeNotifier {
     for (var i = _strokes.length - 1; i >= 0; i--) {
       if (ids.contains(_strokes[i].id)) remove.take(_strokes, i);
     }
+    // An arrow is not one of the four selectable shapes: shape stays null.
     final arrow = Stroke(
       id: _newId(),
       tool: latest.tool,
@@ -1248,9 +1325,7 @@ class DrawingController extends ChangeNotifier {
     _history.record(CompositeCommand([remove, AddStrokeCommand(arrow)]));
     _revision++;
     _recent.clear();
-    _selected
-      ..clear()
-      ..add(arrow.id);
+    _selected.clear();
     onShapeRecognized?.call();
   }
 
@@ -1279,7 +1354,10 @@ class DrawingController extends ChangeNotifier {
     final before = _strokes[i];
     final refined = SmartStroke.refineDetailed(before.points);
     if (refined == null) return;
-    final after = before.copyWith(points: refined.points);
+    final after = before.copyWith(
+      points: refined.points,
+      shape: _stored(refined.kind),
+    );
     final dot = _isEllipseKind(refined.kind) ? ShapeCenter.dotFor(after) : null;
     final replace = ReplaceStrokesCommand([before], [after]);
     _history.execute(

@@ -3,9 +3,9 @@ import 'dart:ui';
 import '../../domain/stroke_point.dart';
 import '../../domain/stroke_tool.dart';
 
-/// Draws one stroke onto a canvas. Shared by the committed and live layers.
-/// Width is constant from the first point to the last: pressure and speed
-/// are ignored and the ends are not tapered.
+/// Draws one stroke. Every stroke is a monoline: a constant-width stroke
+/// along the untouched recorded path, with round caps and round joins.
+/// Highlighter is the same geometry at a wider width and lower opacity.
 abstract final class InkRenderer {
   static const double highlighterWidthScale = 6;
   static const double highlighterAlpha = 0.35;
@@ -25,9 +25,8 @@ abstract final class InkRenderer {
     if (isHighlighter) color = color.withValues(alpha: highlighterAlpha);
 
     if (points.length == 1) {
-      final p = points.first;
       canvas.drawCircle(
-        Offset(p.x, p.y),
+        Offset(points.first.x, points.first.y),
         strokeWidth / 2,
         Paint()
           ..color = color
@@ -37,18 +36,19 @@ abstract final class InkRenderer {
       return;
     }
 
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = isHighlighter ? StrokeCap.square : StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..isAntiAlias = true;
-
-    canvas.drawPath(_smoothPath(points), paint);
+    canvas.drawPath(
+      _smoothPath(points),
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = isHighlighter ? StrokeCap.square : StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true,
+    );
   }
 
-  /// Quadratic curve through midpoints between samples.
+  /// Quadratic curve through midpoints between samples (shapes, highlighter).
   static Path _smoothPath(List<StrokePoint> pts) {
     final path = Path()..moveTo(pts.first.x, pts.first.y);
     if (pts.length == 2) {

@@ -23,7 +23,8 @@ final class AppSettings {
     this.undoLimit = 200,
     this.confirmDeletePage = true,
     this.rememberPosition = true,
-    this.shapeRecognition = true,
+    this.shapeRecognition =
+        false, // off by default: handwriting stays as written
   });
 
   static const List<double> penWidths = [1, 2, 4, 6];
@@ -54,6 +55,10 @@ final class AppSettings {
   final int undoLimit;
   final bool confirmDeletePage;
   final bool rememberPosition;
+
+  /// Hold-to-snap shape recognition. Off by default so handwriting is kept
+  /// exactly as written. Stored under a new prefs key, so an old saved
+  /// `true` value is ignored.
   final bool shapeRecognition;
 
   AppSettings copyWith({
