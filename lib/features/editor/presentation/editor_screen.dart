@@ -332,13 +332,15 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   double get _maxScale => _baseScale * 5.0; // 500%
 
   double get _fitScale => _baseScale.clamp(_minScale, _maxScale).toDouble();
+  double get _paperFitScale =>
+    (_viewportW / kPageSize.width).clamp(_minScale, _maxScale).toDouble();
 
   void _fitToWidth() {
     if (!_fitted || _sessions.isEmpty) return;
 
     final m = _transform.value;
 
-    final target = _fitScale;
+    final target = _paperFitScale;
 
     final sceneY = (_viewportH / 2 - m.storage[13]) / m.storage[0];
 
