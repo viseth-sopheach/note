@@ -28,7 +28,7 @@ class SharedPrefsSettingsRepository implements SettingsRepository {
   static const String _undo = 'undo_limit';
   static const String _confirm = 'confirm_delete_page';
   static const String _remember = 'remember_position';
-  static const String _shapes = 'shape_recognition';
+  static const String _shapes = 'shape_recognition_v3';
   static const String _positionPrefix = 'editor_position_';
 
   final SharedPreferences _prefs;

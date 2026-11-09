@@ -110,8 +110,8 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   }
 
   void _armLongPress(int pointer, Offset paper, Offset global) {
+    if (widget.onLongPress == null || !DrawingController.hasClipboard) return;
     _cancelLongPress();
-    if (widget.onLongPress == null) return;
     _lpTimer = Timer(widget.longPressDuration, () {
       _lpTimer = null;
       if (pointer != _drawingPointer) return;

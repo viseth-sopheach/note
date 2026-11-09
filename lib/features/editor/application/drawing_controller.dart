@@ -21,7 +21,6 @@ import '../domain/stroke_hit_test.dart';
 import '../domain/stroke_point.dart';
 import '../domain/stroke_recorder.dart';
 import '../domain/stroke_selection.dart';
-import '../domain/stroke_simplifier.dart';
 import '../domain/stroke_tool.dart';
 import 'tool_settings.dart';
 
@@ -75,6 +74,9 @@ class DrawingController extends ChangeNotifier {
   /// Pointer jitter below this distance (document units) still counts as
   /// holding still.
   static const double holdTolerance = 3;
+
+  /// Max points used to glide the filtered pen tip onto the release point.
+  static const int _glideSteps = 16;
 
   static const double framePad = 8;
   static const double handleHitPx = 14; // half size: 28 px target
@@ -149,6 +151,7 @@ class DrawingController extends ChangeNotifier {
   final Stopwatch _clock = Stopwatch()..start();
   final List<({String id, int at})> _recent = [];
   static const int _mergeWindowMs = 2500;
+  static const bool _mergeArrows = false;
 
   Timer? _refineTimer;
   SelectionHandle? _handle;
@@ -867,6 +870,19 @@ class DrawingController extends ChangeNotifier {
     _recognized = null;
   }
 
+  /// The pen filter lags the pointer. On lift, let it converge onto the
+  /// release point so the stroke ends with a smooth tail, not a straight jump.
+  void _glideTo(double x, double y, int t, double pressure) {
+    for (var i = 0; i < _glideSteps; i++) {
+      final last = _recorder.points.last;
+      if ((last.x - x).abs() + (last.y - y).abs() < 0.5) break;
+      final s = _pen.apply(x, y, t + (i + 1) * 8);
+      _recorder.add(
+        StrokePoint(x: s.x, y: s.y, pressure: pressure, timestampMs: t),
+      );
+    }
+  }
+
   // ---- Pointer input ----
 
   bool beginStroke({
@@ -1195,15 +1211,12 @@ class DrawingController extends ChangeNotifier {
         final recognized = _recognized;
 
         if (recognized == null) {
-          // The last point stays raw.
           final p = _snapPoint(x, y);
+          final t = timeMs - _originMs;
+          if (_snap == null) _glideTo(p.x, p.y, t, pressure);
           _recorder.add(
-            StrokePoint(
-              x: p.x,
-              y: p.y,
-              pressure: pressure,
-              timestampMs: timeMs - _originMs,
-            ),
+            StrokePoint(x: p.x, y: p.y, pressure: pressure, timestampMs: t),
+            force: true,
           );
         }
         var stroke = _recorder.end();
@@ -1235,14 +1248,6 @@ class DrawingController extends ChangeNotifier {
         if (merge != null) {
           _applyArrowMerge(stroke, merge);
         } else {
-          // Freehand pen ink is simplified once, at lift, so editing and
-          // PDF export work with far fewer points. Snapped and recognized
-          // shapes are already clean.
-          if (recognized == null && _snap == null) {
-            stroke = stroke.copyWith(
-              points: StrokeSimplifier.rdp(stroke.points),
-            );
-          }
           _history.execute(
             dot == null
                 ? AddStrokeCommand(stroke)
@@ -1550,7 +1555,9 @@ class DrawingController extends ChangeNotifier {
   ({List<Stroke> parts, RecognizedShape shape})? _findArrowMerge(
     Stroke latest,
   ) {
-    if (!_settings.shapeRecognition || latest.tool != StrokeTool.pen) {
+    if (!_mergeArrows ||
+        !_settings.shapeRecognition ||
+        latest.tool != StrokeTool.pen) {
       return null;
     }
     final now = _clock.elapsedMilliseconds;

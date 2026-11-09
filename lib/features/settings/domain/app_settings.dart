@@ -24,8 +24,7 @@ final class AppSettings {
     this.undoLimit = 200,
     this.confirmDeletePage = true,
     this.rememberPosition = true,
-    this.shapeRecognition =
-        false, // off by default: handwriting stays as written
+    this.shapeRecognition = true, // hold ~1 s before lifting to snap to a shape
   });
 
   static const List<double> zoomLevels = [0.5, 0.75, 1.0, 1.25, 1.5];
@@ -55,9 +54,9 @@ final class AppSettings {
   final bool confirmDeletePage;
   final bool rememberPosition;
 
-  /// Hold-to-snap shape recognition. Off by default so handwriting is kept
-  /// exactly as written. Stored under a new prefs key, so an old saved
-  /// `true` value is ignored.
+  /// Hold-to-snap shape recognition. On by default; hold the pointer still
+  /// before lifting to snap a stroke to a clean shape. Stored under a new
+  /// prefs key, so an old saved `false` value is ignored.
   final bool shapeRecognition;
 
   AppSettings copyWith({

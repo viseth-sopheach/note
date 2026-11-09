@@ -44,12 +44,13 @@ final class StrokeRecorder {
   }
 
   /// Returns true when the point was kept.
-  bool add(StrokePoint point) {
+  bool add(StrokePoint point, {bool force = false}) {
     if (!isActive) throw StateError('No stroke is being recorded.');
     final last = _points.last;
     final dx = point.x - last.x;
     final dy = point.y - last.y;
-    if (dx * dx + dy * dy < minDistance * minDistance) return false;
+    final sq = dx * dx + dy * dy;
+    if (sq == 0 || (!force && sq < minDistance * minDistance)) return false;
     _points.add(point);
     return true;
   }
