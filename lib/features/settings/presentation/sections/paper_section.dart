@@ -7,7 +7,6 @@ import '../../../editor/domain/tip_size.dart';
 import '../../../editor/presentation/toolbar/ink_palette.dart';
 import '../../../library/domain/paper_template.dart';
 import '../../application/settings_providers.dart';
-import '../../domain/app_settings.dart';
 import '../widgets/settings_widgets.dart';
 
 class PaperSection extends ConsumerWidget {

@@ -1,6 +1,8 @@
 import 'dart:developer' as developer;
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -90,11 +92,6 @@ class LibraryScreen extends ConsumerWidget {
                     ),
                   ),
                   GlassIconButton(
-                    tooltip: 'New folder (Ctrl+Shift+N)',
-                    icon: const Icon(Icons.create_new_folder_outlined),
-                    onPressed: () => _createFolder(context, ref),
-                  ),
-                  GlassIconButton(
                     tooltip: 'Settings',
                     icon: const Icon(Icons.settings_outlined),
                     onPressed: () => context.push(AppRoutes.settings),
@@ -104,11 +101,38 @@ class LibraryScreen extends ConsumerWidget {
               const SizedBox(width: 12),
             ],
           ),
-          floatingActionButton: GlassFab(
-            tooltip: 'New notebook (Ctrl+N)',
-            label: 'New notebook',
-            icon: Icons.add,
-            onPressed: () => _createNotebook(context, ref),
+          floatingActionButton: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              GlassFab(
+                tooltip: 'New folder (Ctrl+Shift+N)',
+                label: 'New folder',
+                icon: Icons.create_new_folder_outlined,
+                onPressed: () => _createFolder(context, ref),
+              ),
+              const SizedBox(height: 10),
+              GlassFab(
+                tooltip: 'Import images',
+                label: 'Import images',
+                icon: Icons.add_photo_alternate_outlined,
+                onPressed: () => _importImages(context, ref),
+              ),
+              const SizedBox(height: 10),
+              GlassFab(
+                tooltip: 'Import PDF',
+                label: 'Import PDF',
+                icon: Icons.picture_as_pdf_outlined,
+                onPressed: () => _importPdf(context, ref),
+              ),
+              const SizedBox(height: 10),
+              GlassFab(
+                tooltip: 'New notebook (Ctrl+N)',
+                label: 'New notebook',
+                icon: Icons.add,
+                onPressed: () => _createNotebook(context, ref),
+              ),
+            ],
           ),
           body: GlassBackdrop(
             child: folders.when(
@@ -193,6 +217,41 @@ class LibraryScreen extends ConsumerWidget {
         stack,
       );
     }
+  }
+
+  Future<void> _importImages(BuildContext context, WidgetRef ref) async {
+    final files = await ImagePicker().pickMultiImage();
+    final paths = [for (final f in files) f.path];
+    if (paths.isEmpty || !context.mounted) return;
+
+    await _guard(context, 'Could not import the images.', () async {
+      final notebook = await ref
+          .read(importServiceProvider)
+          .importImages(paths, folderId: folderId);
+      if (notebook == null) throw StateError('No readable images.');
+      if (context.mounted) {
+        await context.push(AppRoutes.notebook(notebook.id));
+      }
+    });
+  }
+
+  Future<void> _importPdf(BuildContext context, WidgetRef ref) async {
+    final files = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf'],
+    );
+    final path = files.isEmpty ? null : files.first.path;
+    if (path == null || !context.mounted) return;
+
+    await _guard(context, 'Could not import the PDF.', () async {
+      final notebook = await ref
+          .read(importServiceProvider)
+          .importPdf(path, folderId: folderId);
+      if (notebook == null) throw StateError('PDF not found.');
+      if (context.mounted) {
+        await context.push(AppRoutes.notebook(notebook.id));
+      }
+    });
   }
 
   Future<File?> _exportFile(

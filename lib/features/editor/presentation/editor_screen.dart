@@ -326,8 +326,12 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // Canvas motion and scrolling
   // ------------------------------------------------------------
 
-  double get _fitScale =>
-      (_viewportW / (kPageSize.width + _pad * 2)).clamp(0.25, 4.0).toDouble();
+  double get _baseScale =>
+      _viewportW / _contentWidth; // 100% = page fits screen width
+  double get _minScale => _baseScale * 0.15; // 15%
+  double get _maxScale => _baseScale * 5.0; // 500%
+
+  double get _fitScale => _baseScale.clamp(_minScale, _maxScale).toDouble();
 
   void _fitToWidth() {
     if (!_fitted || _sessions.isEmpty) return;
@@ -924,6 +928,40 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     });
   }
 
+  Future<void> _addImagePages() async {
+    if (_busy || _sessions.isEmpty) return;
+
+    final files = await ImagePicker().pickMultiImage();
+    final paths = [for (final f in files) f.path];
+    if (paths.isEmpty || !mounted) return;
+
+    await _runExclusive('Could not add the images.', () async {
+      final service = ref.read(importServiceProvider);
+      for (final path in paths) {
+        final stored = await service.storeImage(path);
+        if (stored == null) continue;
+
+        final index = _sessions.length;
+        await _repository.insertPage(
+          widget.notebookId,
+          pageIndex: index,
+          template: _sessions.last.template,
+          imagePath: stored,
+        );
+        final session = await _openPage(index);
+        if (!mounted) {
+          session.close();
+          return;
+        }
+        setState(() {
+          _sessions.add(session);
+          _activeIndex = index;
+        });
+      }
+      _scheduleScroll(_sessions.length - 1);
+    });
+  }
+
   Future<Size> _imageSize(File file) async {
     final buffer = await ui.ImmutableBuffer.fromUint8List(
       await file.readAsBytes(),
@@ -1089,7 +1127,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
     final scale = math
         .min(limit, _viewportW / _contentWidth)
-        .clamp(0.25, 4.0)
+        .clamp(_minScale, _maxScale)
         .toDouble();
 
     _fitted = true;
@@ -1316,6 +1354,12 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           icon: Icons.file_copy_outlined,
           label: 'Duplicate page',
         ),
+      if (!_busy)
+        (
+          value: 'imagepages',
+          icon: Icons.add_photo_alternate_outlined,
+          label: 'Add images as pages',
+        ),
       if (!_busy && _sessions.length > 1)
         (value: 'delete', icon: Icons.delete_outline, label: 'Delete page'),
       if (!_busy)
@@ -1361,6 +1405,9 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
       case 'duplicate':
         unawaited(_duplicatePage());
+
+      case 'imagepages':
+        unawaited(_addImagePages());
 
       case 'delete':
         unawaited(_deletePage());
@@ -1798,8 +1845,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                                       transformationController: _transform,
                                       constrained: false,
                                       alignment: Alignment.topLeft,
-                                      minScale: 0.25,
-                                      maxScale: 4,
+                                      minScale: _minScale,
+                                      maxScale: _maxScale,
                                       scaleFactor: 1000,
                                       boundaryMargin: const EdgeInsets.all(
                                         double.infinity,

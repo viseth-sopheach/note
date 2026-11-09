@@ -1,12 +1,41 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 class ShareService {
-  /// Shares only the file as an attachment, with no subject or text.
+  static bool get _desktop =>
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+  /// Mobile: opens the share sheet.
+  /// Desktop: saves to Downloads and reveals the file.
   Future<void> shareFile(File file, String title) async {
-    await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')]),
-    );
+    if (!_desktop) {
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')]),
+      );
+      return;
+    }
+
+    final dir =
+        await getDownloadsDirectory() ??
+        await getApplicationDocumentsDirectory();
+    var target = File(p.join(dir.path, p.basename(file.path)));
+    var n = 1;
+    while (await target.exists()) {
+      final name = p.basenameWithoutExtension(file.path);
+      target = File(p.join(dir.path, '$name ($n).pdf'));
+      n++;
+    }
+    await file.copy(target.path);
+
+    if (Platform.isWindows) {
+      await Process.run('explorer.exe', ['/select,', target.path]);
+    } else if (Platform.isMacOS) {
+      await Process.run('open', ['-R', target.path]);
+    } else {
+      await Process.run('xdg-open', [dir.path]);
+    }
   }
 }
