@@ -3,7 +3,7 @@ import 'package:flutter/animation.dart';
 abstract final class GlassTokens {
   static const double blurThin = 8;
   static const double blurRegular = 14;
-  static const double blurThick = 22;
+  static const double blurThick = 30;
 
   static const double radiusSmall = 12;
   static const double radiusMedium = 20;

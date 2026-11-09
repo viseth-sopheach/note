@@ -1,4 +1,5 @@
 import 'dart:developer' as developer;
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +14,7 @@ import '../../../app/routes.dart';
 import '../../settings/application/settings_providers.dart';
 import '../../settings/domain/layout_density.dart';
 import '../../sharing/application/sharing_providers.dart';
+import '../../sharing/presentation/export_options_dialog.dart';
 import '../application/library_actions.dart';
 import '../application/library_providers.dart';
 import '../domain/folder.dart';
@@ -193,6 +195,24 @@ class LibraryScreen extends ConsumerWidget {
     }
   }
 
+  Future<File?> _exportFile(
+    BuildContext context,
+    WidgetRef ref,
+    Notebook notebook,
+  ) async {
+    final options = await ExportOptionsDialog.show(context);
+    if (options == null || !context.mounted) return null;
+    return ref
+        .read(exportServiceProvider)
+        .exportNotebookPdf(
+          notebookId: notebook.id,
+          title: notebook.title,
+          template: notebook.template,
+          pdfPath: notebook.pdfPath,
+          options: options,
+        );
+  }
+
   Future<void> _onFolderAction(
     BuildContext context,
     WidgetRef ref,
@@ -286,33 +306,21 @@ class LibraryScreen extends ConsumerWidget {
         );
       case ItemAction.export:
         await _guard(context, 'Could not export the notebook.', () async {
-          final file = await ref
-              .read(exportServiceProvider)
-              .exportNotebookPdf(
-                notebookId: notebook.id,
-                title: notebook.title,
-              );
+          final file = await _exportFile(context, ref, notebook);
+          if (file == null) return;
           await ref.read(shareServiceProvider).shareFile(file, notebook.title);
         });
       case ItemAction.drive:
         await _guard(context, 'Could not upload to Google Drive.', () async {
-          final file = await ref
-              .read(exportServiceProvider)
-              .exportNotebookPdf(
-                notebookId: notebook.id,
-                title: notebook.title,
-              );
+          final file = await _exportFile(context, ref, notebook);
+          if (file == null) return;
           await ref.read(driveServiceProvider).upload(file);
           if (context.mounted) _toast(context, 'Uploaded to Google Drive');
         });
       case ItemAction.telegram:
         await _guard(context, 'Could not send to Telegram.', () async {
-          final file = await ref
-              .read(exportServiceProvider)
-              .exportNotebookPdf(
-                notebookId: notebook.id,
-                title: notebook.title,
-              );
+          final file = await _exportFile(context, ref, notebook);
+          if (file == null) return;
           await ref.read(telegramServiceProvider).sendDocument(file);
           if (context.mounted) _toast(context, 'Sent to Telegram');
         });

@@ -1,175 +1,238 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:flutter/painting.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:pdf/pdf.dart';
+import 'package:pdf/pdf.dart' show PdfPageFormat;
 import 'package:pdf/widgets.dart' as pw;
+import 'package:pdfrx/pdfrx.dart' as rx;
 
-import '../../editor/domain/ink_geometry.dart';
 import '../../editor/domain/page_repository.dart';
-import '../../editor/domain/stroke.dart';
-import '../../editor/domain/stroke_tool.dart';
+import '../../editor/presentation/drawing/ink_renderer.dart';
+import '../../editor/presentation/paper/paper_colors.dart';
+import '../../editor/presentation/paper/paper_painter.dart';
+import '../../library/domain/paper_template.dart';
+import '../domain/export_options.dart';
 
 class ExportService {
   ExportService(this._pages);
 
   final PageRepository _pages;
 
-  static const double _s = 0.75; // 96 dpi pixels -> PDF points
-  static const double _w = 794 * _s;
-  static const double _h = 1123 * _s;
+  /// Raster pixels per document unit (288 dpi).
+  static const double _scale = 3;
+
+  /// A4 in PDF points (same aspect as kPageSize).
+  static const double _pdfW = 794 * 0.75;
+  static const double _pdfH = 1123 * 0.75;
 
   Future<File> exportNotebookPdf({
     required String notebookId,
     required String title,
+    required PaperTemplate template,
+    String? pdfPath,
+    ExportOptions options = const ExportOptions(),
   }) async {
-    final count = math.max(1, await _pages.pageCount(notebookId));
-    final doc = pw.Document();
+    rx.PdfDocument? source;
+    try {
+      if (pdfPath != null) source = await rx.PdfDocument.openFile(pdfPath);
+      final count =
+          source?.pages.length ??
+          math.max(1, await _pages.pageCount(notebookId));
 
-    for (var i = 0; i < count; i++) {
-      final strokes = await _pages.loadStrokes(notebookId, pageIndex: i);
-      final imagePath = await _pages.loadImagePath(notebookId, pageIndex: i);
-      final image = imagePath != null && File(imagePath).existsSync()
-          ? pw.MemoryImage(await File(imagePath).readAsBytes())
-          : null;
-
-      final overlays = <pw.Widget>[];
-      for (final img in await _pages.loadImages(notebookId, pageIndex: i)) {
-        final file = File(img.path);
-        if (!file.existsSync()) continue;
-        overlays.add(
-          pw.Positioned(
-            left: img.x * _s,
-            top: img.y * _s,
-            child: pw.SizedBox(
-              width: img.width * _s,
-              height: img.height * _s,
-              child: pw.Image(
-                pw.MemoryImage(await file.readAsBytes()),
-                fit: pw.BoxFit.fill,
-              ),
+      final doc = pw.Document();
+      for (var i = 0; i < count; i++) {
+        final png = await _renderPage(
+          notebookId: notebookId,
+          index: i,
+          notebookTemplate: template,
+          options: options,
+          sourcePage: source?.pages[i],
+        );
+        final image = pw.MemoryImage(png);
+        doc.addPage(
+          pw.Page(
+            pageFormat: const PdfPageFormat(_pdfW, _pdfH),
+            margin: pw.EdgeInsets.zero,
+            build: (_) => pw.FullPage(
+              ignoreMargins: true,
+              child: pw.Image(image, fit: pw.BoxFit.fill),
             ),
           ),
         );
       }
 
-      for (final t in await _pages.loadTexts(notebookId, pageIndex: i)) {
-        if (t.text.trim().isEmpty) continue;
-        overlays.add(
-          pw.Positioned(
-            left: (t.x + 6) * _s,
-            top: (t.y + 6) * _s,
-            child: pw.SizedBox(
-              width: (t.width - 12) * _s,
-              child: pw.Text(
-                t.text,
-                style: pw.TextStyle(
-                  fontSize: t.fontSize * _s,
-                  color: PdfColor.fromInt(
-                    0xFF000000 | (t.colorValue & 0xFFFFFF),
-                  ),
-                ),
-                textAlign: switch (t.align) {
-                  1 => pw.TextAlign.center,
-                  2 => pw.TextAlign.right,
-                  _ => pw.TextAlign.left,
-                },
-              ),
-            ),
-          ),
-        );
-      }
-
-      doc.addPage(
-        pw.Page(
-          pageFormat: const PdfPageFormat(_w, _h),
-          margin: pw.EdgeInsets.zero,
-          build: (_) => pw.Stack(
-            children: [
-              if (image != null)
-                pw.Positioned.fill(
-                  child: pw.Image(image, fit: pw.BoxFit.contain),
-                ),
-              ...overlays,
-              pw.CustomPaint(
-                size: const PdfPoint(_w, _h),
-                painter: (canvas, size) => _paint(canvas, size, strokes),
-              ),
-            ],
-          ),
-        ),
-      );
+      final dir = await getTemporaryDirectory();
+      final safe = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final file = File(p.join(dir.path, '$safe.pdf'));
+      await file.writeAsBytes(await doc.save(), flush: true);
+      return file;
+    } finally {
+      source?.dispose();
     }
-
-    final dir = await getTemporaryDirectory();
-    final safe = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final file = File(p.join(dir.path, '$safe.pdf'));
-    await file.writeAsBytes(await doc.save(), flush: true);
-    return file;
   }
 
-  void _paint(PdfGraphics canvas, PdfPoint size, List<Stroke> strokes) {
-    for (final stroke in strokes) {
-      if (stroke.points.isEmpty) continue;
-      final highlighter = stroke.tool == StrokeTool.highlighter;
-      final color = PdfColor.fromInt(
-        0xFF000000 | (stroke.colorValue & 0xFFFFFF),
-      );
-      final width = stroke.width * (highlighter ? 6 : 1) * _s;
+  Future<Uint8List> _renderPage({
+    required String notebookId,
+    required int index,
+    required PaperTemplate notebookTemplate,
+    required ExportOptions options,
+    rx.PdfPage? sourcePage,
+  }) async {
+    final strokes = await _pages.loadStrokes(notebookId, pageIndex: index);
+    final images = await _pages.loadImages(notebookId, pageIndex: index);
+    final texts = await _pages.loadTexts(notebookId, pageIndex: index);
+    final bgPath = await _pages.loadImagePath(notebookId, pageIndex: index);
+    final template =
+        options.paper.template ??
+        await _pages.loadTemplate(notebookId, pageIndex: index) ??
+        notebookTemplate;
 
-      canvas.saveContext();
-      canvas.setGraphicState(PdfGraphicState(opacity: highlighter ? 0.35 : 1));
-
-      if (stroke.points.length == 1) {
-        final pt = stroke.points.first;
-        canvas.setFillColor(color);
-        canvas.drawEllipse(pt.x * _s, size.y - pt.y * _s, width / 2, width / 2);
-        canvas.fillPath();
-      } else {
-        // Same variable-width outline the canvas paints on screen, so the
-        // exported PDF matches what the user sees. Highlighters stay a plain
-        // uniform-width polyline (their ink is flat by design).
-        final outline =
-            highlighter || !InkGeometry.usesVariableWidth(stroke.points)
-            ? null
-            : InkGeometry.build(
-                stroke.points,
-                stroke.width,
-                seed: InkGeometry.seedFor(stroke.id),
-              );
-        if (outline != null) {
-          canvas.setFillColor(color);
-          canvas.moveTo(
-            outline.left.first.x * _s,
-            size.y - outline.left.first.y * _s,
-          );
-          for (final v in outline.left.skip(1)) {
-            canvas.lineTo(v.x * _s, size.y - v.y * _s);
-          }
-          for (final v in outline.right.reversed) {
-            canvas.lineTo(v.x * _s, size.y - v.y * _s);
-          }
-          canvas.closePath();
-          canvas.fillPath();
-          for (final c in [outline.start, outline.end]) {
-            canvas.drawEllipse(c.x * _s, size.y - c.y * _s, c.r * _s, c.r * _s);
-            canvas.fillPath();
-          }
-        } else {
-          canvas.setStrokeColor(color);
-          canvas.setLineWidth(width);
-          canvas.setLineCap(PdfLineCap.round);
-          canvas.setLineJoin(PdfLineJoin.round);
-          final first = stroke.points.first;
-          canvas.moveTo(first.x * _s, size.y - first.y * _s);
-          for (final pt in stroke.points.skip(1)) {
-            canvas.lineTo(pt.x * _s, size.y - pt.y * _s);
-          }
-          canvas.strokePath();
-        }
+    final owned = <ui.Image>[];
+    try {
+      ui.Image? background;
+      if (sourcePage != null) {
+        background = await _renderPdfPage(sourcePage);
+      } else if (bgPath != null) {
+        background = await _decode(bgPath);
       }
-      canvas.restoreContext();
+      if (background != null) owned.add(background);
+
+      // Same rule as the editor: backgrounds and PDFs are never darkened.
+      final dark =
+          options.colorMode == ExportColorMode.dark && background == null;
+
+      const size = kPageSize;
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder)..scale(_scale);
+
+      if (background != null) {
+        canvas.drawRect(
+          Offset.zero & size,
+          Paint()..color = const Color(0xFFFFFFFF),
+        );
+        _drawContained(canvas, background, size);
+      } else {
+        PaperPainter(template, dark: dark).paint(canvas, size);
+      }
+
+      canvas
+        ..save()
+        ..clipRect(Offset.zero & size);
+
+      for (final img in images) {
+        final decoded = await _decode(img.path);
+        if (decoded == null) continue;
+        owned.add(decoded);
+        canvas.drawImageRect(
+          decoded,
+          Rect.fromLTWH(
+            0,
+            0,
+            decoded.width.toDouble(),
+            decoded.height.toDouble(),
+          ),
+          Rect.fromLTWH(img.x, img.y, img.width, img.height),
+          Paint()..filterQuality = FilterQuality.medium,
+        );
+      }
+
+      for (final t in texts) {
+        if (t.text.trim().isEmpty) continue;
+        final width = math.max(1.0, t.width - 12);
+        final painter = TextPainter(
+          text: TextSpan(
+            text: t.text,
+            style: TextStyle(
+              color: Color(PaperColors.inkFor(t.colorValue, darkPaper: dark)),
+              fontSize: t.fontSize,
+              height: 1.25,
+            ),
+          ),
+          textAlign: switch (t.align) {
+            1 => TextAlign.center,
+            2 => TextAlign.right,
+            _ => TextAlign.left,
+          },
+          textDirection: TextDirection.ltr,
+        )..layout(minWidth: width, maxWidth: width);
+        painter.paint(canvas, Offset(t.x + 6, t.y + 6));
+        painter.dispose();
+      }
+
+      for (final s in strokes) {
+        InkRenderer.paintStroke(
+          canvas,
+          points: s.points,
+          tool: s.tool,
+          colorValue: PaperColors.inkFor(s.colorValue, darkPaper: dark),
+          width: s.width,
+        );
+      }
+      canvas.restore();
+
+      final picture = recorder.endRecording();
+      final raster = await picture.toImage(
+        (size.width * _scale).round(),
+        (size.height * _scale).round(),
+      );
+      picture.dispose();
+      try {
+        final data = await raster.toByteData(format: ui.ImageByteFormat.png);
+        if (data == null) throw StateError('Could not encode page $index.');
+        return data.buffer.asUint8List();
+      } finally {
+        raster.dispose();
+      }
+    } finally {
+      for (final image in owned) {
+        image.dispose();
+      }
     }
+  }
+
+  Future<ui.Image?> _decode(String path) async {
+    final file = File(path);
+    if (!file.existsSync()) return null;
+    final codec = await ui.instantiateImageCodec(await file.readAsBytes());
+    try {
+      return (await codec.getNextFrame()).image;
+    } finally {
+      codec.dispose();
+    }
+  }
+
+  /// Renders the PDF page at the size it occupies on screen (contain-fit).
+  Future<ui.Image?> _renderPdfPage(rx.PdfPage page) async {
+    final fit = applyBoxFit(
+      BoxFit.contain,
+      Size(page.width, page.height),
+      kPageSize,
+    ).destination;
+    final pixels = await page.render(
+      fullWidth: fit.width * _scale,
+      fullHeight: fit.height * _scale,
+    );
+    if (pixels == null) return null;
+    try {
+      return await pixels.createImage();
+    } finally {
+      pixels.dispose();
+    }
+  }
+
+  void _drawContained(Canvas canvas, ui.Image image, Size box) {
+    final src = Size(image.width.toDouble(), image.height.toDouble());
+    final fit = applyBoxFit(BoxFit.contain, src, box).destination;
+    final dst = Alignment.center.inscribe(fit, Offset.zero & box);
+    canvas.drawImageRect(
+      image,
+      Offset.zero & src,
+      dst,
+      Paint()..filterQuality = FilterQuality.high,
+    );
   }
 }

@@ -9,10 +9,9 @@ import '../../../../app/glass/glass_tokens.dart';
 import '../../application/drawing_controller.dart';
 import '../../application/measure_controller.dart';
 import '../../domain/stroke_tool.dart';
+import '../../domain/tip_size.dart';
 import 'ink_palette.dart';
 
-const List<double> _penWidths = [1, 2, 4, 6];
-const List<double> _highlighterWidths = [2, 3, 4];
 const double _menuWidth = 248;
 
 class FloatingToolbar extends StatefulWidget {
@@ -373,7 +372,6 @@ class _InkOptions extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final glass = context.glass;
-    final widths = tool == StrokeTool.pen ? _penWidths : _highlighterWidths;
 
     return GlassSurface(
       intensity: GlassIntensity.thick,
@@ -414,45 +412,58 @@ class _InkOptions extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final w in widths)
-                  Semantics(
-                    button: true,
-                    selected: w == controller.width,
-                    label: 'Width ${w.toStringAsFixed(0)}',
-                    child: GestureDetector(
-                      onTap: () => controller.selectWidth(w),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        margin: const EdgeInsets.only(right: 8),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: w == controller.width
-                              ? scheme.primary.withValues(alpha: 0.18)
-                              : null,
-                          border: Border.all(
-                            color: w == controller.width
-                                ? scheme.primary
-                                : glass.border,
-                          ),
-                        ),
-                        child: Container(
-                          width: 4 + w * 2,
-                          height: 4 + w * 2,
-                          decoration: BoxDecoration(
-                            color: Color(controller.colorValue)
-                                .withValues(alpha: 1),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
+            Builder(
+              builder: (context) {
+                final percent = TipSize.percentFor(tool, controller.width);
+                final dot = controller.width.clamp(2.0, 28.0).toDouble();
+                return SizedBox(
+                  width: 248,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('Tip size'),
+                          const Spacer(),
+                          Text('$percent%'),
+                        ],
                       ),
-                    ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Slider(
+                              min: TipSize.minPercent.toDouble(),
+                              max: TipSize.maxPercent.toDouble(),
+                              divisions:
+                                  TipSize.maxPercent - TipSize.minPercent,
+                              value: percent.toDouble(),
+                              label: '$percent%',
+                              onChanged: (v) => controller.selectWidth(
+                                TipSize.widthFor(tool, v.round()),
+                              ),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 32,
+                            height: 32,
+                            child: Center(
+                              child: Container(
+                                width: dot,
+                                height: dot,
+                                decoration: BoxDecoration(
+                                  color: Color(controller.colorValue)
+                                      .withValues(alpha: 1),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-              ],
+                );
+              },
             ),
           ],
         ),

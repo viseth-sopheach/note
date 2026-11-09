@@ -31,10 +31,10 @@ class GlassTheme extends ThemeExtension<GlassTheme> {
   );
 
   static const GlassTheme dark = GlassTheme(
-    fill: Color(0x24FFFFFF),
-    highlight: Color(0x33FFFFFF),
+    fill: Color(0x1AFFFFFF),
+    highlight: Color(0x2EFFFFFF),
     border: Color(0x2EFFFFFF),
-    shadow: Color(0x59000000),
+    shadow: Color(0x80000000),
     solid: Color(0xFF2C2C2E),
     hover: Color(0x1FFFFFFF),
     canvas: Color(0xFF1C1C1E),

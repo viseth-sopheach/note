@@ -32,29 +32,32 @@ class GlassSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final glass = context.glass;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final shape = BorderRadius.circular(radius);
     final opaque = MediaQuery.highContrastOf(context);
 
-    final decoration = BoxDecoration(
-      borderRadius: shape,
-      border: Border.all(color: glass.border),
-      color: opaque ? glass.solid : null,
-      gradient: opaque
-          ? null
-          : LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color.alphaBlend(glass.highlight, glass.fill),
-                glass.fill,
-              ],
-              stops: const [0, 0.55],
-            ),
-    );
-
     Widget surface = DecoratedBox(
-      decoration: decoration,
-      child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+      decoration: BoxDecoration(
+        borderRadius: shape,
+        color: opaque ? glass.solid : (dark ? const Color(0x3D000000) : null),
+        gradient: opaque
+            ? null
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.alphaBlend(glass.highlight, glass.fill),
+                  glass.fill,
+                ],
+                stops: const [0, 0.55],
+              ),
+      ),
+      child: CustomPaint(
+        foregroundPainter: opaque
+            ? null
+            : _RimPainter(radius: radius, dark: dark),
+        child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+      ),
     );
 
     if (!opaque) {
@@ -72,8 +75,8 @@ class GlassSurface extends StatelessWidget {
               ? [
                   BoxShadow(
                     color: glass.shadow,
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
                   ),
                 ]
               : null,
@@ -82,4 +85,51 @@ class GlassSurface extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Specular rim: bright top-left edge, faint middle, soft bottom-right edge.
+class _RimPainter extends CustomPainter {
+  const _RimPainter({required this.radius, required this.dark});
+
+  final double radius;
+  final bool dark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rrect = RRect.fromRectAndRadius(
+      (Offset.zero & size).deflate(0.5),
+      Radius.circular(radius),
+    );
+    final rim = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Colors.white.withValues(alpha: dark ? 0.55 : 0.9),
+        Colors.white.withValues(alpha: dark ? 0.06 : 0.15),
+        Colors.white.withValues(alpha: dark ? 0.22 : 0.5),
+      ],
+      stops: const [0, 0.5, 1],
+    ).createShader(Offset.zero & size);
+
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..shader = rim
+        ..isAntiAlias = true,
+    );
+    canvas.drawRRect(
+      rrect.deflate(1.5),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = Colors.white.withValues(alpha: dark ? 0.06 : 0.2)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RimPainter old) =>
+      old.radius != radius || old.dark != dark;
 }

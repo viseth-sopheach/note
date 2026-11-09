@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/glass/glass_divider.dart';
 import '../../../editor/domain/stroke_tool.dart';
+import '../../../editor/domain/tip_size.dart';
 import '../../../editor/presentation/toolbar/ink_palette.dart';
 import '../../../library/domain/paper_template.dart';
 import '../../application/settings_providers.dart';
@@ -20,8 +21,6 @@ class PaperSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
     final notifier = ref.read(appSettingsProvider.notifier);
-
-    String widthLabel(double w) => 'Width ${w.toStringAsFixed(0)}';
 
     return SettingsSection(
       title: 'Note-taking & Paper',
@@ -56,14 +55,12 @@ class PaperSection extends ConsumerWidget {
               notifier.update((s) => s.copyWith(penColorValue: c.toARGB32())),
         ),
         const GlassDivider(),
-        SettingsChoiceTile<double>(
-          title: 'Pen thickness',
-          value: settings.penWidth,
-          options: [
-            for (final w in AppSettings.penWidths)
-              (value: w, label: widthLabel(w)),
-          ],
-          onChanged: (w) => notifier.update((s) => s.copyWith(penWidth: w)),
+        SettingsPercentTile(
+          title: 'Pen tip size',
+          percent: TipSize.percentFor(StrokeTool.pen, settings.penWidth),
+          onChanged: (v) => notifier.update(
+            (s) => s.copyWith(penWidth: TipSize.widthFor(StrokeTool.pen, v)),
+          ),
         ),
         const GlassDivider(),
         SettingsColorRow(
@@ -75,15 +72,17 @@ class PaperSection extends ConsumerWidget {
           ),
         ),
         const GlassDivider(),
-        SettingsChoiceTile<double>(
-          title: 'Highlighter thickness',
-          value: settings.highlighterWidth,
-          options: [
-            for (final w in AppSettings.highlighterWidths)
-              (value: w, label: widthLabel(w)),
-          ],
-          onChanged: (w) =>
-              notifier.update((s) => s.copyWith(highlighterWidth: w)),
+        SettingsPercentTile(
+          title: 'Highlighter tip size',
+          percent: TipSize.percentFor(
+            StrokeTool.highlighter,
+            settings.highlighterWidth,
+          ),
+          onChanged: (v) => notifier.update(
+            (s) => s.copyWith(
+              highlighterWidth: TipSize.widthFor(StrokeTool.highlighter, v),
+            ),
+          ),
         ),
       ],
     );

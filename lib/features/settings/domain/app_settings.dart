@@ -1,4 +1,5 @@
 import '../../editor/domain/stroke_tool.dart';
+import '../../editor/domain/tip_size.dart';
 import '../../library/domain/paper_template.dart';
 import 'app_theme_mode.dart';
 import 'layout_density.dart';
@@ -27,8 +28,6 @@ final class AppSettings {
         false, // off by default: handwriting stays as written
   });
 
-  static const List<double> penWidths = [1, 2, 4, 6];
-  static const List<double> highlighterWidths = [2, 3, 4];
   static const List<double> zoomLevels = [0.5, 0.75, 1.0, 1.25, 1.5];
   static const List<int> undoLimits = [50, 100, 200, 500];
 
@@ -116,14 +115,20 @@ final class AppSettings {
       defaultTool: defaultTool == StrokeTool.highlighter
           ? StrokeTool.highlighter
           : StrokeTool.pen,
-      penWidth: penWidths.contains(penWidth) ? penWidth : 2,
-      highlighterWidth: highlighterWidths.contains(highlighterWidth)
-          ? highlighterWidth
-          : 3,
+      penWidth: _clampWidth(penWidth, TipSize.penMin, TipSize.penMax, 2),
+      highlighterWidth: _clampWidth(
+        highlighterWidth,
+        TipSize.highlighterMin,
+        TipSize.highlighterMax,
+        3,
+      ),
       defaultZoom: zoomLevels.contains(defaultZoom) ? defaultZoom : 1.0,
       undoLimit: undoLimits.contains(undoLimit) ? undoLimit : 200,
       toolbarOrder: List<StrokeTool>.unmodifiable(order),
       hiddenTools: Set<StrokeTool>.unmodifiable(hidden),
     );
   }
+
+  static double _clampWidth(double v, double lo, double hi, double fallback) =>
+      v.isFinite ? v.clamp(lo, hi).toDouble() : fallback;
 }

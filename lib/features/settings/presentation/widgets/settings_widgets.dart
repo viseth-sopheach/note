@@ -222,3 +222,46 @@ class SettingsColorRow extends StatelessWidget {
     );
   }
 }
+
+class SettingsPercentTile extends StatelessWidget {
+  const SettingsPercentTile({
+    super.key,
+    required this.title,
+    required this.percent,
+    required this.onChanged,
+  });
+
+  final String title;
+  final int percent;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              ),
+              Text('$percent%'),
+            ],
+          ),
+          Slider(
+            min: 1,
+            max: 100,
+            divisions: 99,
+            value: percent.toDouble(),
+            label: '$percent%',
+            onChanged: (v) => onChanged(v.round()),
+          ),
+        ],
+      ),
+    );
+  }
+}

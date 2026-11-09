@@ -88,7 +88,7 @@ void main() {
     expect(s.themeMode, AppThemeMode.system);
     expect(s.defaultTemplate, PaperTemplate.blank);
     expect(s.accentColorValue, const AppSettings().accentColorValue);
-    expect(s.penWidth, 2);
+    expect(s.penWidth, 3.5);
     expect(s.undoLimit, 200);
     expect(s.toolbarOrder, StrokeTool.values);
     expect(s.hiddenTools, isEmpty);

@@ -281,7 +281,7 @@ class DrawingController extends ChangeNotifier {
   /// selected. Does nothing while a stroke is being drawn.
   bool selectAt(double x, double y, {bool shapesOnly = false}) {
     if (isDrawing) return false;
-    final radius = 10 / _scale;
+    final radius = (shapesOnly ? 14 : 10) / _scale;
     for (var i = _strokes.length - 1; i >= 0; i--) {
       final s = _strokes[i];
       if (!_selectable(s)) continue;
@@ -825,7 +825,9 @@ class DrawingController extends ChangeNotifier {
         // A pen/highlighter down on a handle grabs the selection; on ink
         // or empty space it just clears the selection and starts drawing.
         if (_selected.isNotEmpty) {
-          if (_handleAt(x, y) != null && _tryBeginSelectionGesture(x, y)) {
+          // Handles and the frame body both grab the selection, so a selected
+          // shape can be moved, resized or rotated without switching tools.
+          if (_tryBeginSelectionGesture(x, y)) {
             notifyListeners();
             _live.ping();
             return true;

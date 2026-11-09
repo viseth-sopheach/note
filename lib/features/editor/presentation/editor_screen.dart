@@ -29,6 +29,7 @@ import '../../settings/application/settings_providers.dart';
 import '../../settings/domain/editor_position.dart';
 import '../../settings/domain/settings_repository.dart';
 import '../../sharing/application/sharing_providers.dart';
+import '../../sharing/presentation/export_options_dialog.dart';
 import '../application/autosave_controller.dart';
 import '../application/canvas_motion.dart';
 import '../application/drawing_controller.dart';
@@ -53,6 +54,7 @@ import 'measure/measure_overlay.dart';
 import 'paper/page_metrics.dart';
 import 'paper/paper_painter.dart';
 import 'paper/paper_view.dart';
+import 'paper/pdf_page_layer.dart';
 import 'toolbar/floating_toolbar.dart';
 import 'toolbar/selection_action_bar.dart';
 import 'widgets/web_scrollbar.dart';
@@ -595,16 +597,23 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // Export
   // ------------------------------------------------------------
 
-  Future<void> exportPdf(String title) {
+  Future<void> exportPdf(String title) async {
+    final options = await ExportOptionsDialog.show(context);
+    if (options == null || !mounted) return;
+
     return _runExclusive('Could not export the PDF.', () async {
       if (!await _flushAll()) {
         throw StateError('Unsaved changes could not be saved.');
       }
-
       final file = await ref
           .read(exportServiceProvider)
-          .exportNotebookPdf(notebookId: widget.notebookId, title: title);
-
+          .exportNotebookPdf(
+            notebookId: widget.notebookId,
+            title: title,
+            template: widget.template,
+            pdfPath: widget.pdfPath,
+            options: options,
+          );
       await ref.read(shareServiceProvider).shareFile(file, title);
     });
   }
@@ -831,11 +840,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       }
 
       if (camera) {
-        final shot = await ImagePicker().pickImage(
-          source: ImageSource.camera,
-          maxWidth: 2480,
-          imageQuality: 90,
-        );
+        final shot = await ImagePicker().pickImage(source: ImageSource.camera);
 
         return shot?.path;
       }
@@ -1404,9 +1409,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           child: Image.file(
             File(image),
             fit: BoxFit.contain,
-            errorBuilder: (_, _, _) {
-              return const Center(child: Icon(Icons.broken_image_outlined));
-            },
+            cacheWidth: 4096,
+            filterQuality: FilterQuality.high,
+            errorBuilder: (_, _, _) =>
+                const Center(child: Icon(Icons.broken_image_outlined)),
           ),
         ),
       );
@@ -1432,7 +1438,13 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       child: SizedBox(
         width: kPageSize.width,
         height: kPageSize.height,
-        child: PdfPageView(document: pdf, pageNumber: session.index + 1),
+        child: PdfPageLayer(
+          key: ValueKey('pdf-${session.index}'),
+          document: pdf,
+          pageNumber: session.index + 1,
+          transform: _transform,
+          scale: _scale,
+        ),
       ),
     );
   }

@@ -34,11 +34,13 @@ class _GlassIconButtonState extends State<GlassIconButton> {
     final still = MediaQuery.disableAnimationsOf(context);
     final duration = still ? Duration.zero : GlassTokens.press;
 
+    final dark = scheme.brightness == Brightness.dark;
+    const accent = Color(0xFF0A84FF);
     final color = !enabled
         ? scheme.onSurface.withValues(alpha: 0.38)
         : widget.selected
-        ? scheme.primary
-        : scheme.onSurface;
+        ? accent
+        : (dark ? Colors.white.withValues(alpha: 0.92) : scheme.onSurface);
 
     return Tooltip(
       message: widget.tooltip,
@@ -71,8 +73,15 @@ class _GlassIconButtonState extends State<GlassIconButton> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: widget.selected
-                      ? scheme.primary.withValues(alpha: 0.18)
+                      ? accent.withValues(alpha: 0.24)
                       : Colors.transparent,
+                  border: widget.selected
+                      ? Border.all(
+                          color: Colors.white.withValues(
+                            alpha: dark ? 0.22 : 0.5,
+                          ),
+                        )
+                      : null,
                 ),
                 child: IconTheme.merge(
                   data: IconThemeData(color: color, size: GlassTokens.iconSize),

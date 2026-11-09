@@ -7,8 +7,8 @@ class GlassPill extends StatelessWidget {
   const GlassPill({
     super.key,
     required this.children,
-    this.intensity = GlassIntensity.regular,
-    this.padding = const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+    this.intensity = GlassIntensity.thick,
+    this.padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
   });
 
   final List<Widget> children;
