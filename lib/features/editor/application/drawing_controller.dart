@@ -12,6 +12,7 @@ import '../domain/drawing_command.dart';
 import '../domain/pen_filter.dart';
 import '../domain/selection_handle.dart';
 import '../domain/shape_center.dart';
+import '../domain/shape_choice.dart';
 import '../domain/shape_geometry.dart';
 import '../domain/shape_recognizer.dart';
 import '../domain/smart_stroke.dart';
@@ -279,8 +280,13 @@ class DrawingController extends ChangeNotifier {
   /// Selects the top-most stroke under (x, y). With [shapesOnly], only
   /// non-freehand strokes are eligible. Returns true when a stroke was
   /// selected. Does nothing while a stroke is being drawn.
-  bool selectAt(double x, double y, {bool shapesOnly = false}) {
-    if (isDrawing) return false;
+  bool selectAt(
+    double x,
+    double y, {
+    bool shapesOnly = false,
+    bool duringStroke = false,
+  }) {
+    if (isDrawing && !duringStroke) return false;
     final radius = (shapesOnly ? 14 : 10) / _scale;
     for (var i = _strokes.length - 1; i >= 0; i--) {
       final s = _strokes[i];
@@ -586,6 +592,78 @@ class DrawingController extends ChangeNotifier {
       _history.record(command);
       _revision++;
     }
+    notifyListeners();
+    _live.ping();
+  }
+
+  // ---- Convert selected shape ----
+
+  Stroke? get _convertible {
+    Stroke? found;
+    for (final s in _strokes) {
+      if (!_selected.contains(s.id) || ShapeCenter.isDot(s)) continue;
+      if (found != null) return null;
+      found = s;
+    }
+    final k = found?.shape;
+    return k == ShapeKind.rectangle ||
+            k == ShapeKind.ellipse ||
+            k == ShapeKind.triangle
+        ? found
+        : null;
+  }
+
+  /// True when exactly one closed shape is selected.
+  bool get canConvertSelection => !isDrawing && _convertible != null;
+
+  void convertSelectionTo(ShapeChoice choice) {
+    if (isDrawing) return;
+    final old = _convertible;
+    if (old == null) return;
+    final b = StrokeSelection.pointBoundsOf([old]);
+    if (b == null) return;
+
+    final cx = (b.left + b.right) / 2;
+    final cy = (b.top + b.bottom) / 2;
+    var w = b.right - b.left;
+    var h = b.bottom - b.top;
+    if (choice == ShapeChoice.circle || choice == ShapeChoice.square) {
+      w = h = math.max(w, h);
+    }
+    final tool = switch (choice) {
+      ShapeChoice.circle || ShapeChoice.ellipse => StrokeTool.ellipse,
+      ShapeChoice.square || ShapeChoice.rectangle => StrokeTool.rectangle,
+      ShapeChoice.triangle => StrokeTool.triangle,
+    };
+
+    final next = old.copyWith(
+      points: ShapeGeometry.build(
+        tool,
+        x0: cx - w / 2,
+        y0: cy - h / 2,
+        x1: cx + w / 2,
+        y1: cy + h / 2,
+      ),
+      shape: _fromTool(tool),
+    );
+
+    final commands = <DrawingCommand>[
+      ReplaceStrokesCommand([old], [next]),
+    ];
+    final dotId = ShapeCenter.dotId(old.id);
+    final dotIndex = _strokes.indexWhere((s) => s.id == dotId);
+    if (dotIndex >= 0) {
+      commands.add(RemoveStrokesCommand()..take(_strokes, dotIndex));
+    }
+    final dot = tool == StrokeTool.ellipse ? ShapeCenter.dotFor(next) : null;
+    if (dot != null) commands.add(AddStrokeCommand(dot));
+
+    _history.execute(CompositeCommand(commands), _strokes);
+    _revision++;
+    _selected
+      ..clear()
+      ..add(next.id);
+    _expandSelection();
     notifyListeners();
     _live.ping();
   }

@@ -39,6 +39,7 @@ import '../application/page_images_controller.dart';
 import '../application/page_texts_controller.dart';
 import '../application/tool_settings.dart';
 import '../domain/page_repository.dart';
+import '../domain/shape_choice.dart';
 import '../domain/stroke_tool.dart';
 import 'dialogs/paper_template_dialog.dart';
 import 'drawing/drawing_surface.dart';
@@ -1502,6 +1503,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
               point.dx,
               point.dy,
               shapesOnly: true,
+              duringStroke: true,
             )) {
               session.images.select(null);
               session.texts.select(null);
@@ -1600,6 +1602,30 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   }
 
   // ------------------------------------------------------------
+  // Shape conversion
+  // ------------------------------------------------------------
+
+  static IconData _shapeIcon(ShapeChoice s) => switch (s) {
+    ShapeChoice.circle => Icons.circle_outlined,
+    ShapeChoice.square => Icons.crop_square,
+    ShapeChoice.rectangle => Icons.rectangle_outlined,
+    ShapeChoice.ellipse => Icons.egg_outlined,
+    ShapeChoice.triangle => Icons.change_history_outlined,
+  };
+
+  Future<void> _showShapeMenu(DrawingController c, Offset anchor) async {
+    final choice = await showGlassMenu<ShapeChoice>(
+      context: context,
+      position: anchor,
+      items: [
+        for (final s in ShapeChoice.values)
+          GlassMenuItem(value: s, icon: _shapeIcon(s), label: s.label),
+      ],
+    );
+    if (choice != null && mounted) c.convertSelectionTo(choice);
+  }
+
+  // ------------------------------------------------------------
   // Selection action bar
   // ------------------------------------------------------------
 
@@ -1636,7 +1662,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         final bottom = (o.dy + f.bottom + pad) * k + m.storage[13];
 
         final paste = DrawingController.hasClipboard;
-        final w = SelectionActionBar.widthFor(paste: paste);
+        final canMore = c.canConvertSelection;
+        final w = SelectionActionBar.widthFor(paste: paste, more: canMore);
         const h = SelectionActionBar.height;
         const gap = 18.0;
         const minY = 72.0;
@@ -1658,6 +1685,9 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                 onDuplicate: c.duplicateSelection,
                 onDelete: c.deleteSelection,
                 onPaste: paste ? c.pasteClipboard : null,
+                onMore: canMore
+                    ? (anchor) => unawaited(_showShapeMenu(c, anchor))
+                    : null,
               ),
             ),
           ],
