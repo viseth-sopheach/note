@@ -183,7 +183,7 @@ class _Picture extends StatelessWidget {
         child: Image.file(
           File(path),
           fit: BoxFit.fill,
-          cacheWidth: 4096,
+          cacheWidth: 2048,
           filterQuality: FilterQuality.high,
           gaplessPlayback: true,
           errorBuilder: (_, _, _) => const ColoredBox(

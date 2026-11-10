@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../../../app/glass/glass_menu.dart';
+import '../../../sharing/application/drive_service.dart';
 
 enum ItemAction { rename, move, delete, export, drive, telegram }
 
@@ -21,7 +20,7 @@ class ItemActionsMenu extends StatelessWidget {
   final bool canShare;
 
   Future<void> _show(BuildContext context, Offset globalPosition) async {
-    final driveOk = Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
+    final driveOk = DriveService.isSupported;
     final action = await showGlassMenu<ItemAction>(
       context: context,
       position: globalPosition,

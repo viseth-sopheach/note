@@ -28,7 +28,7 @@ class _ShareIntentListenerState extends ConsumerState<ShareIntentListener> {
   @override
   void initState() {
     super.initState();
-    if (!(Platform.isAndroid || Platform.isIOS)) return;
+    if (!Platform.isAndroid) return; // iOS share extension is not set up yet
 
     // App was closed: wait for the first frame so the router is ready.
     WidgetsBinding.instance.addPostFrameCallback((_) async {

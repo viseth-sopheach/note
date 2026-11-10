@@ -194,6 +194,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   bool _textMode = false;
 
   int _activeIndex = 0;
+  int _firstVisible = 0;
+  int _lastVisible = 0;
 
   double _viewportW = 600;
   double _viewportH = 600;
@@ -244,8 +246,31 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // Canvas transformation
   // ------------------------------------------------------------
 
+  void _updateVisibleRange() {
+    if (!mounted || _sessions.isEmpty) return;
+    final m = _transform.value;
+    final scale = m.storage[0];
+    final top = -m.storage[13] / scale;
+    final bottom = (_viewportH - m.storage[13]) / scale;
+    final lo = (((top - _pad) / _cellH).floor() - 1).clamp(
+      0,
+      _sessions.length - 1,
+    );
+    final hi = (((bottom - _pad) / _cellH).floor() + 1).clamp(
+      0,
+      _sessions.length - 1,
+    );
+    if (lo == _firstVisible && hi == _lastVisible) return;
+    setState(() {
+      _firstVisible = lo;
+      _lastVisible = hi;
+    });
+  }
+
   void _onTransform() {
     if (!_fitted || _sessions.isEmpty) return;
+
+    _updateVisibleRange();
 
     final m = _transform.value;
 
@@ -333,7 +358,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
   double get _fitScale => _baseScale.clamp(_minScale, _maxScale).toDouble();
   double get _paperFitScale =>
-    (_viewportW / kPageSize.width).clamp(_minScale, _maxScale).toDouble();
+      (_viewportW / kPageSize.width).clamp(_minScale, _maxScale).toDouble();
 
   void _fitToWidth() {
     if (!_fitted || _sessions.isEmpty) return;
@@ -569,6 +594,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         _activeIndex = 0;
         _loading = false;
         _fitted = false;
+        _firstVisible = 0;
+        _lastVisible = math.min(opened.length - 1, 2);
       });
     } catch (error, stack) {
       developer.log(
@@ -752,6 +779,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _scrollToPage(index);
+        _updateVisibleRange();
       }
     });
   }
@@ -1266,7 +1294,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       s.close();
     }
 
-    _pdf?.dispose();
+    final pdf = _pdf;
+    if (pdf != null) unawaited(PdfRenderQueue.idle.whenComplete(pdf.dispose));
 
     _settings.dispose();
 
@@ -1459,7 +1488,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           child: Image.file(
             File(image),
             fit: BoxFit.contain,
-            cacheWidth: 4096,
+            cacheWidth: 2048,
             filterQuality: FilterQuality.high,
             errorBuilder: (_, _, _) =>
                 const Center(child: Icon(Icons.broken_image_outlined)),
@@ -1776,7 +1805,15 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
             padding: const EdgeInsets.all(_pad),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: [for (final s in _sessions) _buildPage(s)],
+              children: [
+                for (var i = 0; i < _sessions.length; i++)
+                  KeyedSubtree(
+                    key: ObjectKey(_sessions[i]),
+                    child: (i >= _firstVisible && i <= _lastVisible)
+                        ? _buildPage(_sessions[i])
+                        : SizedBox.fromSize(size: kCellSize),
+                  ),
+              ],
             ),
           ),
           Positioned.fill(

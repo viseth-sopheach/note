@@ -41,7 +41,9 @@ class ExportService {
   static const double _k = 0.75;
 
   /// Raster pixels per document unit for PDF backgrounds and text boxes.
-  static const double _rasterScale = 4;
+  static final double _rasterScale = (Platform.isAndroid || Platform.isIOS)
+      ? 2.5
+      : 4;
 
   static final double _pdfW = kPageSize.width * _k;
   static final double _pdfH = kPageSize.height * _k;

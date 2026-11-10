@@ -6,52 +6,55 @@ import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:path/path.dart' as p;
 
 class DriveService {
-	static bool get isSupported =>
-		Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
+  static const String _serverClientId = String.fromEnvironment(
+    'GOOGLE_SERVER_CLIENT_ID',
+  );
 
-	final GoogleSignIn _signIn = GoogleSignIn.instance;
-	bool _initialized = false;
+  static bool get isSupported =>
+      Platform.isAndroid && _serverClientId.isNotEmpty;
 
-	Future<void> _initialize() async {
-		if (_initialized) return;
+  final GoogleSignIn _signIn = GoogleSignIn.instance;
+  bool _initialized = false;
 
-		await _signIn.initialize();
-		_initialized = true;
-	}
+  Future<void> _initialize() async {
+    if (_initialized) return;
+    await _signIn.initialize(serverClientId: _serverClientId);
+    _initialized = true;
+  }
 
-	Future<void> upload(File file) async {
-		await _initialize();
+  Future<void> upload(File file) async {
+    await _initialize();
 
-		final account = await _signIn.authenticate(
-			scopeHint: [drive.DriveApi.driveFileScope],
-		);
+    final account = await _signIn.authenticate(
+      scopeHint: [drive.DriveApi.driveFileScope],
+    );
 
-		final authorization = await account.authorizationClient
-			.authorizationForScopes([drive.DriveApi.driveFileScope]);
+    final authorization = await account.authorizationClient
+        .authorizationForScopes([drive.DriveApi.driveFileScope]);
 
-		if (authorization == null) {
-			throw StateError('Google Drive authorization failed.');
-		}
+    if (authorization == null) {
+      throw StateError('Google Drive authorization failed.');
+    }
 
-		final client = authorization.authClient(scopes: [
-			drive.DriveApi.driveFileScope,
-		]);
+    final client = authorization.authClient(
+      scopes: [drive.DriveApi.driveFileScope],
+    );
 
-		try {
-			final api = drive.DriveApi(client);
-			final media = drive.Media(file.openRead(), await file.length());
+    try {
+      final api = drive.DriveApi(client);
+      final media = drive.Media(file.openRead(), await file.length());
 
-			await api.files.create(
-				drive.File()..name = p.basename(file.path),
-				uploadMedia: media,
-			);
-		} finally {
-			client.close();
-		}
-	}
+      await api.files.create(
+        drive.File()..name = p.basename(file.path),
+        uploadMedia: media,
+      );
+    } finally {
+      client.close();
+    }
+  }
 
-	Future<void> signOut() async {
-		await _initialize();
-		await _signIn.signOut();
-	}
+  Future<void> signOut() async {
+    await _initialize();
+    await _signIn.signOut();
+  }
 }

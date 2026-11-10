@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -12,8 +13,17 @@ class ShareService {
   /// Desktop: saves to Downloads and reveals the file.
   Future<void> shareFile(File file, String title) async {
     if (!_desktop) {
+      final view = PlatformDispatcher.instance.views.first;
+      final size = view.physicalSize / view.devicePixelRatio;
       await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')]),
+        ShareParams(
+          files: [XFile(file.path, mimeType: 'application/pdf')],
+          sharePositionOrigin: Rect.fromCenter(
+            center: Offset(size.width / 2, size.height / 2),
+            width: 1,
+            height: 1,
+          ),
+        ),
       );
       return;
     }
