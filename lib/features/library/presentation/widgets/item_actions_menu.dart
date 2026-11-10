@@ -36,24 +36,12 @@ class ItemActionsMenu extends StatelessWidget {
             icon: Icons.drive_file_move_outlined,
             label: 'Move to…',
           ),
-        if (canShare) ...[
+        if (canShare && driveOk)
           const GlassMenuItem(
-            value: ItemAction.export,
-            icon: Icons.ios_share,
-            label: 'Export PDF / Share',
+            value: ItemAction.drive,
+            icon: Icons.cloud_upload_outlined,
+            label: 'Upload to Google Drive',
           ),
-          if (driveOk)
-            const GlassMenuItem(
-              value: ItemAction.drive,
-              icon: Icons.cloud_upload_outlined,
-              label: 'Upload to Google Drive',
-            ),
-          const GlassMenuItem(
-            value: ItemAction.telegram,
-            icon: Icons.send_outlined,
-            label: 'Send to Telegram',
-          ),
-        ],
         const GlassMenuItem(
           value: ItemAction.delete,
           icon: Icons.delete_outline,
