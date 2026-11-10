@@ -1295,7 +1295,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     }
 
     final pdf = _pdf;
-    if (pdf != null) unawaited(PdfRenderQueue.idle.whenComplete(pdf.dispose));
+    if (pdf != null) unawaited(pdf.dispose());
 
     _settings.dispose();
 
