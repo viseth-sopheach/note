@@ -58,9 +58,9 @@ class ExportService {
     rx.PdfDocument? source;
     try {
       if (pdfPath != null) source = await rx.PdfDocument.openFile(pdfPath);
-      final count =
-          source?.pages.length ??
-          math.max(1, await _pages.pageCount(notebookId));
+      final sourceCount = source?.pages.length ?? 0;
+      final storedCount = await _pages.pageCount(notebookId);
+      final count = math.max(1, math.max(sourceCount, storedCount));
 
       final doc = pw.Document(compress: true);
       for (var i = 0; i < count; i++) {
@@ -69,7 +69,9 @@ class ExportService {
           index: i,
           notebookTemplate: template,
           options: options,
-          sourcePage: source?.pages[i],
+          sourcePage: (source != null && i < sourceCount)
+              ? source.pages[i]
+              : null,
         );
         doc.addPage(
           pw.Page(

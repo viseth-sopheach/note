@@ -312,7 +312,14 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     final scaledW = _contentWidth * scale;
     final scaledH = _contentHeight * scale;
 
-    final x = (_viewportW - scaledW) / 2;
+    final double x;
+    if (scale <= _baseScale * 1.0001) {
+      x = (_viewportW - scaledW) / 2;
+    } else {
+      final left = (_pad + kBleedX) * scale;
+      final right = (_pad + kBleedX + kPageSize.width) * scale;
+      x = t.dx.clamp(_viewportW - right, -left).toDouble();
+    }
 
     final y = scaledH + 2 * _margin <= _viewportH
         ? (_viewportH - scaledH) / 2
@@ -347,9 +354,9 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // Canvas motion and scrolling
   // ------------------------------------------------------------
 
-  double get _baseScale => _viewportW / kPageSize.width;
-  double get _minScale => _baseScale;
-  double get _maxScale => _baseScale;
+  double get _baseScale => _viewportW / kPageSize.width; // 100% = fit width
+  double get _minScale => _baseScale * 0.15; // 15%
+  double get _maxScale => _baseScale * 5; // 500%
   double get _fitScale => _baseScale;
   double get _paperFitScale => _baseScale;
 
@@ -448,13 +455,39 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     );
   }
 
-  /// Mouse wheel scrolls the canvas.
+  void _zoomAt(Offset focal, double factor) {
+    final m = _transform.value;
+    final s = m.storage[0];
+    final target = (s * factor).clamp(_minScale, _maxScale).toDouble();
+    if (target == s) return;
+    final sceneX = (focal.dx - m.storage[12]) / s;
+    final sceneY = (focal.dy - m.storage[13]) / s;
+    final t = _clampTranslation(
+      Offset(focal.dx - sceneX * target, focal.dy - sceneY * target),
+      target,
+    );
+    _view.stop();
+    _setTransform(target, t.dx, t.dy);
+  }
+
+  /// Mouse wheel scrolls the canvas. Ctrl + wheel zooms.
   void _onSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
 
     GestureBinding.instance.pointerSignalResolver.register(event, (e) {
-      final delta = (e as PointerScrollEvent).scrollDelta;
-      _view.scrollBy(Offset(0, -delta.dy));
+      final scroll = e as PointerScrollEvent;
+      if (HardwareKeyboard.instance.isControlPressed &&
+          ref.read(appSettingsProvider).wheelZoom) {
+        final box = context.findRenderObject() as RenderBox?;
+        if (box != null) {
+          _zoomAt(
+            box.globalToLocal(scroll.position),
+            math.exp(-scroll.scrollDelta.dy / 400),
+          );
+        }
+        return;
+      }
+      _view.scrollBy(Offset(0, -scroll.scrollDelta.dy));
     });
   }
 
@@ -550,9 +583,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         _pdf = await PdfDocument.openFile(widget.pdfPath!);
       }
 
+      final saved = await _repository.pageCount(widget.notebookId);
       final count = _pdf != null
-          ? _pdf!.pages.length
-          : math.max(1, await _repository.pageCount(widget.notebookId));
+          ? math.max(_pdf!.pages.length, saved)
+          : math.max(1, saved);
 
       for (var i = 0; i < count; i++) {
         opened.add(await _openPage(i));
@@ -1863,7 +1897,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                                         double.infinity,
                                       ),
                                       panEnabled: !busyInput,
-                                      scaleEnabled: false,
+                                      scaleEnabled: zoomAllowed,
                                       onInteractionStart: (_) {
                                         _view.stop();
                                       },
