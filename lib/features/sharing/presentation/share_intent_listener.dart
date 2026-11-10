@@ -9,7 +9,8 @@ import '../../../app/router.dart';
 import '../../../app/routes.dart';
 import '../application/sharing_providers.dart';
 
-/// Opens PDFs shared from Drive, Telegram, Files and other apps as a new notebook.
+/// Opens PDFs and images shared from Drive, Telegram, Files and other apps as a
+/// new notebook.
 class ShareIntentListener extends ConsumerStatefulWidget {
   const ShareIntentListener({super.key, required this.child});
 
@@ -28,7 +29,6 @@ class _ShareIntentListenerState extends ConsumerState<ShareIntentListener> {
   @override
   void initState() {
     super.initState();
-    if (!Platform.isAndroid) return; // iOS share extension is not set up yet
 
     // App was closed: wait for the first frame so the router is ready.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -50,22 +50,34 @@ class _ShareIntentListenerState extends ConsumerState<ShareIntentListener> {
     if (files.isEmpty || _busy) return;
     _busy = true;
     try {
+      const imgExt = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'};
+      final images = <String>[];
       for (final file in files) {
         final path = file.path;
-        if (!path.toLowerCase().endsWith('.pdf')) continue;
+        final lower = path.toLowerCase();
         if (!_handled.add(path)) continue;
-
-        try {
-          final notebook = await ref
-              .read(importServiceProvider)
-              .importPdf(path);
-          if (notebook != null) {
-            appRouter.push(AppRoutes.notebook(notebook.id));
-          } else {
-            _toast('Could not read the PDF.');
+        if (lower.endsWith('.pdf')) {
+          try {
+            final nb = await ref.read(importServiceProvider).importPdf(path);
+            if (nb != null) {
+              appRouter.push(AppRoutes.notebook(nb.id));
+            } else {
+              _toast('Could not read the PDF.');
+            }
+          } catch (_) {
+            _toast('Could not import the PDF.');
           }
+        } else if (file.type == SharedMediaType.image ||
+            imgExt.any(lower.endsWith)) {
+          images.add(path);
+        }
+      }
+      if (images.isNotEmpty) {
+        try {
+          final nb = await ref.read(importServiceProvider).importImages(images);
+          if (nb != null) appRouter.push(AppRoutes.notebook(nb.id));
         } catch (_) {
-          _toast('Could not import the PDF.');
+          _toast('Could not import the images.');
         }
       }
     } finally {

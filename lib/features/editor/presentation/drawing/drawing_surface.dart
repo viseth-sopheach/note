@@ -153,9 +153,9 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
 
     // Reject strokes that start outside the defined bounds.
     final raw = _local(e);
-    if (widget.isClaimed?.call(raw) ?? false) return;
     final b = widget.bounds;
     if (b != null && !b.contains(raw)) return;
+    if (widget.isClaimed?.call(raw) ?? false) return;
     final p = raw;
 
     final started = _c.beginStroke(
@@ -174,6 +174,9 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   }
 
   void _move(PointerMoveEvent e) {
+    final b = widget.bounds;
+    if (b != null && !b.contains(_local(e))) return;
+
     // A real drag is not a long press. Check before forwarding so the timer
     // does not fire on the same frame as the first move.
     final d0 = _downPos;

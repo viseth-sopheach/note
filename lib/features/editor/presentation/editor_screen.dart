@@ -312,11 +312,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     final scaledW = _contentWidth * scale;
     final scaledH = _contentHeight * scale;
 
-    final paperFits = kPageSize.width * scale <= _viewportW;
-
-    final x = paperFits
-        ? (_viewportW - scaledW) / 2
-        : t.dx.clamp(_viewportW - scaledW - _margin, _margin).toDouble();
+    final x = (_viewportW - scaledW) / 2;
 
     final y = scaledH + 2 * _margin <= _viewportH
         ? (_viewportH - scaledH) / 2
@@ -351,14 +347,11 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // Canvas motion and scrolling
   // ------------------------------------------------------------
 
-  double get _baseScale =>
-      _viewportW / _contentWidth; // 100% = page fits screen width
-  double get _minScale => _baseScale * 0.15; // 15%
-  double get _maxScale => _baseScale * 5.0; // 500%
-
-  double get _fitScale => _baseScale.clamp(_minScale, _maxScale).toDouble();
-  double get _paperFitScale =>
-      (_viewportW / kPageSize.width).clamp(_minScale, _maxScale).toDouble();
+  double get _baseScale => _viewportW / kPageSize.width;
+  double get _minScale => _baseScale;
+  double get _maxScale => _baseScale;
+  double get _fitScale => _baseScale;
+  double get _paperFitScale => _baseScale;
 
   void _fitToWidth() {
     if (!_fitted || _sessions.isEmpty) return;
@@ -406,7 +399,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
     final scale = m.storage[0];
 
-    final showH = kPageSize.width * scale > _viewportW;
+    final showH = false;
 
     const bar = 16.0;
 
@@ -456,26 +449,12 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   }
 
   /// Mouse wheel scrolls the canvas.
-  /// Ctrl + wheel zooms.
-  /// Shift + wheel scrolls horizontally.
   void _onSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
 
-    final keys = HardwareKeyboard.instance;
-
-    // Ctrl + wheel: InteractiveViewer handles zooming.
-    if (keys.isControlPressed && ref.read(appSettingsProvider).wheelZoom) {
-      return;
-    }
-
     GestureBinding.instance.pointerSignalResolver.register(event, (e) {
-      var delta = (e as PointerScrollEvent).scrollDelta;
-
-      if (keys.isShiftPressed && delta.dx == 0) {
-        delta = Offset(delta.dy, 0);
-      }
-
-      _view.scrollBy(-delta);
+      final delta = (e as PointerScrollEvent).scrollDelta;
+      _view.scrollBy(Offset(0, -delta.dy));
     });
   }
 
@@ -1155,10 +1134,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   void _fitWidth() {
     final limit = ref.read(appSettingsProvider).defaultZoom;
 
-    final scale = math
-        .min(limit, _viewportW / _contentWidth)
-        .clamp(_minScale, _maxScale)
-        .toDouble();
+    final scale = _baseScale;
 
     _fitted = true;
 
@@ -1461,11 +1437,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // Paper
   // ------------------------------------------------------------
 
-  bool _darkPaper(_PageSession session) {
-    return Theme.of(context).brightness == Brightness.dark &&
-        session.imagePath == null &&
-        _pdf == null;
-  }
+  bool _darkPaper(_PageSession s) => false;
 
   Widget _paper(_PageSession session) {
     final image = session.imagePath;
@@ -1891,7 +1863,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                                         double.infinity,
                                       ),
                                       panEnabled: !busyInput,
-                                      scaleEnabled: zoomAllowed,
+                                      scaleEnabled: false,
                                       onInteractionStart: (_) {
                                         _view.stop();
                                       },
@@ -2032,7 +2004,8 @@ class _PaperClipper extends CustomClipper<Rect> {
   const _PaperClipper();
 
   @override
-  Rect getClip(Size size) => Offset.zero & size;
+  Rect getClip(Size size) =>
+      Rect.fromLTWH(kBleedX, kBleedY, kPageSize.width, kPageSize.height);
 
   @override
   bool shouldReclip(covariant CustomClipper<Rect> oldClipper) {
