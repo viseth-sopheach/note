@@ -118,3 +118,28 @@ class CompositeCommand implements DrawingCommand {
     }
   }
 }
+
+/// Swaps the whole stroke list between two states in one undoable step.
+/// Used by the eraser, which can split one stroke into several.
+class SnapshotCommand implements DrawingCommand {
+  SnapshotCommand(List<Stroke> before, List<Stroke> after)
+    : _before = List<Stroke>.unmodifiable(before),
+      _after = List<Stroke>.unmodifiable(after);
+
+  final List<Stroke> _before;
+  final List<Stroke> _after;
+
+  @override
+  void apply(List<Stroke> strokes) {
+    strokes
+      ..clear()
+      ..addAll(_after);
+  }
+
+  @override
+  void revert(List<Stroke> strokes) {
+    strokes
+      ..clear()
+      ..addAll(_before);
+  }
+}

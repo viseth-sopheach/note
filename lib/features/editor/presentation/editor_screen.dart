@@ -17,6 +17,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../app/glass/glass_button.dart';
 import '../../../app/glass/glass_dialog.dart';
 import '../../../app/glass/glass_list_tile.dart';
 import '../../../app/glass/glass_menu.dart';
@@ -38,8 +39,11 @@ import '../application/measure_controller.dart';
 import '../application/page_images_controller.dart';
 import '../application/page_texts_controller.dart';
 import '../application/tool_settings.dart';
+import '../domain/page_image.dart';
 import '../domain/page_repository.dart';
+import '../domain/page_text.dart';
 import '../domain/shape_choice.dart';
+import '../domain/stroke.dart';
 import '../domain/stroke_tool.dart';
 import 'dialogs/paper_template_dialog.dart';
 import 'drawing/drawing_surface.dart';
@@ -104,6 +108,22 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
   }
 }
 
+class _PageClip {
+  const _PageClip({
+    required this.template,
+    required this.imagePath,
+    required this.strokes,
+    required this.images,
+    required this.texts,
+  });
+
+  final PaperTemplate template;
+  final String? imagePath;
+  final List<Stroke> strokes;
+  final List<PageImage> images;
+  final List<PageText> texts;
+}
+
 class _PageSession {
   _PageSession({
     required this.index,
@@ -161,6 +181,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   /// Zoom limits as fractions of the fit-to-width scale.
   static const double _minZoomFraction = 0.15;
   static const double _doubleTapZoomFraction = 0.98;
+
+  static _PageClip? _pageClip;
 
   /// Space kept below the last page so the New Page card never covers it.
   static double get _bottomInset => NewPageCard.height + 32;
@@ -1119,6 +1141,72 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     });
   }
 
+  void _copyPage() {
+    if (_busy || _sessions.isEmpty) return;
+    final index = _visiblePage;
+    final s = _sessions[index];
+    setState(() {
+      _pageClip = _PageClip(
+        template: s.template,
+        imagePath: s.imagePath,
+        strokes: List<Stroke>.of(s.controller.strokes),
+        images: List<PageImage>.of(s.images.images),
+        texts: List<PageText>.of(s.texts.texts),
+      );
+    });
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('Page ${index + 1} copied')));
+  }
+
+  Future<void> _pastePage() async {
+    final clip = _pageClip;
+    if (clip == null || _busy || _sessions.isEmpty) return;
+    final current = _visiblePage;
+    final count = _sessions.length;
+
+    final target = await showGlassDialog<int>(
+      context: context,
+      builder: (_) => _PasteDestinationDialog(count: count, current: current),
+    );
+    if (target == null || !mounted) return;
+
+    await _runExclusive('Could not paste the page.', () async {
+      if (!await _flushAll()) {
+        throw StateError('Unsaved changes could not be saved.');
+      }
+
+      await _repository.insertPage(
+        widget.notebookId,
+        pageIndex: target,
+        template: clip.template,
+        strokes: clip.strokes,
+        imagePath: clip.imagePath,
+        images: clip.images,
+        texts: clip.texts,
+      );
+
+      final pasted = await _openPage(target);
+      final updated = [..._sessions]..insert(target, pasted);
+      for (var i = target + 1; i < updated.length; i++) {
+        await _rebind(updated[i], i);
+      }
+
+      if (!mounted) {
+        pasted.close();
+        return;
+      }
+
+      setState(() {
+        _sessions
+          ..clear()
+          ..addAll(updated);
+        _activeIndex = target;
+      });
+      _scheduleScroll(target);
+    });
+  }
+
   Future<void> _deletePage() async {
     if (_busy || _sessions.length < 2) return;
 
@@ -1445,6 +1533,14 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           label: 'Duplicate page',
         ),
       if (!_busy)
+        (value: 'copy', icon: Icons.copy_outlined, label: 'Copy page'),
+      if (!_busy && _pageClip != null)
+        (
+          value: 'paste',
+          icon: Icons.content_paste_outlined,
+          label: 'Paste page',
+        ),
+      if (!_busy)
         (
           value: 'imagepages',
           icon: Icons.add_photo_alternate_outlined,
@@ -1496,6 +1592,12 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       case 'duplicate':
         unawaited(_duplicatePage());
 
+      case 'copy':
+        _copyPage();
+
+      case 'paste':
+        unawaited(_pastePage());
+
       case 'imagepages':
         unawaited(_addImagePages());
 
@@ -1514,7 +1616,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // Paper
   // ------------------------------------------------------------
 
-  bool _darkPaper(_PageSession s) => false;
+  bool _darkPaper(_PageSession s) =>
+      Theme.of(context).brightness == Brightness.dark;
 
   Widget _paper(_PageSession session) {
     final image = session.imagePath;
@@ -1596,7 +1699,6 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           controller: session.controller,
           allowTouch: _fingerDraws,
           origin: kPaperOrigin,
-          bounds: Offset.zero & kPageSize,
           isClaimed: (point) {
             if (_textMode) return true;
 
@@ -1684,13 +1786,15 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                         origin: kPaperOrigin,
                         darkPaper: dark,
                       ),
-                      SelectionLayer(
-                        controller: session.controller,
-                        origin: kPaperOrigin,
-                        darkPaper: dark,
-                      ),
                     ],
                   ),
+                ),
+              ),
+              Positioned.fill(
+                child: SelectionLayer(
+                  controller: session.controller,
+                  origin: kPaperOrigin,
+                  darkPaper: dark,
                 ),
               ),
             ],
@@ -2036,6 +2140,12 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                   unawaited(_deletePage());
                 }
               : null,
+          onCopyPage: _copyPage,
+          onPastePage: _pageClip == null
+              ? null
+              : () {
+                  unawaited(_pastePage());
+                },
           textActive: _textMode,
           onTextTool: _toggleTextTool,
           onToolPicked: () {
@@ -2083,6 +2193,94 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   }
 }
 
+class _PasteDestinationDialog extends StatefulWidget {
+  const _PasteDestinationDialog({required this.count, required this.current});
+
+  final int count;
+  final int current;
+
+  @override
+  State<_PasteDestinationDialog> createState() =>
+      _PasteDestinationDialogState();
+}
+
+class _PasteDestinationDialogState extends State<_PasteDestinationDialog> {
+  late int _target = widget.current + 1;
+
+  void _set(int v) => setState(() => _target = v.clamp(0, widget.count));
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+
+    Widget chip(String label, int value) => ChoiceChip(
+      label: Text(label),
+      selected: _target == value,
+      onSelected: (_) => _set(value),
+    );
+
+    return GlassDialog(
+      title: const Text('Paste page'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Position', style: text.titleSmall),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                tooltip: 'Earlier',
+                icon: const Icon(Icons.remove_circle_outline),
+                onPressed: _target > 0 ? () => _set(_target - 1) : null,
+              ),
+              SizedBox(
+                width: 160,
+                child: Text(
+                  'Page ${_target + 1} of ${widget.count + 1}',
+                  textAlign: TextAlign.center,
+                  style: text.titleMedium,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Later',
+                icon: const Icon(Icons.add_circle_outline),
+                onPressed: _target < widget.count
+                    ? () => _set(_target + 1)
+                    : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              chip('First', 0),
+              chip('Before current', widget.current),
+              chip('After current', widget.current + 1),
+              chip('Last', widget.count),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        GlassButton(
+          label: 'Cancel',
+          kind: GlassButtonKind.plain,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        GlassButton(
+          autofocus: true,
+          label: 'Paste',
+          onPressed: () => Navigator.of(context).pop(_target),
+        ),
+      ],
+    );
+  }
+}
+
 class _PaperClipper extends CustomClipper<Rect> {
   const _PaperClipper();
 
@@ -2091,7 +2289,5 @@ class _PaperClipper extends CustomClipper<Rect> {
       Rect.fromLTWH(kBleedX, kBleedY, kPageSize.width, kPageSize.height);
 
   @override
-  bool shouldReclip(covariant CustomClipper<Rect> oldClipper) {
-    return false;
-  }
+  bool shouldReclip(covariant CustomClipper<Rect> oldClipper) => false;
 }

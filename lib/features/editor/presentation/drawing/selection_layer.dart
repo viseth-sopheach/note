@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../../application/drawing_controller.dart';
 import '../../domain/selection_handle.dart';
 import '../paper/paper_colors.dart';
+import '../paper/paper_painter.dart';
 import 'ink_renderer.dart';
 
 /// Lasso, hover outline, selection frame or line endpoints, handles and the
@@ -138,6 +139,7 @@ class SelectionPainter extends CustomPainter {
 
     if (controller.isTransformingSelection) {
       canvas.save();
+      canvas.clipRect(Offset.zero & kPageSize);
       canvas.translate(controller.selectionDx, controller.selectionDy);
       for (final s in controller.selectedStrokes) {
         InkRenderer.paintStroke(

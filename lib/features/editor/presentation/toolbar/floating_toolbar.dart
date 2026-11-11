@@ -33,6 +33,8 @@ class FloatingToolbar extends StatefulWidget {
     required this.onSettings,
     required this.onDuplicatePage,
     required this.onDeletePage,
+    required this.onCopyPage,
+    this.onPastePage,
     required this.textActive,
     required this.onTextTool,
     required this.onToolPicked,
@@ -55,6 +57,12 @@ class FloatingToolbar extends StatefulWidget {
 
   /// Null hides the delete item (only one page left).
   final VoidCallback? onDeletePage;
+
+  final VoidCallback onCopyPage;
+
+  /// Null hides "Paste page" (nothing copied yet).
+  final VoidCallback? onPastePage;
+
   final bool busy;
 
   final bool textActive;
@@ -135,6 +143,18 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
           icon: Icons.file_copy_outlined,
           label: 'Duplicate page',
         ),
+      if (!widget.busy)
+        const GlassMenuItem(
+          value: 'copy',
+          icon: Icons.copy_outlined,
+          label: 'Copy page',
+        ),
+      if (!widget.busy && widget.onPastePage != null)
+        const GlassMenuItem(
+          value: 'paste',
+          icon: Icons.content_paste_outlined,
+          label: 'Paste page',
+        ),
       if (!widget.busy && widget.onDeletePage != null)
         const GlassMenuItem(
           value: 'delete',
@@ -155,6 +175,10 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
         widget.onToggleMeasure(MeasureKind.protractor);
       case 'duplicate':
         widget.onDuplicatePage();
+      case 'copy':
+        widget.onCopyPage();
+      case 'paste':
+        widget.onPastePage?.call();
       case 'delete':
         widget.onDeletePage?.call();
       case 'settings':
@@ -185,12 +209,12 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
                   ),
                   GlassIconButton(
                     tooltip: 'Undo (Ctrl+Z)',
-                    icon: const Icon(Icons.undo),
+                    icon: const GlassSvgIcon(ToolIcons.undo),
                     onPressed: _c.canUndo ? _c.undo : null,
                   ),
                   GlassIconButton(
                     tooltip: 'Redo (Ctrl+Y)',
-                    icon: const Icon(Icons.redo),
+                    icon: const GlassSvgIcon(ToolIcons.redo),
                     onPressed: _c.canRedo ? _c.redo : null,
                   ),
                 ],

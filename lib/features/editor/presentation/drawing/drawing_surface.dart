@@ -67,6 +67,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
 
   Offset? _downPos;
   int _downMs = 0;
+  Offset _lastPaper = Offset.zero;
 
   Timer? _lpTimer;
 
@@ -146,15 +147,26 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
       }
     }
     if (!_isDrawingDevice(e)) return;
+
+    final stale = _drawingPointer;
+    if (stale != null && stale != e.pointer) {
+      _cancelLongPress();
+      _c.endStroke(
+        pointer: stale,
+        x: _lastPaper.dx,
+        y: _lastPaper.dy,
+        pressure: 1.0,
+        timeMs: e.timeStamp.inMilliseconds,
+      );
+      _drawingPointer = null;
+    }
+
     if (e.kind == PointerDeviceKind.mouse &&
         (e.buttons & kPrimaryButton) == 0) {
       return;
     }
 
-    // Reject strokes that start outside the defined bounds.
     final raw = _local(e);
-    final b = widget.bounds;
-    if (b != null && !b.contains(raw)) return;
     if (widget.isClaimed?.call(raw) ?? false) return;
     final p = raw;
 
@@ -167,6 +179,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
     );
     if (started) {
       _drawingPointer = e.pointer;
+      _lastPaper = raw;
       _downPos = raw;
       _downMs = e.timeStamp.inMilliseconds;
       _armLongPress(e.pointer, raw, e.position);
@@ -174,8 +187,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   }
 
   void _move(PointerMoveEvent e) {
-    final b = widget.bounds;
-    if (b != null && !b.contains(_local(e))) return;
+    if (e.pointer == _drawingPointer) _lastPaper = _local(e);
 
     // A real drag is not a long press. Check before forwarding so the timer
     // does not fire on the same frame as the first move.

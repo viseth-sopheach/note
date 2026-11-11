@@ -120,7 +120,8 @@ class DrawingController extends ChangeNotifier {
   late StrokeTool _seenTool;
 
   _Mode _mode = _Mode.none;
-  RemoveStrokesCommand? _erase;
+  List<Stroke>? _eraseBefore;
+  bool _eraseChanged = false;
   double _lastX = 0;
   double _lastY = 0;
 
@@ -903,7 +904,8 @@ class DrawingController extends ChangeNotifier {
     switch (_settings.tool) {
       case StrokeTool.eraser:
         _mode = _Mode.erase;
-        _erase = RemoveStrokesCommand();
+        _eraseBefore = List<Stroke>.of(_strokes);
+        _eraseChanged = false;
         _lastX = x;
         _lastY = y;
         _eraseTo(x, y);
@@ -1070,13 +1072,14 @@ class DrawingController extends ChangeNotifier {
 
     switch (_mode) {
       case _Mode.erase:
-        final erase = _erase!;
         _eraseTo(x, y);
-        if (!erase.isEmpty) {
-          _history.record(erase);
+        final before = _eraseBefore;
+        if (_eraseChanged && before != null) {
+          _history.record(SnapshotCommand(before, List<Stroke>.of(_strokes)));
           _revision++;
         }
-        _erase = null;
+        _eraseBefore = null;
+        _eraseChanged = false;
         _finish();
         notifyListeners();
 
@@ -1281,8 +1284,15 @@ class DrawingController extends ChangeNotifier {
 
     switch (_mode) {
       case _Mode.erase:
-        _erase!.revert(_strokes);
-        _erase = null;
+        final before = _eraseBefore;
+        if (before != null) {
+          _strokes
+            ..clear()
+            ..addAll(before);
+          _inkEpoch++;
+        }
+        _eraseBefore = null;
+        _eraseChanged = false;
       case _Mode.lasso:
         _lasso.clear();
       case _Mode.move:
@@ -1657,27 +1667,138 @@ class DrawingController extends ChangeNotifier {
     onShapeRecognized?.call();
   }
 
-  /// Erases strokes touched by the path from the last point to (x, y).
-  /// Returns true when at least one stroke was removed.
+  /// Erases only the parts of strokes within reach of the path from the last
+  /// point to (x, y). Touched strokes are trimmed or split; untouched parts
+  /// stay. Returns true when anything changed.
   bool _eraseTo(double x, double y) {
-    final erase = _erase!;
+    final ax = _lastX, ay = _lastY;
+    _lastX = x;
+    _lastY = y;
+
+    final next = <Stroke>[];
+    final modified = <String>{};
     var changed = false;
-    for (var i = _strokes.length - 1; i >= 0; i--) {
-      if (StrokeHitTest.hitsSegment(
-        _strokes[i],
-        ax: _lastX,
-        ay: _lastY,
+
+    for (final s in _strokes) {
+      if (!StrokeHitTest.hitsSegment(
+        s,
+        ax: ax,
+        ay: ay,
         bx: x,
         by: y,
         radius: eraserRadius,
       )) {
-        erase.take(_strokes, i);
+        next.add(s);
+        continue;
+      }
+
+      // A single dot that is touched disappears.
+      if (s.points.length < 2) {
         changed = true;
+        modified.add(s.id);
+        continue;
+      }
+
+      final scale = s.tool == StrokeTool.highlighter
+          ? StrokeHitTest.highlighterWidthScale
+          : 1;
+      final reach = eraserRadius + s.width * scale / 2;
+
+      final dense = _densify(s.points, 5);
+      final runs = <List<StrokePoint>>[];
+      var cur = <StrokePoint>[];
+      for (final p in dense) {
+        if (_distToSegment(p.x, p.y, ax, ay, x, y) <= reach) {
+          if (cur.isNotEmpty) {
+            runs.add(cur);
+            cur = <StrokePoint>[];
+          }
+        } else {
+          cur.add(p);
+        }
+      }
+      if (cur.isNotEmpty) runs.add(cur);
+
+      if (runs.length == 1 && runs.first.length == dense.length) {
+        next.add(s); // nothing was actually inside the eraser
+        continue;
+      }
+
+      changed = true;
+      modified.add(s.id);
+      var first = true;
+      for (final run in runs) {
+        if (run.length < 2) continue;
+        next.add(
+          Stroke(
+            id: first ? s.id : _newId(),
+            tool: s.tool,
+            colorValue: s.colorValue,
+            width: s.width,
+            points: run,
+          ),
+        );
+        first = false;
       }
     }
-    _lastX = x;
-    _lastY = y;
-    return changed;
+
+    if (!changed) return false;
+
+    // The center dot of an edited ellipse no longer matches it.
+    next.removeWhere(
+      (s) =>
+          ShapeCenter.isDot(s) && modified.contains(ShapeCenter.ownerOf(s.id)),
+    );
+
+    _strokes
+      ..clear()
+      ..addAll(next);
+    _eraseChanged = true;
+    _inkEpoch++;
+    return true;
+  }
+
+  /// Adds points so no segment is longer than [step]; originals are kept.
+  static List<StrokePoint> _densify(List<StrokePoint> pts, double step) {
+    if (pts.length < 2) return pts;
+    final out = <StrokePoint>[pts.first];
+    for (var i = 1; i < pts.length; i++) {
+      final a = pts[i - 1], b = pts[i];
+      final dx = b.x - a.x, dy = b.y - a.y;
+      final n = (math.sqrt(dx * dx + dy * dy) / step).ceil();
+      for (var k = 1; k < n; k++) {
+        final t = k / n;
+        out.add(
+          StrokePoint(
+            x: a.x + dx * t,
+            y: a.y + dy * t,
+            pressure: a.pressure + (b.pressure - a.pressure) * t,
+            timestampMs: (a.timestampMs + (b.timestampMs - a.timestampMs) * t)
+                .round(),
+          ),
+        );
+      }
+      out.add(b);
+    }
+    return out;
+  }
+
+  static double _distToSegment(
+    double px,
+    double py,
+    double ax,
+    double ay,
+    double bx,
+    double by,
+  ) {
+    final dx = bx - ax, dy = by - ay;
+    final l2 = dx * dx + dy * dy;
+    if (l2 == 0) {
+      return math.sqrt((px - ax) * (px - ax) + (py - ay) * (py - ay));
+    }
+    final t = (((px - ax) * dx + (py - ay) * dy) / l2).clamp(0.0, 1.0);
+    final cx = ax + t * dx - px, cy = ay + t * dy - py;
+    return math.sqrt(cx * cx + cy * cy);
   }
 
   static bool _isEllipseKind(ShapeKind? k) =>

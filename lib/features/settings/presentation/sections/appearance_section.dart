@@ -56,7 +56,7 @@ class AppearanceSection extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'Notebook paper stays white in every theme.',
+                'Notebook paper follows the theme. Imported PDFs and images stay as they are.',
                 style: textTheme.bodySmall?.copyWith(color: muted),
               ),
             ],

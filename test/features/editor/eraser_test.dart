@@ -23,14 +23,18 @@ void main() {
     c.endStroke(pointer: 2, x: x2, y: y2, pressure: 1, timeMs: 116);
   }
 
-  test('erasing removes only the touched stroke', () {
+  test('erasing cuts only the touched part', () {
     drawLine(0);
     drawLine(100);
     c.selectTool(StrokeTool.eraser);
 
     eraseDrag(50, -5, 50, 5);
 
-    expect(c.strokes.map((s) => s.id), ['id1']);
+    expect(c.strokes, hasLength(3));
+    expect(c.strokes.last.id, 'id1'); // the other line is untouched
+    final left = c.strokes[0].points, right = c.strokes[1].points;
+    expect(left.every((p) => p.x < 50), isTrue);
+    expect(right.every((p) => p.x > 50), isTrue);
   });
 
   test('one drag over two strokes is one undo step', () {
@@ -39,13 +43,13 @@ void main() {
     c.selectTool(StrokeTool.eraser);
 
     eraseDrag(50, -5, 50, 40);
-    expect(c.strokes, isEmpty);
+    expect(c.strokes, hasLength(4));
 
     c.undo();
     expect(c.strokes.map((s) => s.id), ['id0', 'id1']);
 
     c.redo();
-    expect(c.strokes, isEmpty);
+    expect(c.strokes, hasLength(4));
   });
 
   test('erasing changes the revision so autosave runs', () {
@@ -77,11 +81,11 @@ void main() {
 
     c.beginStroke(pointer: 2, x: 50, y: -5, pressure: 1, timeMs: 100);
     c.extendStroke(pointer: 2, x: 50, y: 5, pressure: 1, timeMs: 108);
-    expect(c.strokes, isEmpty);
+    expect(c.strokes, hasLength(2)); // line was cut in two
 
     c.cancelStroke(2);
 
-    expect(c.strokes, hasLength(1));
+    expect(c.strokes.single.id, 'id0');
     expect(c.isDrawing, isFalse);
   });
 }
