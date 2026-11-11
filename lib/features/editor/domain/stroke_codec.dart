@@ -11,14 +11,16 @@ import 'stroke_tool.dart';
 /// Layout (little endian):
 ///   u8 version, u32 strokeCount, then per stroke:
 ///   u8 idLength, id (utf8), u8 tool index,
-///   [v2 only] u8 shape (0 line, 1 rectangle, 2 ellipse, 3 triangle,
+///   [v2+] u8 shape (0 line, 1 rectangle, 2 ellipse, 3 triangle,
 ///     4 arrow, 255 none),
+///   [v3] u8 flags (bit 0 = filled),
+///   [v4] u32 fill color (0 = none) after the shape byte,
 ///   u32 color, f32 width, u32 pointCount,
 ///   then per point: f32 x, f32 y, f32 pressure, u32 timeMs.
 ///
 /// Never reorder StrokeTool values: the index is stored. Only append.
 abstract final class StrokeCodec {
-  static const int formatVersion = 2;
+  static const int formatVersion = 4;
   static const int _pointSize = 16;
   static const int _noShape = 255;
 
@@ -48,7 +50,7 @@ abstract final class StrokeCodec {
       if (ids[i].length > 255) {
         throw ArgumentError.value(strokes[i].id, 'id', 'Id is too long');
       }
-      size += 1 + ids[i].length + 1 + 1 + 4 + 4 + 4;
+      size += 1 + ids[i].length + 1 + 4 + 4 + 4 + 4 + 4;
       size += strokes[i].points.length * _pointSize;
     }
 
@@ -73,6 +75,8 @@ abstract final class StrokeCodec {
       o += 1;
       data.setUint8(o, _shapeByte(s.shape));
       o += 1;
+      data.setUint32(o, (s.fillColorValue ?? 0) & 0xFFFFFFFF, Endian.little);
+      o += 4;
       data.setUint32(o, s.colorValue & 0xFFFFFFFF, Endian.little);
       o += 4;
       data.setFloat32(o, s.width, Endian.little);
@@ -111,7 +115,7 @@ abstract final class StrokeCodec {
 
     final version = data.getUint8(o);
     o += 1;
-    if (version != 1 && version != 2) {
+    if (version < 1 || version > 4) {
       throw FormatException('Unsupported stroke format: $version');
     }
 
@@ -140,8 +144,20 @@ abstract final class StrokeCodec {
         o += 1;
       }
 
+      int? fillColor;
+      var legacyFilled = false;
+      if (version == 3) {
+        legacyFilled = (data.getUint8(o) & 1) != 0;
+        o += 1;
+      } else if (version >= 4) {
+        final raw = data.getUint32(o, Endian.little);
+        o += 4;
+        fillColor = raw == 0 ? null : raw;
+      }
+
       final color = data.getUint32(o, Endian.little);
       o += 4;
+      if (legacyFilled) fillColor = color;
       final width = data.getFloat32(o, Endian.little);
       o += 4;
       final pointCount = data.getUint32(o, Endian.little);
@@ -172,6 +188,7 @@ abstract final class StrokeCodec {
           width: width,
           points: points,
           shape: shape,
+          fillColorValue: fillColor,
         ),
       );
     }

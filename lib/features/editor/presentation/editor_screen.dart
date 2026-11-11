@@ -61,7 +61,9 @@ import 'paper/paper_painter.dart';
 import 'paper/paper_view.dart';
 import 'paper/pdf_page_layer.dart';
 import 'toolbar/floating_toolbar.dart';
+import 'toolbar/ink_palette.dart';
 import 'toolbar/selection_action_bar.dart';
+import 'toolbar/tool_icons.dart';
 import 'widgets/web_scrollbar.dart';
 
 class EditorScreen extends ConsumerStatefulWidget {
@@ -190,6 +192,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   static double get _contentWidth => kCellSize.width + _pad * 2;
 
   static double get _cellH => kCellSize.height;
+
+  static const String _highlightAction = 'highlight';
+  static const String _colorAction = 'color';
+  static const int _removeFill = 0;
 
   late final ToolSettings _settings;
   late final SettingsRepository _settingsRepository;
@@ -1845,15 +1851,59 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   };
 
   Future<void> _showShapeMenu(DrawingController c, Offset anchor) async {
-    final choice = await showGlassMenu<ShapeChoice>(
+    final choice = await showGlassMenu<Object>(
       context: context,
       position: anchor,
       items: [
-        for (final s in ShapeChoice.values)
-          GlassMenuItem(value: s, icon: _shapeIcon(s), label: s.label),
+        if (c.canHighlightSelection)
+          GlassMenuItem<Object>(
+            value: _highlightAction,
+            iconAsset: ToolIcons.highlighter,
+            label: 'Highlight',
+          ),
+        if (c.canRecolorSelection)
+          const GlassMenuItem<Object>(
+            value: _colorAction,
+            icon: Icons.palette_outlined,
+            label: 'Change color',
+          ),
+        if (c.canConvertSelection)
+          for (final s in ShapeChoice.values)
+            GlassMenuItem<Object>(
+              value: s,
+              icon: _shapeIcon(s),
+              label: s.label,
+            ),
       ],
     );
-    if (choice != null && mounted) c.convertSelectionTo(choice);
+    if (!mounted) return;
+    if (choice == _highlightAction) {
+      final color = await showGlassDialog<int>(
+        context: context,
+        builder: (_) => _ShapeColorDialog(
+          title: 'Highlight color',
+          current: c.selectionFillColorValue,
+          allowRemove: c.selectionHighlighted,
+        ),
+      );
+      if (color == null || !mounted) return;
+      if (color == _removeFill) {
+        c.removeSelectionHighlight();
+      } else {
+        c.highlightSelection(color);
+      }
+    } else if (choice == _colorAction) {
+      final color = await showGlassDialog<int>(
+        context: context,
+        builder: (_) => _ShapeColorDialog(
+          title: 'Change color',
+          current: c.selectionColorValue,
+        ),
+      );
+      if (color != null && mounted) c.changeSelectionColor(color);
+    } else if (choice is ShapeChoice) {
+      c.convertSelectionTo(choice);
+    }
   }
 
   // ------------------------------------------------------------
@@ -1893,7 +1943,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
         final bottom = (o.dy + f.bottom + pad) * k + m.storage[13];
 
         final paste = DrawingController.hasClipboard;
-        final canMore = c.canConvertSelection;
+        final canMore =
+            c.canConvertSelection ||
+            c.canHighlightSelection ||
+            c.canRecolorSelection;
         final w = SelectionActionBar.widthFor(paste: paste, more: canMore);
         const h = SelectionActionBar.height;
         const gap = 18.0;
@@ -2290,4 +2343,71 @@ class _PaperClipper extends CustomClipper<Rect> {
 
   @override
   bool shouldReclip(covariant CustomClipper<Rect> oldClipper) => false;
+}
+
+class _ShapeColorDialog extends StatelessWidget {
+  const _ShapeColorDialog({
+    required this.title,
+    this.current,
+    this.allowRemove = false,
+  });
+
+  final String title;
+  final int? current;
+  final bool allowRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return GlassDialog(
+      title: Text(title),
+      content: Wrap(
+        spacing: 14,
+        runSpacing: 14,
+        children: [
+          for (final ink in kInkColors)
+            Semantics(
+              button: true,
+              selected: ink.value == current,
+              label: ink.name,
+              child: Tooltip(
+                message: ink.name,
+                child: InkResponse(
+                  radius: 28,
+                  onTap: () => Navigator.of(context).pop(ink.value),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Color(ink.value),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: ink.value == current
+                            ? scheme.primary
+                            : scheme.outlineVariant,
+                        width: ink.value == current ? 3 : 1,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      actions: [
+        if (allowRemove)
+          GlassButton(
+            label: 'Remove',
+            kind: GlassButtonKind.destructive,
+            onPressed: () => Navigator.of(context).pop(0),
+          ),
+        GlassButton(
+          label: 'Cancel',
+          kind: GlassButtonKind.plain,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
+  }
 }

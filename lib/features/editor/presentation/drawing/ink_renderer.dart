@@ -9,6 +9,7 @@ import '../../domain/stroke_tool.dart';
 abstract final class InkRenderer {
   static const double highlighterWidthScale = 6;
   static const double highlighterAlpha = 0.35;
+  static const double fillAlpha = 0.3;
 
   static void paintStroke(
     Canvas canvas, {
@@ -16,6 +17,7 @@ abstract final class InkRenderer {
     required StrokeTool tool,
     required int colorValue,
     required double width,
+    int? fillColorValue,
   }) {
     if (points.isEmpty) return;
 
@@ -23,6 +25,21 @@ abstract final class InkRenderer {
     final strokeWidth = isHighlighter ? width * highlighterWidthScale : width;
     var color = Color(colorValue);
     if (isHighlighter) color = color.withValues(alpha: highlighterAlpha);
+
+    if (fillColorValue != null && points.length >= 3) {
+      final area = Path()..moveTo(points.first.x, points.first.y);
+      for (final p in points.skip(1)) {
+        area.lineTo(p.x, p.y);
+      }
+      area.close();
+      canvas.drawPath(
+        area,
+        Paint()
+          ..color = Color(fillColorValue).withValues(alpha: fillAlpha)
+          ..style = PaintingStyle.fill
+          ..isAntiAlias = true,
+      );
+    }
 
     if (points.length == 1) {
       canvas.drawCircle(

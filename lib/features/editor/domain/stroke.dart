@@ -14,6 +14,7 @@ final class Stroke {
     required this.width,
     required List<StrokePoint> points,
     this.shape,
+    this.fillColorValue,
   }) : points = List<StrokePoint>.unmodifiable(points);
 
   static const Object _keep = Object();
@@ -32,6 +33,11 @@ final class Stroke {
   /// Only line, rectangle, ellipse or triangle, otherwise null.
   final ShapeKind? shape;
 
+  /// ARGB color of the semi-transparent interior fill, or null for no fill.
+  final int? fillColorValue;
+
+  bool get filled => fillColorValue != null;
+
   bool get isEmpty => points.isEmpty;
 
   /// Pass `shape: null` to clear the shape; omit it to keep the current one.
@@ -41,6 +47,7 @@ final class Stroke {
     double? width,
     List<StrokePoint>? points,
     Object? shape = _keep,
+    Object? fillColorValue = _keep,
   }) => Stroke(
     id: id,
     tool: tool ?? this.tool,
@@ -48,6 +55,9 @@ final class Stroke {
     width: width ?? this.width,
     points: points ?? this.points,
     shape: identical(shape, _keep) ? this.shape : shape as ShapeKind?,
+    fillColorValue: identical(fillColorValue, _keep)
+        ? this.fillColorValue
+        : fillColorValue as int?,
   );
 
   @override
@@ -58,6 +68,7 @@ final class Stroke {
         other.colorValue != colorValue ||
         other.width != width ||
         other.shape != shape ||
+        other.fillColorValue != fillColorValue ||
         other.points.length != points.length) {
       return false;
     }
@@ -68,6 +79,13 @@ final class Stroke {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, tool, colorValue, width, Object.hashAll(points), shape);
+  int get hashCode => Object.hash(
+    id,
+    tool,
+    colorValue,
+    width,
+    Object.hashAll(points),
+    shape,
+    fillColorValue,
+  );
 }

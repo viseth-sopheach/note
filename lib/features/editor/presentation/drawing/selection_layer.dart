@@ -148,6 +148,9 @@ class SelectionPainter extends CustomPainter {
           tool: s.tool,
           colorValue: PaperColors.inkFor(s.colorValue, darkPaper: darkPaper),
           width: s.width,
+          fillColorValue: s.fillColorValue == null
+              ? null
+              : PaperColors.inkFor(s.fillColorValue!, darkPaper: darkPaper),
         );
       }
       canvas.restore();

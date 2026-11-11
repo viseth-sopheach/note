@@ -672,6 +672,105 @@ class DrawingController extends ChangeNotifier {
     _live.ping();
   }
 
+  // ---- Highlight (fill) selected shapes ----
+
+  /// Selected shapes only. Freehand strokes and center dots are never touched.
+  List<Stroke> get _shapeSelection => [
+    for (final s in _strokes)
+      if (_selected.contains(s.id) && !ShapeCenter.isDot(s) && s.shape != null)
+        s,
+  ];
+
+  static bool _fillable(Stroke s) =>
+      s.shape == ShapeKind.rectangle ||
+      s.shape == ShapeKind.ellipse ||
+      s.shape == ShapeKind.triangle;
+
+  List<Stroke> get _fillableSelection => [
+    for (final s in _shapeSelection)
+      if (_fillable(s)) s,
+  ];
+
+  /// True when the selection has a closed shape that can be filled.
+  bool get canHighlightSelection => !isDrawing && _fillableSelection.isNotEmpty;
+
+  /// True when every fillable selected shape is already filled.
+  bool get selectionHighlighted {
+    final shapes = _fillableSelection;
+    return shapes.isNotEmpty && shapes.every((s) => s.filled);
+  }
+
+  /// Shared fill color of the selected closed shapes, or null when they
+  /// differ or none is filled.
+  int? get selectionFillColorValue {
+    final shapes = _fillableSelection;
+    if (shapes.isEmpty) return null;
+    final first = shapes.first.fillColorValue;
+    return shapes.every((s) => s.fillColorValue == first) ? first : null;
+  }
+
+  /// Fills the interior of the selected closed shapes with [colorValue].
+  void highlightSelection(int colorValue) => _setFill(colorValue);
+
+  /// Removes the fill from the selected closed shapes.
+  void removeSelectionHighlight() => _setFill(null);
+
+  /// One undo step. Border, width and border color are never changed.
+  void _setFill(int? value) {
+    if (isDrawing) return;
+    final shapes = [
+      for (final s in _fillableSelection)
+        if (s.fillColorValue != value) s,
+    ];
+    if (shapes.isEmpty) return;
+
+    _history.execute(
+      ReplaceStrokesCommand(shapes, [
+        for (final s in shapes) s.copyWith(fillColorValue: value),
+      ]),
+      _strokes,
+    );
+    _revision++;
+    notifyListeners();
+    _live.ping();
+  }
+
+  // ---- Change color of selected shapes ----
+
+  bool get canRecolorSelection => !isDrawing && _shapeSelection.isNotEmpty;
+
+  /// Shared color of the selected shapes, or null when they differ.
+  int? get selectionColorValue {
+    final shapes = _shapeSelection;
+    if (shapes.isEmpty) return null;
+    final first = shapes.first.colorValue;
+    return shapes.every((s) => s.colorValue == first) ? first : null;
+  }
+
+  /// Recolors the selected shapes (and the center dot of a selected ellipse).
+  /// Other strokes are never touched. One undo step.
+  void changeSelectionColor(int colorValue) {
+    if (isDrawing) return;
+    final targets = [
+      for (final s in _strokes)
+        if (_selected.contains(s.id) &&
+            (s.shape != null || ShapeCenter.isDot(s)) &&
+            s.colorValue != colorValue)
+          s,
+    ];
+    if (targets.isEmpty) return;
+
+    _history.execute(
+      ReplaceStrokesCommand(targets, [
+        for (final s in targets) s.copyWith(colorValue: colorValue),
+      ]),
+      _strokes,
+    );
+    _revision++;
+    notifyListeners();
+    _live.ping();
+  }
+
   // ---- Copy / duplicate / paste ----
 
   static const double duplicateOffset = 24;
@@ -730,6 +829,7 @@ class DrawingController extends ChangeNotifier {
           width: moved.width,
           points: moved.points,
           shape: moved.shape,
+          fillColorValue: moved.fillColorValue,
         ),
       );
     }

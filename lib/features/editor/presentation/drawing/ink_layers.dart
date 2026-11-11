@@ -82,6 +82,9 @@ final class InkPictureCache {
         tool: s.tool,
         colorValue: PaperColors.inkFor(s.colorValue, darkPaper: dark),
         width: s.width,
+        fillColorValue: s.fillColorValue == null
+            ? null
+            : PaperColors.inkFor(s.fillColorValue!, darkPaper: dark),
       );
 
   void dispose() {

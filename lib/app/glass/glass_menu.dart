@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'glass_surface.dart';
 import 'glass_tokens.dart';
@@ -6,13 +7,17 @@ import 'glass_tokens.dart';
 class GlassMenuItem<T> {
   const GlassMenuItem({
     required this.value,
-    required this.icon,
+    this.icon,
+    this.iconAsset,
     required this.label,
     this.destructive = false,
-  });
+  }) : assert(icon != null || iconAsset != null);
 
   final T value;
-  final IconData icon;
+  final IconData? icon;
+
+  /// SVG asset used instead of [icon].
+  final String? iconAsset;
   final String label;
   final bool destructive;
 }
@@ -87,12 +92,23 @@ class _MenuLayer<T> extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           child: Row(
                             children: [
-                              Icon(
-                                item.icon,
-                                size: 20,
-                                color: item.destructive
-                                    ? scheme.error
-                                    : scheme.onSurface,
+                              Builder(
+                                builder: (_) {
+                                  final color = item.destructive
+                                      ? scheme.error
+                                      : scheme.onSurface;
+                                  return item.iconAsset != null
+                                      ? SvgPicture.asset(
+                                          item.iconAsset!,
+                                          width: 20,
+                                          height: 20,
+                                          colorFilter: ColorFilter.mode(
+                                            color,
+                                            BlendMode.srcIn,
+                                          ),
+                                        )
+                                      : Icon(item.icon, size: 20, color: color);
+                                },
                               ),
                               const SizedBox(width: 12),
                               Expanded(

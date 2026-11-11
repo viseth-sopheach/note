@@ -39,6 +39,8 @@ class ToolSettings extends ChangeNotifier {
   StrokeTool get tool => _tool;
   int get colorValue => _colorValue;
   double get width => _width;
+  double get penWidth => _penWidth;
+  double get highlighterWidth => _highlighterWidth;
 
   /// Hold at the end of a pen or highlighter stroke to snap it to a shape.
   bool get shapeRecognition => _shapeRecognition;

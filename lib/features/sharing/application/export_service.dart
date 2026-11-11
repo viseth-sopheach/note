@@ -267,6 +267,21 @@ class ExportService {
       );
       final alpha = highlighter ? InkRenderer.highlighterAlpha : 1.0;
 
+      if (s.filled && s.points.length >= 3) {
+        g
+          ..saveContext()
+          ..setGraphicState(PdfGraphicState(opacity: InkRenderer.fillAlpha))
+          ..setFillColor(color)
+          ..moveTo(_x(s.points.first.x), _y(s.points.first.y));
+        for (final p in s.points.skip(1)) {
+          g.lineTo(_x(p.x), _y(p.y));
+        }
+        g
+          ..closePath()
+          ..fillPath()
+          ..restoreContext();
+      }
+
       g
         ..saveContext()
         ..setGraphicState(PdfGraphicState(opacity: alpha, strokeOpacity: alpha))
