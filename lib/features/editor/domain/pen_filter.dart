@@ -7,8 +7,8 @@ import 'dart:math' as math;
 /// (alpha [fastAlpha]) so there is little lag.
 final class PenFilter {
   PenFilter({
-    this.slowAlpha = 0.35,
-    this.fastAlpha = 0.8,
+    this.slowAlpha = 0.5,
+    this.fastAlpha = 0.9,
     this.slowSpeed = 0.15, // document units per ms
     this.fastSpeed = 1.5,
   });

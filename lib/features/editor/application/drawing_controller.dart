@@ -125,11 +125,6 @@ class DrawingController extends ChangeNotifier {
   double _lastX = 0;
   double _lastY = 0;
 
-  // Raw (unfiltered) pen tip, used only to draw the live stroke without lag.
-  double _tipX = 0;
-  double _tipY = 0;
-  bool _hasTip = false;
-
   final List<Vertex> _lasso = [];
   final Set<String> _selected = {};
   String? _hoverId;
@@ -190,9 +185,6 @@ class DrawingController extends ChangeNotifier {
   /// Stable for the whole life of the live stroke, used as the live ink
   /// cache key. Cleared by [StrokeRecorder.cancel] / [StrokeRecorder.end].
   String? get liveStrokeId => _recorder.id;
-
-  /// Latest pointer position of the stroke being drawn, or null when idle.
-  ({double x, double y})? get liveTip => _hasTip ? (x: _tipX, y: _tipY) : null;
 
   // ---- Shape rules ----
 
@@ -1042,9 +1034,6 @@ class DrawingController extends ChangeNotifier {
         _originMs = timeMs;
         _snap = _findSnap(x, y);
         final start = _snapPoint(x, y);
-        _tipX = start.x;
-        _tipY = start.y;
-        _hasTip = true;
         _pen.begin(start.x, start.y, 0);
         _recorder.begin(
           id: _newId(),
@@ -1158,9 +1147,6 @@ class DrawingController extends ChangeNotifier {
         if (_recognized != null) return;
         final p = _snapPoint(x, y);
         final t = timeMs - _originMs;
-        _tipX = p.x;
-        _tipY = p.y;
-        _hasTip = true;
         // Smooth freehand input; ruler-snapped points are already straight.
         final ({double x, double y}) s = _snap == null
             ? _pen.apply(p.x, p.y, t)
@@ -1440,7 +1426,6 @@ class DrawingController extends ChangeNotifier {
     _rot = 0;
     _deselectedOnDown = false;
     _lockAspect = false;
-    _hasTip = false;
   }
 
   void _beginSelect(double x, double y) {
