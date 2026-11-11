@@ -206,8 +206,9 @@ final class LiveStrokeCache {
     String id,
     List<StrokePoint> pts,
     Color color,
-    double width,
-  ) {
+    double width, {
+    ({double x, double y})? tip,
+  }) {
     if (_id != id || pts.length < _next) {
       reset();
       _id = id;
@@ -230,7 +231,9 @@ final class LiveStrokeCache {
       canvas.drawPicture(f);
     }
     canvas.drawPath(_path, _paint);
-    canvas.drawLine(_tail, Offset(pts.last.x, pts.last.y), _paint);
+    final end = Offset(pts.last.x, pts.last.y);
+    canvas.drawLine(_tail, end, _paint);
+    if (tip != null) canvas.drawLine(end, Offset(tip.x, tip.y), _paint);
   }
 
   void _freeze() {
@@ -320,7 +323,14 @@ class LiveInkPainter extends CustomPainter {
         id != null &&
         controller.recognizedShape == null &&
         pts.length >= 2) {
-      cache.paintPen(canvas, id, pts, color, controller.width);
+      cache.paintPen(
+        canvas,
+        id,
+        pts,
+        color,
+        controller.width,
+        tip: controller.liveTip,
+      );
     } else {
       cache.reset();
       InkRenderer.paintStroke(

@@ -57,6 +57,7 @@ import 'gestures/two_finger_double_tap.dart';
 import 'gestures/two_finger_scroll_guard.dart';
 import 'measure/measure_overlay.dart';
 import 'paper/page_metrics.dart';
+import 'paper/paper_colors.dart';
 import 'paper/paper_painter.dart';
 import 'paper/paper_view.dart';
 import 'paper/pdf_page_layer.dart';
@@ -180,8 +181,12 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   static const double _pad = 24;
   static const double _margin = 88;
 
-  /// Zoom limits as fractions of the fit-to-width scale.
-  static const double _minZoomFraction = 0.15;
+  /// Paper width never drops below this fraction of the viewport width.
+  static const double _minPaperWidthFraction = 0.15;
+
+  /// Maximum zoom, relative to fit-to-width (100%): 500%.
+  static const double _maxZoomMultiplier = 5.0;
+
   static const double _doubleTapZoomFraction = 0.98;
 
   static _PageClip? _pageClip;
@@ -375,15 +380,16 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     if (_sessions.isEmpty) return;
 
     final m = _transform.value;
-
-    final scale = m.storage[0];
+    final raw = m.storage[0];
+    final scale = raw.clamp(_minScale, _maxScale).toDouble();
 
     final target = _clampTranslation(
       Offset(m.storage[12], m.storage[13]),
       scale,
     );
 
-    if ((target.dx - m.storage[12]).abs() < 0.5 &&
+    if ((scale - raw).abs() < 1e-6 &&
+        (target.dx - m.storage[12]).abs() < 0.5 &&
         (target.dy - m.storage[13]).abs() < 0.5) {
       return;
     }
@@ -398,8 +404,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // ------------------------------------------------------------
 
   double get _baseScale => _viewportW / kPageSize.width; // 100% = fit width
-  double get _minScale => _baseScale * _minZoomFraction; // 15%
-  double get _maxScale => _baseScale * 5; // 500%
+  double get _minScale => _viewportW * _minPaperWidthFraction / kPageSize.width;
+  double get _maxScale => _baseScale * _maxZoomMultiplier;
   double get _fitScale => _baseScale;
   double get _paperFitScale => _baseScale * _doubleTapZoomFraction;
 
@@ -1499,24 +1505,136 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // ------------------------------------------------------------
 
   void _showPages() {
+    final current = _visiblePage;
     showGlassSheet<void>(
       context: context,
-      builder: (sheet) => Material(
-        type: MaterialType.transparency,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 420),
-          child: ListView.builder(
-            shrinkWrap: true,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: _sessions.length,
-            itemBuilder: (_, i) => ListTile(
-              leading: const Icon(Icons.description_outlined),
-              title: Text('Page ${i + 1}'),
-              selected: i == _visiblePage,
-              onTap: () {
-                Navigator.of(sheet).pop();
-                _scrollToPage(i);
+      builder: (sheet) {
+        final colors = Theme.of(sheet).colorScheme;
+        return Material(
+          type: MaterialType.transparency,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 460),
+            child: ListView.builder(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: _sessions.length,
+              itemBuilder: (_, i) {
+                final selected = i == current;
+                return Semantics(
+                  button: true,
+                  selected: selected,
+                  label: 'Page ${i + 1}',
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.of(sheet).pop();
+                      _scrollToPage(i);
+                    },
+                    child: Container(
+                      color: selected
+                          ? colors.primary.withValues(alpha: 0.14)
+                          : null,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: selected
+                                    ? colors.primary
+                                    : colors.outlineVariant,
+                                width: selected ? 2 : 1,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(5),
+                              child: _pageThumb(_sessions[i], 60),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              'Page ${i + 1}',
+                              style: Theme.of(sheet).textTheme.bodyLarge
+                                  ?.copyWith(
+                                    fontWeight: selected
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                    color: selected ? colors.primary : null,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
               },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Read-only miniature of a page: paper, images, text and ink.
+  Widget _pageThumb(_PageSession s, double width) {
+    final dark = _darkPaper(s);
+    final height = width * kPageSize.height / kPageSize.width;
+
+    return SizedBox(
+      width: width,
+      height: height,
+      child: FittedBox(
+        fit: BoxFit.fill,
+        child: SizedBox(
+          width: kPageSize.width,
+          height: kPageSize.height,
+          child: IgnorePointer(
+            child: ClipRect(
+              child: Stack(
+                children: [
+                  Positioned.fill(child: _paper(s)),
+                  for (final img in s.images.images)
+                    Positioned(
+                      left: img.x,
+                      top: img.y,
+                      width: img.width,
+                      height: img.height,
+                      child: Image.file(
+                        File(img.path),
+                        fit: BoxFit.fill,
+                        cacheWidth: 256,
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      ),
+                    ),
+                  for (final t in s.texts.texts)
+                    Positioned(
+                      left: t.x + PageTextsController.innerPadding,
+                      top: t.y + PageTextsController.innerPadding,
+                      width: t.width - PageTextsController.innerPadding * 2,
+                      child: Text(
+                        t.text,
+                        style: TextStyle(
+                          fontSize: t.fontSize,
+                          height: 1.25,
+                          color: Color(
+                            PaperColors.inkFor(t.colorValue, darkPaper: dark),
+                          ),
+                        ),
+                      ),
+                    ),
+                  Positioned.fill(
+                    child: CommittedInkLayer(
+                      controller: s.controller,
+                      darkPaper: dark,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

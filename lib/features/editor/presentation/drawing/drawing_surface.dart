@@ -71,6 +71,11 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
 
   Timer? _lpTimer;
 
+  // Stylus-only mode: finger long-press that only opens the paste menu.
+  Timer? _fingerTimer;
+  int? _fingerPointer;
+  Offset _fingerDown = Offset.zero;
+
   DrawingController get _c => widget.controller;
 
   Offset _local(PointerEvent e) => e.localPosition - widget.origin;
@@ -127,9 +132,38 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
     });
   }
 
+  void _cancelFingerPaste() {
+    _fingerTimer?.cancel();
+    _fingerTimer = null;
+    _fingerPointer = null;
+  }
+
+  /// Finger is blocked from drawing. A 1 s still hold may only open the
+  /// paste menu; it never starts, selects or changes a stroke.
+  void _armFingerPaste(PointerDownEvent e) {
+    if (e.kind != PointerDeviceKind.touch ||
+        widget.onLongPress == null ||
+        !DrawingController.hasClipboard) {
+      return;
+    }
+    _cancelFingerPaste();
+    final pointer = e.pointer;
+    final paper = _local(e);
+    final global = e.position;
+    _fingerPointer = pointer;
+    _fingerDown = global;
+    _fingerTimer = Timer(widget.longPressDuration, () {
+      _fingerTimer = null;
+      if (_fingerPointer != pointer || _touches.length != 1) return;
+      _fingerPointer = null;
+      widget.onLongPress!(paper, global);
+    });
+  }
+
   @override
   void dispose() {
     _cancelLongPress();
+    _cancelFingerPaste();
     super.dispose();
   }
 
@@ -143,10 +177,14 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
           _drawingPointer = null;
         }
         _cancelLongPress();
+        _cancelFingerPaste();
         return;
       }
     }
-    if (!_isDrawingDevice(e)) return;
+    if (!_isDrawingDevice(e)) {
+      _armFingerPaste(e);
+      return;
+    }
 
     final stale = _drawingPointer;
     if (stale != null && stale != e.pointer) {
@@ -187,6 +225,11 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   }
 
   void _move(PointerMoveEvent e) {
+    if (e.pointer == _fingerPointer &&
+        (e.position - _fingerDown).distance > 10) {
+      _cancelFingerPaste();
+    }
+
     if (e.pointer == _drawingPointer) _lastPaper = _local(e);
 
     // A real drag is not a long press. Check before forwarding so the timer
@@ -210,6 +253,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   }
 
   void _up(PointerUpEvent e) {
+    if (e.pointer == _fingerPointer) _cancelFingerPaste();
     _cancelLongPress();
     _touches.remove(e.pointer);
     final wasDrawing = e.pointer == _drawingPointer;
@@ -239,6 +283,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   }
 
   void _cancel(PointerCancelEvent e) {
+    if (e.pointer == _fingerPointer) _cancelFingerPaste();
     _cancelLongPress();
     _touches.remove(e.pointer);
     if (e.pointer == _drawingPointer) _drawingPointer = null;

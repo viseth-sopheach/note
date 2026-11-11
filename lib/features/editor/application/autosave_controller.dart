@@ -35,7 +35,15 @@ class AutosaveController {
   void _onChanged() {
     if (!hasUnsavedChanges) return;
     _timer?.cancel();
-    _timer = Timer(delay, () => unawaited(flush()));
+    _timer = Timer(delay, _flushWhenIdle);
+  }
+
+  void _flushWhenIdle() {
+    if (controller.isDrawing) {
+      _timer = Timer(delay, _flushWhenIdle);
+      return;
+    }
+    unawaited(flush());
   }
 
   /// Saves now if there are unsaved changes. Saves never overlap.

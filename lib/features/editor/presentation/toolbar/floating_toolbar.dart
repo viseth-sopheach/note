@@ -204,7 +204,7 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
                   ),
                   GlassIconButton(
                     tooltip: 'Pages',
-                    icon: const Icon(Icons.grid_view_outlined),
+                    icon: const GlassSvgIcon(ToolIcons.pages),
                     onPressed: widget.onPages,
                   ),
                   GlassIconButton(
