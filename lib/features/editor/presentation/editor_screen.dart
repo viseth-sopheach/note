@@ -158,6 +158,13 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   static const double _pad = 24;
   static const double _margin = 88;
 
+  /// Zoom limits as fractions of the fit-to-width scale.
+  static const double _minZoomFraction = 0.15;
+  static const double _doubleTapZoomFraction = 0.98;
+
+  /// Space kept below the last page so the New Page card never covers it.
+  static double get _bottomInset => NewPageCard.height + 32;
+
   static double get _contentWidth => kCellSize.width + _pad * 2;
 
   static double get _cellH => kCellSize.height;
@@ -175,8 +182,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   final ValueNotifier<bool> _scrolling = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _atBottom = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _zoomAllowed = ValueNotifier<bool>(true);
+  final ValueNotifier<bool> _twoFingerScroll = ValueNotifier<bool>(false);
 
   Timer? _idleTimer;
+  Timer? _snapTimer;
 
   double _lastTy = 0;
   double _lastScale = 1;
@@ -292,11 +301,17 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
     final fits = scaledH + 2 * _margin <= _viewportH;
 
-    final lowest = math.min(_margin, _viewportH - scaledH - _margin);
+    final lowest = math.min(
+      _margin,
+      _viewportH - scaledH - _margin - _bottomInset,
+    );
 
     _atBottom.value = fits || ty <= lowest + 8;
 
     if (!moved) return;
+
+    _snapTimer?.cancel();
+    _snapTimer = Timer(const Duration(milliseconds: 180), _snapToBottom);
 
     _scrolling.value = true;
 
@@ -355,10 +370,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // ------------------------------------------------------------
 
   double get _baseScale => _viewportW / kPageSize.width; // 100% = fit width
-  double get _minScale => _baseScale * 0.15; // 15%
+  double get _minScale => _baseScale * _minZoomFraction; // 15%
   double get _maxScale => _baseScale * 5; // 500%
   double get _fitScale => _baseScale;
-  double get _paperFitScale => _baseScale;
+  double get _paperFitScale => _baseScale * _doubleTapZoomFraction;
 
   void _fitToWidth() {
     if (!_fitted || _sessions.isEmpty) return;
@@ -380,6 +395,38 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     _view.animateTo(scale: target, translation: translation);
 
     unawaited(HapticFeedback.selectionClick());
+  }
+
+  /// When scrolling stops past the end of the last page, glide to the spot
+  /// where the New Page card and bottom actions are fully visible.
+  void _snapToBottom() {
+    if (!mounted || !_fitted || _sessions.isEmpty || _busy) return;
+    final m = _transform.value;
+    final scale = m.storage[0];
+    final ty = m.storage[13];
+    if (_contentHeight * scale + 2 * _margin <= _viewportH) return;
+
+    final pageEnd = _viewportH - _contentHeight * scale - _margin;
+    final target = pageEnd - _bottomInset;
+    if (ty >= pageEnd - 4 || ty <= target + 8) return;
+
+    _view.animateTo(scale: scale, translation: Offset(m.storage[12], target));
+  }
+
+  void _scrollByFingers(Offset delta) {
+    _view.stop();
+    final m = _transform.value;
+    final s = m.storage[0];
+    final t = _clampTranslation(
+      Offset(m.storage[12] + delta.dx, m.storage[13] + delta.dy),
+      s,
+    );
+    _setTransform(s, t.dx, t.dy);
+  }
+
+  void _flingByFingers(Offset velocity) {
+    if (velocity.distance < 200) return;
+    _view.scrollBy(velocity * 0.25);
   }
 
   void _scrollTo({double? x, double? y}) {
@@ -421,7 +468,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
             WebScrollbar(
               axis: Axis.vertical,
               viewport: _viewportH,
-              content: _contentHeight * scale + 2 * _margin,
+              content: _contentHeight * scale + 2 * _margin + _bottomInset,
               position: _margin - m.storage[13],
               alwaysVisible: _isDesktop,
               revealed: _scrolling.value,
@@ -1138,7 +1185,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   double _clampTy(double ty, double scale) {
     final lowest = math.min(
       _margin,
-      _viewportH - _contentHeight * scale - _margin,
+      _viewportH - _contentHeight * scale - _margin - _bottomInset,
     );
 
     return ty.clamp(lowest, _margin).toDouble();
@@ -1295,10 +1342,12 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     _transform.removeListener(_onTransform);
 
     _idleTimer?.cancel();
+    _snapTimer?.cancel();
 
     _scrolling.dispose();
     _atBottom.dispose();
     _zoomAllowed.dispose();
+    _twoFingerScroll.dispose();
 
     for (final s in _sessions) {
       s.close();
@@ -1459,12 +1508,6 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       case 'settings':
         unawaited(context.push(AppRoutes.settings));
     }
-  }
-
-  void _comingSoon(String label) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('$label is coming soon')));
   }
 
   // ------------------------------------------------------------
@@ -1869,6 +1912,9 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                       children: [
                         TwoFingerScrollGuard(
                           zoomEnabled: _zoomAllowed,
+                          scrolling: _twoFingerScroll,
+                          onScroll: _scrollByFingers,
+                          onScrollEnd: _flingByFingers,
                           child: ListenableBuilder(
                             listenable: anyDrawing,
                             child: pages,
@@ -1882,10 +1928,13 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                                   ) ||
                                   _measure.interacting;
 
-                              return ValueListenableBuilder<bool>(
-                                valueListenable: _zoomAllowed,
+                              return ListenableBuilder(
+                                listenable: Listenable.merge([
+                                  _zoomAllowed,
+                                  _twoFingerScroll,
+                                ]),
                                 child: child,
-                                builder: (context, zoomAllowed, pagesChild) =>
+                                builder: (context, pagesChild) =>
                                     InteractiveViewer(
                                       transformationController: _transform,
                                       constrained: false,
@@ -1896,8 +1945,9 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                                       boundaryMargin: const EdgeInsets.all(
                                         double.infinity,
                                       ),
-                                      panEnabled: !busyInput,
-                                      scaleEnabled: zoomAllowed,
+                                      panEnabled:
+                                          !busyInput && !_twoFingerScroll.value,
+                                      scaleEnabled: _zoomAllowed.value,
                                       onInteractionStart: (_) {
                                         _view.stop();
                                       },
@@ -1978,7 +2028,6 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           onSettings: () {
             context.push(AppRoutes.settings);
           },
-          onComingSoon: _comingSoon,
           onDuplicatePage: () {
             unawaited(_duplicatePage());
           },

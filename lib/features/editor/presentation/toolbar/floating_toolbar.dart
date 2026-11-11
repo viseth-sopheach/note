@@ -4,6 +4,7 @@ import '../../../../app/glass/glass_icon_button.dart';
 import '../../../../app/glass/glass_menu.dart';
 import '../../../../app/glass/glass_pill.dart';
 import '../../../../app/glass/glass_surface.dart';
+import '../../../../app/glass/glass_svg_icon.dart';
 import '../../../../app/glass/glass_theme.dart';
 import '../../../../app/glass/glass_tokens.dart';
 import '../../application/drawing_controller.dart';
@@ -11,6 +12,7 @@ import '../../application/measure_controller.dart';
 import '../../domain/stroke_tool.dart';
 import '../../domain/tip_size.dart';
 import 'ink_palette.dart';
+import 'tool_icons.dart';
 
 const double _menuWidth = 248;
 
@@ -29,7 +31,6 @@ class FloatingToolbar extends StatefulWidget {
     required this.onAddTemplate,
     required this.onToggleMeasure,
     required this.onSettings,
-    required this.onComingSoon,
     required this.onDuplicatePage,
     required this.onDeletePage,
     required this.textActive,
@@ -50,7 +51,6 @@ class FloatingToolbar extends StatefulWidget {
   final VoidCallback onAddTemplate;
   final void Function(MeasureKind kind) onToggleMeasure;
   final VoidCallback onSettings;
-  final void Function(String label) onComingSoon;
   final VoidCallback onDuplicatePage;
 
   /// Null hides the delete item (only one page left).
@@ -250,9 +250,9 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
   }
 
   List<Widget> _centerTools() {
-    Widget tool(StrokeTool t, IconData icon, String tip) => GlassIconButton(
+    Widget tool(StrokeTool t, Widget icon, String tip) => GlassIconButton(
       tooltip: tip,
-      icon: Icon(icon),
+      icon: icon,
       selected: !widget.textActive && _c.tool == t,
       onPressed: () {
         widget.onToolPicked();
@@ -264,7 +264,7 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
       _InkToolButton(
         controller: _c,
         tool: StrokeTool.pen,
-        icon: Icons.edit_outlined,
+        icon: const GlassSvgIcon(ToolIcons.pen),
         tooltip: 'Pen',
         textActive: widget.textActive,
         onPicked: widget.onToolPicked,
@@ -272,30 +272,37 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
       _InkToolButton(
         controller: _c,
         tool: StrokeTool.highlighter,
-        icon: Icons.highlight_outlined,
+        icon: const GlassSvgIcon(ToolIcons.highlighter),
         tooltip: 'Highlighter',
         textActive: widget.textActive,
         onPicked: widget.onToolPicked,
       ),
-      tool(StrokeTool.eraser, Icons.cleaning_services_outlined, 'Eraser'),
-      tool(StrokeTool.select, Icons.gesture, 'Lasso select'),
+      tool(StrokeTool.eraser, const GlassSvgIcon(ToolIcons.eraser), 'Eraser'),
+      tool(
+        StrokeTool.select,
+        const GlassSvgIcon(ToolIcons.lasso),
+        'Lasso select',
+      ),
       GlassIconButton(
         tooltip: 'Text box',
         icon: const Icon(Icons.text_fields),
         selected: widget.textActive,
         onPressed: widget.onTextTool,
       ),
-      GlassIconButton(
-        tooltip: 'AI assistant',
-        icon: const Text('AI', style: TextStyle(fontWeight: FontWeight.w700)),
-        onPressed: () => widget.onComingSoon('AI assistant'),
-      ),
       if (_expanded) ...[
-        tool(StrokeTool.line, Icons.horizontal_rule, 'Line'),
-        tool(StrokeTool.rectangle, Icons.rectangle_outlined, 'Rectangle'),
-        tool(StrokeTool.ellipse, Icons.circle_outlined, 'Ellipse'),
-        tool(StrokeTool.triangle, Icons.change_history_outlined, 'Triangle'),
-        tool(StrokeTool.arrow, Icons.arrow_right_alt, 'Arrow'),
+        tool(StrokeTool.line, const Icon(Icons.horizontal_rule), 'Line'),
+        tool(
+          StrokeTool.rectangle,
+          const Icon(Icons.rectangle_outlined),
+          'Rectangle',
+        ),
+        tool(StrokeTool.ellipse, const Icon(Icons.circle_outlined), 'Ellipse'),
+        tool(
+          StrokeTool.triangle,
+          const Icon(Icons.change_history_outlined),
+          'Triangle',
+        ),
+        tool(StrokeTool.arrow, const Icon(Icons.arrow_right_alt), 'Arrow'),
       ],
       GlassIconButton(
         tooltip: _expanded ? 'Fewer tools' : 'More tools',
@@ -318,7 +325,7 @@ class _InkToolButton extends StatefulWidget {
 
   final DrawingController controller;
   final StrokeTool tool;
-  final IconData icon;
+  final Widget icon;
   final String tooltip;
   final bool textActive;
   final VoidCallback onPicked;
@@ -347,7 +354,7 @@ class _InkToolButtonState extends State<_InkToolButton> {
       menuChildren: [_InkOptions(controller: c, tool: widget.tool)],
       child: GlassIconButton(
         tooltip: widget.tooltip,
-        icon: Icon(widget.icon),
+        icon: widget.icon,
         selected: selected,
         onPressed: () {
           if (!selected) {

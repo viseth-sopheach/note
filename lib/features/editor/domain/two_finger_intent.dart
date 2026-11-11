@@ -6,10 +6,10 @@ enum TwoFingerIntent { undecided, scroll, zoom }
 /// Decided once per gesture, then locked. No Flutter imports.
 final class TwoFingerIntentClassifier {
   TwoFingerIntentClassifier({
-    this.touchSlop = 10,
+    this.touchSlop = 6,
     this.panSlop = 10,
     this.scaleSlop = 0.04,
-    this.zoomBias = 1.5,
+    this.zoomBias = 2.0,
   });
 
   /// Movement (px) needed before a touch gesture is classified.

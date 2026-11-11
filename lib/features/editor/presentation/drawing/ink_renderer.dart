@@ -42,7 +42,7 @@ abstract final class InkRenderer {
         ..color = color
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeWidth
-        ..strokeCap = isHighlighter ? StrokeCap.square : StrokeCap.round
+        ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..isAntiAlias = true,
     );

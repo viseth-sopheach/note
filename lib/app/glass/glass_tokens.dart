@@ -18,6 +18,7 @@ abstract final class GlassTokens {
 
   static const double minTarget = 44;
   static const double iconSize = 22;
+  static const double toolbarIconSize = iconSize * 0.9;
 
   static const Duration press = Duration(milliseconds: 120);
   static const Duration menu = Duration(milliseconds: 200);

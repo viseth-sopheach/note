@@ -281,7 +281,7 @@ class ExportService {
       } else {
         g
           ..setLineWidth(width)
-          ..setLineCap(highlighter ? PdfLineCap.square : PdfLineCap.round)
+          ..setLineCap(PdfLineCap.round)
           ..setLineJoin(PdfLineJoin.round);
         _smoothPath(g, pts);
         g.strokePath();

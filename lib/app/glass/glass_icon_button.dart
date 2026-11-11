@@ -84,7 +84,10 @@ class _GlassIconButtonState extends State<GlassIconButton> {
                       : null,
                 ),
                 child: IconTheme.merge(
-                  data: IconThemeData(color: color, size: GlassTokens.iconSize),
+                  data: IconThemeData(
+                    color: color,
+                    size: GlassTokens.toolbarIconSize,
+                  ),
                   child: widget.icon,
                 ),
               ),
