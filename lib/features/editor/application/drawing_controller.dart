@@ -977,9 +977,11 @@ class DrawingController extends ChangeNotifier {
     for (var i = 0; i < _glideSteps; i++) {
       final last = _recorder.points.last;
       if ((last.x - x).abs() + (last.y - y).abs() < 0.5) break;
-      final s = _pen.apply(x, y, t + (i + 1) * 8);
+      final ts = t + (i + 1) * 8;
+      final s = _pen.apply(x, y, ts);
       _recorder.add(
-        StrokePoint(x: s.x, y: s.y, pressure: pressure, timestampMs: t),
+        StrokePoint(x: s.x, y: s.y, pressure: pressure, timestampMs: ts),
+        force: true,
       );
     }
   }
