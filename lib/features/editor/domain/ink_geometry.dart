@@ -13,12 +13,16 @@ final class InkOutline {
     required this.right,
     required this.start,
     required this.end,
+    this.alphas,
   });
 
   final List<InkVertex> left;
   final List<InkVertex> right;
   final InkSample start;
   final InkSample end;
+
+  /// Opacity 0..1 per centre-line sample, or null for fully opaque.
+  final List<double>? alphas;
 }
 
 /// Pen-on-paper ink geometry. No Flutter imports.
@@ -59,13 +63,13 @@ abstract final class InkGeometry {
 
   // ---- Centre line and outline ----
 
-  static InkOutline offset(List<InkSample> c) {
+  static InkOutline offset(List<InkSample> c, {List<double>? alphas}) {
     final left = <InkVertex>[];
     final right = <InkVertex>[];
     var tx = 1.0, ty = 0.0;
     for (var j = 0; j < c.length; j++) {
-      final a = c[math.max(0, j - 1)];
-      final b = c[math.min(c.length - 1, j + 1)];
+      final a = c[math.max(0, j - 2)];
+      final b = c[math.min(c.length - 1, j + 2)];
       final dx = b.x - a.x, dy = b.y - a.y;
       final l = math.sqrt(dx * dx + dy * dy);
       if (l > 1e-9) {
@@ -76,7 +80,13 @@ abstract final class InkGeometry {
       left.add((x: c[j].x + nx * c[j].r, y: c[j].y + ny * c[j].r));
       right.add((x: c[j].x - nx * c[j].r, y: c[j].y - ny * c[j].r));
     }
-    return InkOutline(left: left, right: right, start: c.first, end: c.last);
+    return InkOutline(
+      left: left,
+      right: right,
+      start: c.first,
+      end: c.last,
+      alphas: alphas,
+    );
   }
 
   // ---- Helpers ----

@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import '../../domain/ink_geometry.dart';
+import '../../domain/physical_ink.dart';
 import '../../domain/stroke_point.dart';
 import '../../domain/stroke_tool.dart';
 
@@ -53,6 +55,14 @@ abstract final class InkRenderer {
       return;
     }
 
+    if (tool.isNaturalPen && points.length >= 3) {
+      final outline = PhysicalInk.build(points, width);
+      if (outline != null) {
+        _paintPressure(canvas, outline, color);
+        return;
+      }
+    }
+
     canvas.drawPath(
       _smoothPath(points),
       Paint()
@@ -63,6 +73,40 @@ abstract final class InkRenderer {
         ..strokeJoin = StrokeJoin.round
         ..isAntiAlias = true,
     );
+  }
+
+  /// Triangle strip with per-vertex alpha: width and opacity change smoothly
+  /// along the stroke without overlap seams.
+  static void _paintPressure(Canvas canvas, InkOutline o, Color color) {
+    final n = o.left.length;
+    final positions = <Offset>[];
+    final colors = <Color>[];
+    for (var i = 0; i < n; i++) {
+      final a = o.alphas == null ? 1.0 : o.alphas![i];
+      final c = color.withValues(alpha: color.a * a);
+      positions
+        ..add(Offset(o.left[i].x, o.left[i].y))
+        ..add(Offset(o.right[i].x, o.right[i].y));
+      colors
+        ..add(c)
+        ..add(c);
+    }
+    final vertices = Vertices(
+      VertexMode.triangleStrip,
+      positions,
+      colors: colors,
+    );
+    canvas.drawVertices(vertices, BlendMode.dst, Paint());
+    vertices.dispose();
+
+    final capPaint = Paint()..isAntiAlias = true;
+    for (final (s, a) in [
+      (o.start, o.alphas?.first ?? 1.0),
+      (o.end, o.alphas?.last ?? 1.0),
+    ]) {
+      capPaint.color = color.withValues(alpha: color.a * a);
+      canvas.drawCircle(Offset(s.x, s.y), s.r, capPaint);
+    }
   }
 
   /// Quadratic curve through midpoints between samples (shapes, highlighter).

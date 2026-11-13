@@ -103,9 +103,8 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
     if (_c.tool.isNaturalPen && e.kind == PointerDeviceKind.stylus) {
       final range = e.pressureMax - e.pressureMin;
       if (range > 0) {
-        return ((e.pressure - e.pressureMin) / range)
-            .clamp(0.05, 1.0)
-            .toDouble();
+        final n = (e.pressure - e.pressureMin) / range;
+        return n.isFinite ? n.clamp(0.05, 1.0).toDouble() : 1.0;
       }
     }
     return 1.0;

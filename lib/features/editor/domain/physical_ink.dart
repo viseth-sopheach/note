@@ -12,6 +12,8 @@ abstract final class PhysicalInk {
   static const double _thick = 1.25;
   static const double _thin = 0.45;
   static const int _taper = 6;
+  static const double _minAlpha = 0.55; // light touch
+  static const double _gamma = 0.8;     // <1 = more sensitive at low pressure
 
   static InkOutline? build(List<StrokePoint> input, double baseWidth) {
     final pts = <StrokePoint>[];
@@ -29,11 +31,17 @@ abstract final class PhysicalInk {
 
     final half = baseWidth / 2;
     final samples = <InkSample>[];
+    final alphas = <double>[];
     var level = 1.0;
+    var alpha = 1.0;
+
     for (var i = 0; i < pts.length; i++) {
-      final double target;
+      double target;
+      double targetAlpha;
       if (pressured) {
-        target = _thin + (_thick - _thin) * pts[i].pressure.clamp(0.0, 1.0);
+        final p = math.pow(pts[i].pressure.clamp(0.0, 1.0), _gamma).toDouble();
+        target = _thin + (_thick - _thin) * p;
+        targetAlpha = _minAlpha + (1 - _minAlpha) * p;
       } else {
         final a = pts[math.max(0, i - 1)];
         final b = pts[math.min(pts.length - 1, i + 1)];
@@ -42,8 +50,15 @@ abstract final class PhysicalInk {
         final t = ((v - _slow) / (_fast - _slow)).clamp(0.0, 1.0);
         final s = t * t * (3 - 2 * t);
         target = _thick + (_thin - _thick) * s;
+        targetAlpha = 1.0;
       }
-      level += (target - level) * 0.3;
+      if (i == 0) {
+        level = target;
+        alpha = targetAlpha;
+      } else {
+        level += (target - level) * 0.3;
+        alpha += (targetAlpha - alpha) * 0.3;
+      }
       final edge = math.min(i, pts.length - 1 - i);
       final taper = edge >= _taper ? 1.0 : 0.35 + 0.65 * edge / _taper;
       samples.add((
@@ -51,8 +66,9 @@ abstract final class PhysicalInk {
         y: pts[i].y,
         r: math.max(0.25, half * level * taper),
       ));
+      alphas.add(alpha.clamp(0.0, 1.0));
     }
-    return InkGeometry.offset(samples);
+    return InkGeometry.offset(samples, alphas: alphas);
   }
 
   static double _dist(StrokePoint a, StrokePoint b) {
