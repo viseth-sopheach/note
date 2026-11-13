@@ -75,29 +75,47 @@ abstract final class InkRenderer {
     );
   }
 
-  /// Triangle strip with per-vertex alpha: width and opacity change smoothly
-  /// along the stroke without overlap seams.
   static void _paintPressure(Canvas canvas, InkOutline o, Color color) {
     final n = o.left.length;
-    final positions = <Offset>[];
-    final colors = <Color>[];
-    for (var i = 0; i < n; i++) {
-      final a = o.alphas == null ? 1.0 : o.alphas![i];
-      final c = color.withValues(alpha: color.a * a);
-      positions
-        ..add(Offset(o.left[i].x, o.left[i].y))
-        ..add(Offset(o.right[i].x, o.right[i].y));
-      colors
-        ..add(c)
-        ..add(c);
+    if (n < 2) return;
+
+    if (o.alphas == null) {
+      final path = Path()..moveTo(o.left.first.x, o.left.first.y);
+      for (var i = 1; i < n; i++) {
+        path.lineTo(o.left[i].x, o.left[i].y);
+      }
+      for (var i = n - 1; i >= 0; i--) {
+        path.lineTo(o.right[i].x, o.right[i].y);
+      }
+      path.close();
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.fill
+          ..isAntiAlias = true,
+      );
+    } else {
+      final positions = <Offset>[];
+      final colors = <Color>[];
+      for (var i = 0; i < n; i++) {
+        final a = o.alphas![i];
+        final c = color.withValues(alpha: color.a * a);
+        positions
+          ..add(Offset(o.left[i].x, o.left[i].y))
+          ..add(Offset(o.right[i].x, o.right[i].y));
+        colors
+          ..add(c)
+          ..add(c);
+      }
+      final vertices = Vertices(
+        VertexMode.triangleStrip,
+        positions,
+        colors: colors,
+      );
+      canvas.drawVertices(vertices, BlendMode.dst, Paint());
+      vertices.dispose();
     }
-    final vertices = Vertices(
-      VertexMode.triangleStrip,
-      positions,
-      colors: colors,
-    );
-    canvas.drawVertices(vertices, BlendMode.dst, Paint());
-    vertices.dispose();
 
     final capPaint = Paint()..isAntiAlias = true;
     for (final (s, a) in [

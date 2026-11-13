@@ -55,6 +55,8 @@ class AutoAlphabetController {
   int _token = 0;
   bool _disposed = false;
   bool _warnedUnsupported = false;
+  bool _running = false;
+  bool _rerun = false;
 
   void _onBegan() {
     if (drawing.tool != StrokeTool.autoPen) return;
@@ -73,6 +75,32 @@ class AutoAlphabetController {
   Future<void> _flush() async {
     _timer = null;
     if (_disposed) return;
+    if (_running) {
+      _rerun = true;
+      return;
+    }
+    _running = true;
+    try {
+      await _flushOnce();
+    } catch (error, stack) {
+      developer.log(
+        'Auto Alphabet Pen failed',
+        name: 'editor',
+        error: error,
+        stackTrace: stack,
+      );
+      _pending.clear();
+    } finally {
+      _running = false;
+      final again = _rerun;
+      _rerun = false;
+      if (again && !_disposed && _pending.isNotEmpty && _timer == null) {
+        _timer = Timer(idleDelay, () => unawaited(_flush()));
+      }
+    }
+  }
+
+  Future<void> _flushOnce() async {
     final token = _token;
 
     final alive = {for (final s in drawing.strokes) s.id: s};
@@ -84,6 +112,11 @@ class AutoAlphabetController {
       ..clear()
       ..addAll(strokes.map((s) => s.id));
     if (strokes.isEmpty) return;
+
+    if (drawing.isDrawing) {
+      _rerun = true; // retry when the pen is up
+      return;
+    }
 
     if (!recognizer.isSupported) {
       _pending.clear();
@@ -111,6 +144,10 @@ class AutoAlphabetController {
       return;
     }
     if (_disposed || token != _token) return; // the user kept writing
+    if (drawing.isDrawing) {
+      _rerun = true;
+      return;
+    }
 
     final text = result?.text.replaceAll(RegExp(r'\s+'), ' ').trim() ?? '';
     if (text.isEmpty) {
