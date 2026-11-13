@@ -34,6 +34,19 @@ void main() {
       );
     });
 
+    test('waits until both fingers moved', () {
+      final c = TwoFingerIntentClassifier()
+        ..beginTouch(ax: 100, ay: 300, bx: 200, by: 300);
+      expect(
+        c.updateTouch(ax: 100, ay: 290, bx: 200, by: 300),
+        TwoFingerIntent.undecided,
+      );
+      expect(
+        c.updateTouch(ax: 100, ay: 280, bx: 200, by: 280),
+        TwoFingerIntent.scroll,
+      );
+    });
+
     test('touchpad: pan without scale is scroll, scale change is zoom', () {
       expect(
         (TwoFingerIntentClassifier()

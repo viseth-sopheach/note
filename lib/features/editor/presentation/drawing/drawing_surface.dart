@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../application/drawing_controller.dart';
+import '../gestures/stylus_gate.dart';
 
 /// Captures mouse, stylus and (optionally) finger input and sends it to
 /// [controller].
@@ -94,6 +95,7 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   bool _isDrawingDevice(PointerEvent e) =>
       e.kind == PointerDeviceKind.mouse ||
       e.kind == PointerDeviceKind.stylus ||
+      e.kind == PointerDeviceKind.invertedStylus ||
       (widget.allowTouch && e.kind == PointerDeviceKind.touch);
 
   /// Always report full pressure. Pen width is a user setting, not a
@@ -168,6 +170,8 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
   }
 
   void _down(PointerDownEvent e) {
+    if (e.kind == PointerDeviceKind.touch && StylusGate.active.value) return;
+
     if (e.kind == PointerDeviceKind.touch) {
       _touches.add(e.pointer);
       if (_touches.length > 1) {

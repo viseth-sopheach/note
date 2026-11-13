@@ -53,6 +53,7 @@ import 'drawing/selection_layer.dart';
 import 'drawing/text_layer.dart';
 import 'editor_stack.dart';
 import 'gestures/one_finger_double_tap.dart';
+import 'gestures/stylus_gate.dart';
 import 'gestures/two_finger_double_tap.dart';
 import 'gestures/two_finger_scroll_guard.dart';
 import 'measure/measure_overlay.dart';
@@ -2207,6 +2208,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                                 listenable: Listenable.merge([
                                   _zoomAllowed,
                                   _twoFingerScroll,
+                                  StylusGate.active,
                                 ]),
                                 child: child,
                                 builder: (context, pagesChild) =>
@@ -2221,8 +2223,12 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                                         double.infinity,
                                       ),
                                       panEnabled:
-                                          !busyInput && !_twoFingerScroll.value,
-                                      scaleEnabled: _zoomAllowed.value,
+                                          !busyInput &&
+                                          !_twoFingerScroll.value &&
+                                          !StylusGate.active.value,
+                                      scaleEnabled:
+                                          _zoomAllowed.value &&
+                                          !StylusGate.active.value,
                                       onInteractionStart: (_) {
                                         _view.stop();
                                       },
@@ -2258,12 +2264,19 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       ),
     );
 
-    final canvas = OneFingerDoubleTap(
-      onDoubleTap: () {
-        _active.undo();
-        unawaited(HapticFeedback.selectionClick());
-      },
-      child: fitCanvas,
+    final canvas = Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: StylusGate.down,
+      onPointerHover: StylusGate.hover,
+      onPointerUp: StylusGate.end,
+      onPointerCancel: StylusGate.end,
+      child: OneFingerDoubleTap(
+        onDoubleTap: () {
+          _active.undo();
+          unawaited(HapticFeedback.selectionClick());
+        },
+        child: fitCanvas,
+      ),
     );
 
     // ----------------------------------------------------------

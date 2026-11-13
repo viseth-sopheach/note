@@ -9,7 +9,7 @@ final class TwoFingerIntentClassifier {
     this.touchSlop = 6,
     this.panSlop = 10,
     this.scaleSlop = 0.04,
-    this.zoomBias = 2.0,
+    this.zoomBias = 1.0,
   });
 
   /// Movement (px) needed before a touch gesture is classified.
@@ -26,6 +26,7 @@ final class TwoFingerIntentClassifier {
 
   TwoFingerIntent _intent = TwoFingerIntent.undecided;
   double _startFx = 0, _startFy = 0, _startSpread = 0;
+  double _startAx = 0, _startAy = 0, _startBx = 0, _startBy = 0;
 
   TwoFingerIntent get intent => _intent;
 
@@ -41,6 +42,10 @@ final class TwoFingerIntentClassifier {
     _startFx = (ax + bx) / 2;
     _startFy = (ay + by) / 2;
     _startSpread = _dist(ax, ay, bx, by);
+    _startAx = ax;
+    _startAy = ay;
+    _startBx = bx;
+    _startBy = by;
   }
 
   TwoFingerIntent updateTouch({
@@ -52,7 +57,14 @@ final class TwoFingerIntentClassifier {
     if (_intent != TwoFingerIntent.undecided) return _intent;
     final focal = _dist((ax + bx) / 2, (ay + by) / 2, _startFx, _startFy);
     final spread = (_dist(ax, ay, bx, by) - _startSpread).abs();
-    if (math.max(focal, spread) < touchSlop) return _intent;
+    final size = math.max(focal, spread);
+    if (size < touchSlop) return _intent;
+
+    // Wait until both fingers have moved, unless the gesture is already large.
+    final moveA = _dist(ax, ay, _startAx, _startAy);
+    final moveB = _dist(bx, by, _startBx, _startBy);
+    if (math.min(moveA, moveB) < 3 && size < touchSlop * 2) return _intent;
+
     return _intent = spread > focal * zoomBias
         ? TwoFingerIntent.zoom
         : TwoFingerIntent.scroll;

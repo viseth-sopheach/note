@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../domain/two_finger_intent.dart';
+import 'stylus_gate.dart';
 
 /// Drives [zoomEnabled] so two-finger scrolling never zooms.
 /// When [onScroll] is set, two-finger scrolling is reported directly
@@ -71,7 +72,7 @@ class _TwoFingerScrollGuardState extends State<TwoFingerScrollGuard> {
   }
 
   void _down(PointerDownEvent e) {
-    if (e.kind != PointerDeviceKind.touch) return;
+    if (e.kind != PointerDeviceKind.touch || StylusGate.active.value) return;
     _touches[e.pointer] = e.position;
     if (_touches.length == 2) {
       _beginTouchPair();

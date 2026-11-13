@@ -3,6 +3,8 @@ import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
+import 'stylus_gate.dart';
+
 /// Fires [onDoubleTap] after two quick one-finger taps. Uses raw pointer
 /// events, so it never competes with drawing, pinch or pan.
 ///
@@ -42,7 +44,7 @@ class _OneFingerDoubleTapState extends State<OneFingerDoubleTap> {
   }
 
   void _down(PointerDownEvent e) {
-    if (e.kind != PointerDeviceKind.touch) return;
+    if (e.kind != PointerDeviceKind.touch || StylusGate.active.value) return;
     if (_origins.isEmpty) {
       _downTime = e.timeStamp;
       _downPos = e.position;
