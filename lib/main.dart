@@ -7,6 +7,7 @@ import 'package:pdfrx/pdfrx.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app/app.dart';
+import 'features/library/application/pinned_notes.dart';
 import 'features/settings/application/settings_providers.dart';
 import 'features/settings/data/shared_prefs_settings_repository.dart';
 
@@ -35,6 +36,7 @@ Future<void> main() async {
   runApp(
     ProviderScope(
       overrides: [
+        sharedPrefsProvider.overrideWithValue(prefs),
         settingsRepositoryProvider.overrideWithValue(
           SharedPrefsSettingsRepository(prefs),
         ),

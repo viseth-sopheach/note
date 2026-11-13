@@ -11,13 +11,14 @@ import 'folder_card.dart';
 import 'item_actions_menu.dart';
 import 'notebook_card.dart';
 
-/// Responsive folder and notebook grids of the library.
+/// Pinned, folders and recent notes of the library.
 class LibraryContent extends StatelessWidget {
   const LibraryContent({
     super.key,
     required this.isRoot,
     required this.folders,
     required this.notebooks,
+    required this.pinnedIds,
     required this.showCovers,
     required this.compact,
     required this.onNewNotebook,
@@ -29,6 +30,7 @@ class LibraryContent extends StatelessWidget {
   final bool isRoot;
   final List<Folder> folders;
   final List<Notebook> notebooks;
+  final Set<String> pinnedIds;
   final bool showCovers;
   final bool compact;
   final VoidCallback onNewNotebook;
@@ -48,22 +50,68 @@ class LibraryContent extends StatelessWidget {
       );
     }
 
+    final pinned = [
+      for (final n in notebooks)
+        if (pinnedIds.contains(n.id)) n,
+    ];
+    final recent = [
+      for (final n in notebooks)
+        if (!pinnedIds.contains(n.id)) n,
+    ];
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final gutter = width >= 1024
-            ? 32.0
-            : width >= 600
             ? 24.0
+            : width >= 600
+            ? 20.0
             : 16.0;
         final side = math.max(gutter, (width - _maxWidth) / 2);
         final gap = compact ? 10.0 : 16.0;
 
+        SliverPadding notebookGrid(List<Notebook> list) => SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: side),
+          sliver: SliverGrid.builder(
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: width < 600 ? 170 : 200,
+              childAspectRatio: 0.72,
+              mainAxisSpacing: gap + 4,
+              crossAxisSpacing: gap,
+            ),
+            itemCount: list.length,
+            itemBuilder: (context, index) {
+              final notebook = list[index];
+              return ItemActionsMenu(
+                canMove: true,
+                canPin: true,
+                isPinned: pinnedIds.contains(notebook.id),
+                onSelected: (action) => onNotebookAction(notebook, action),
+                child: NotebookCard(
+                  notebook: notebook,
+                  showCover: showCovers,
+                  onTap: () => context.push(AppRoutes.notebook(notebook.id)),
+                ),
+              );
+            },
+          ),
+        );
+
         return CustomScrollView(
           slivers: [
+            if (pinned.isNotEmpty) ...[
+              _SectionHeader(
+                label: 'Pinned',
+                icon: Icons.push_pin_outlined,
+                count: pinned.length,
+                side: side,
+              ),
+              notebookGrid(pinned),
+            ],
             if (folders.isNotEmpty) ...[
               _SectionHeader(
                 label: 'Folders',
+                icon: Icons.folder_outlined,
                 count: folders.length,
                 side: side,
               ),
@@ -92,39 +140,16 @@ class LibraryContent extends StatelessWidget {
                 ),
               ),
             ],
-            if (notebooks.isNotEmpty) ...[
+            if (recent.isNotEmpty) ...[
               _SectionHeader(
-                label: 'Notebooks',
-                count: notebooks.length,
+                label: 'Recent notes',
+                icon: Icons.schedule,
+                count: recent.length,
                 side: side,
               ),
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(side, 0, side, 104),
-                sliver: SliverGrid.builder(
-                  gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: width < 600 ? 170 : 200,
-                    childAspectRatio: 0.72,
-                    mainAxisSpacing: gap + 4,
-                    crossAxisSpacing: gap,
-                  ),
-                  itemCount: notebooks.length,
-                  itemBuilder: (context, index) {
-                    final notebook = notebooks[index];
-                    return ItemActionsMenu(
-                      canMove: true,
-                      onSelected: (action) =>
-                          onNotebookAction(notebook, action),
-                      child: NotebookCard(
-                        notebook: notebook,
-                        showCover: showCovers,
-                        onTap: () =>
-                            context.push(AppRoutes.notebook(notebook.id)),
-                      ),
-                    );
-                  },
-                ),
-              ),
+              notebookGrid(recent),
             ],
+            const SliverToBoxAdapter(child: SizedBox(height: 104)),
           ],
         );
       },
@@ -135,11 +160,13 @@ class LibraryContent extends StatelessWidget {
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({
     required this.label,
+    required this.icon,
     required this.count,
     required this.side,
   });
 
   final String label;
+  final IconData icon;
   final int count;
   final double side;
 
@@ -153,18 +180,20 @@ class _SectionHeader extends StatelessWidget {
         padding: EdgeInsets.fromLTRB(side, 24, side, 12),
         child: Row(
           children: [
+            Icon(icon, size: 18, color: colors.onSurfaceVariant),
+            const SizedBox(width: 8),
             Text(
               label,
               style: textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w600,
-                color: colors.onSurfaceVariant,
+                color: colors.onSurface,
               ),
             ),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: colors.surfaceContainerHighest,
+                color: Colors.white.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(

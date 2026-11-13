@@ -10,15 +10,15 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/glass/glass_backdrop.dart';
 import '../../../app/glass/glass_button.dart';
-import '../../../app/glass/glass_icon_button.dart';
-import '../../../app/glass/glass_pill.dart';
 import '../../../app/routes.dart';
+import '../../../app/theme.dart';
 import '../../settings/application/settings_providers.dart';
 import '../../settings/domain/layout_density.dart';
 import '../../sharing/application/sharing_providers.dart';
 import '../../sharing/presentation/export_options_dialog.dart';
 import '../application/library_actions.dart';
 import '../application/library_providers.dart';
+import '../application/pinned_notes.dart';
 import '../domain/folder.dart';
 import '../domain/notebook.dart';
 import 'dialogs/confirm_delete_dialog.dart';
@@ -27,6 +27,7 @@ import 'dialogs/new_folder_dialog.dart';
 import 'dialogs/new_notebook_dialog.dart';
 import 'dialogs/rename_dialog.dart';
 import 'library_search_delegate.dart';
+import 'widgets/home_shell.dart';
 import 'widgets/item_actions_menu.dart';
 import 'widgets/library_content.dart';
 
@@ -49,8 +50,12 @@ class LibraryScreen extends ConsumerWidget {
 
     final folders = ref.watch(foldersProvider(folderId));
     final notebooks = ref.watch(notebooksProvider(folderId));
+    final pinned = ref.watch(pinnedNotesProvider);
     final showCovers = ref.watch(
       appSettingsProvider.select((s) => s.showCovers),
+    );
+    final accent = ref.watch(
+      appSettingsProvider.select((s) => s.accentColorValue),
     );
     final compact = ref.watch(
       appSettingsProvider.select((s) => s.density == LayoutDensity.compact),
@@ -59,104 +64,144 @@ class LibraryScreen extends ConsumerWidget {
         ? 'Viseth\'s Library'
         : (folderAsync?.value?.name ?? '');
 
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyN, control: true): () =>
-            _createNotebook(context, ref),
-        const SingleActivator(
-          LogicalKeyboardKey.keyN,
-          control: true,
-          shift: true,
-        ): () =>
-            _createFolder(context, ref),
-        const SingleActivator(LogicalKeyboardKey.keyF, control: true): () =>
-            showSearch<void>(
-              context: context,
-              delegate: LibrarySearchDelegate(),
-            ),
-      },
-      child: Focus(
-        autofocus: true,
-        child: Scaffold(
-          appBar: AppBar(
-            title: Text(title),
-            actions: [
-              GlassPill(
-                children: [
-                  GlassIconButton(
-                    tooltip: 'Search (Ctrl+F)',
-                    icon: const Icon(Icons.search),
-                    onPressed: () => showSearch<void>(
-                      context: context,
-                      delegate: LibrarySearchDelegate(),
+    void search() =>
+        showSearch<void>(context: context, delegate: LibrarySearchDelegate());
+
+    return Theme(
+      data: AppTheme.build(
+        Brightness.dark,
+        seed: Color(accent),
+        compact: compact,
+      ),
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.keyN, control: true): () =>
+              _createNotebook(context, ref),
+          const SingleActivator(
+            LogicalKeyboardKey.keyN,
+            control: true,
+            shift: true,
+          ): () =>
+              _createFolder(context, ref),
+          const SingleActivator(LogicalKeyboardKey.keyF, control: true): search,
+        },
+        child: Focus(
+          autofocus: true,
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final w = box.maxWidth;
+              final mobile = w < 600;
+              final rail = w >= 600 && w < 1000;
+
+              return Scaffold(
+                backgroundColor: HomeColors.bg,
+                drawer: mobile
+                    ? Drawer(
+                        backgroundColor: Colors.transparent,
+                        elevation: 0,
+                        width: 288,
+                        child: Builder(
+                          builder: (dctx) => Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: HomeSidebar(
+                              compact: false,
+                              isRoot: _isRoot,
+                              afterTap: () => Navigator.of(dctx).pop(),
+                            ),
+                          ),
+                        ),
+                      )
+                    : null,
+                floatingActionButton: mobile
+                    ? GlassFab(
+                        tooltip: 'New notebook',
+                        label: 'New note',
+                        icon: Icons.add,
+                        onPressed: () => _createNotebook(context, ref),
+                      )
+                    : null,
+                body: HomeBackground(
+                  child: SafeArea(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (!mobile)
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: HomeSidebar(compact: rail, isRoot: _isRoot),
+                          ),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Builder(
+                                builder: (hctx) => HomeHeader(
+                                  title: title,
+                                  isRoot: _isRoot,
+                                  mobile: mobile,
+                                  onMenu: mobile
+                                      ? () => Scaffold.of(hctx).openDrawer()
+                                      : null,
+                                  onSearch: search,
+                                  onNewNote: () =>
+                                      _createNotebook(context, ref),
+                                  onNewFolder: () =>
+                                      _createFolder(context, ref),
+                                  onImportImages: () =>
+                                      _importImages(context, ref),
+                                  onImportPdf: () => _importPdf(context, ref),
+                                ),
+                              ),
+                              Expanded(
+                                child: folders.when(
+                                  data: (folderList) => notebooks.when(
+                                    data: (notebookList) => LibraryContent(
+                                      isRoot: _isRoot,
+                                      folders: folderList,
+                                      notebooks: notebookList,
+                                      pinnedIds: pinned,
+                                      showCovers: showCovers,
+                                      compact: compact,
+                                      onNewNotebook: () =>
+                                          _createNotebook(context, ref),
+                                      onNewFolder: () =>
+                                          _createFolder(context, ref),
+                                      onFolderAction: (folder, action) =>
+                                          _onFolderAction(
+                                            context,
+                                            ref,
+                                            folder,
+                                            action,
+                                          ),
+                                      onNotebookAction: (notebook, action) =>
+                                          _onNotebookAction(
+                                            context,
+                                            ref,
+                                            notebook,
+                                            action,
+                                          ),
+                                    ),
+                                    loading: () => const Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                    error: (error, stack) =>
+                                        _ErrorView(onRetry: () => _reload(ref)),
+                                  ),
+                                  loading: () => const Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                  error: (error, stack) =>
+                                      _ErrorView(onRetry: () => _reload(ref)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  GlassIconButton(
-                    tooltip: 'Settings',
-                    icon: const Icon(Icons.settings_outlined),
-                    onPressed: () => context.push(AppRoutes.settings),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 12),
-            ],
-          ),
-          floatingActionButton: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              GlassFab(
-                tooltip: 'New folder (Ctrl+Shift+N)',
-                label: 'New folder',
-                icon: Icons.create_new_folder_outlined,
-                onPressed: () => _createFolder(context, ref),
-              ),
-              const SizedBox(height: 10),
-              GlassFab(
-                tooltip: 'Import images',
-                label: 'Import images',
-                icon: Icons.add_photo_alternate_outlined,
-                onPressed: () => _importImages(context, ref),
-              ),
-              const SizedBox(height: 10),
-              GlassFab(
-                tooltip: 'Import PDF',
-                label: 'Import PDF',
-                icon: Icons.picture_as_pdf_outlined,
-                onPressed: () => _importPdf(context, ref),
-              ),
-              const SizedBox(height: 10),
-              GlassFab(
-                tooltip: 'New notebook (Ctrl+N)',
-                label: 'New notebook',
-                icon: Icons.add,
-                onPressed: () => _createNotebook(context, ref),
-              ),
-            ],
-          ),
-          body: GlassBackdrop(
-            child: folders.when(
-              data: (folderList) => notebooks.when(
-                data: (notebookList) => LibraryContent(
-                  isRoot: _isRoot,
-                  folders: folderList,
-                  notebooks: notebookList,
-                  showCovers: showCovers,
-                  compact: compact,
-                  onNewNotebook: () => _createNotebook(context, ref),
-                  onNewFolder: () => _createFolder(context, ref),
-                  onFolderAction: (folder, action) =>
-                      _onFolderAction(context, ref, folder, action),
-                  onNotebookAction: (notebook, action) =>
-                      _onNotebookAction(context, ref, notebook, action),
                 ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, stack) =>
-                    _ErrorView(onRetry: () => _reload(ref)),
-              ),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => _ErrorView(onRetry: () => _reload(ref)),
-            ),
+              );
+            },
           ),
         ),
       ),
@@ -311,6 +356,7 @@ class LibraryScreen extends ConsumerWidget {
       case ItemAction.export:
       case ItemAction.drive:
       case ItemAction.telegram:
+      case ItemAction.pin:
         break; // Moving folders is not supported yet.
     }
   }
@@ -383,6 +429,8 @@ class LibraryScreen extends ConsumerWidget {
           await ref.read(telegramServiceProvider).sendDocument(file);
           if (context.mounted) _toast(context, 'Sent to Telegram');
         });
+      case ItemAction.pin:
+        await ref.read(pinnedNotesProvider.notifier).toggle(notebook.id);
     }
   }
 
