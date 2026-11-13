@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+
 const Color kEditorSurface = Color(0xFF222224);
 const Color _kOnSurface = Color(0xFFF2F2F7);
 const Color _kOnSurfaceMuted = Color(0xFF9A9AA0);
@@ -9,8 +10,8 @@ const Color _kTile = Color(0xFF2E2E31);
 /// asked the OS to reduce motion.
 Duration _motion(BuildContext context, [int ms = 300]) =>
     MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : Duration(milliseconds: ms);
+    ? Duration.zero
+    : Duration(milliseconds: ms);
 
 // ---------------------------------------------------------------------------
 // PageBar: floating "< Page 2 of 2 >" pill

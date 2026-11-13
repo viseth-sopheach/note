@@ -3,7 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../domain/stroke_tool.dart';
 
 /// Tool, color and width shared by every page of the open notebook.
-/// Pen and highlighter each remember their own color and width.
+/// Pen, Physical Pen and Auto Alphabet Pen share one color and width;
+/// the highlighter keeps its own.
 class ToolSettings extends ChangeNotifier {
   ToolSettings({
     StrokeTool tool = StrokeTool.pen,
@@ -45,6 +46,8 @@ class ToolSettings extends ChangeNotifier {
   /// Hold at the end of a pen or highlighter stroke to snap it to a shape.
   bool get shapeRecognition => _shapeRecognition;
 
+  bool get _usesPenSlot => _tool == StrokeTool.pen || _tool.isNaturalPen;
+
   void selectShapeRecognition(bool enabled) {
     if (enabled == _shapeRecognition) return;
     _shapeRecognition = enabled;
@@ -58,6 +61,8 @@ class ToolSettings extends ChangeNotifier {
 
     switch (tool) {
       case StrokeTool.pen:
+      case StrokeTool.physicalPen:
+      case StrokeTool.autoPen:
         _colorValue = _penColor;
         _width = _penWidth;
       case StrokeTool.highlighter:
@@ -75,10 +80,8 @@ class ToolSettings extends ChangeNotifier {
 
     _colorValue = colorValue;
 
-    if (_tool == StrokeTool.pen) _penColor = colorValue;
-    if (_tool == StrokeTool.highlighter) {
-      _highlighterColor = colorValue;
-    }
+    if (_usesPenSlot) _penColor = colorValue;
+    if (_tool == StrokeTool.highlighter) _highlighterColor = colorValue;
 
     notifyListeners();
   }
@@ -88,10 +91,8 @@ class ToolSettings extends ChangeNotifier {
 
     _width = width;
 
-    if (_tool == StrokeTool.pen) _penWidth = width;
-    if (_tool == StrokeTool.highlighter) {
-      _highlighterWidth = width;
-    }
+    if (_usesPenSlot) _penWidth = width;
+    if (_tool == StrokeTool.highlighter) _highlighterWidth = width;
 
     notifyListeners();
   }

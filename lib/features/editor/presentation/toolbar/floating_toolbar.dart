@@ -295,6 +295,22 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
       ),
       _InkToolButton(
         controller: _c,
+        tool: StrokeTool.physicalPen,
+        icon: const Icon(Icons.draw_outlined),
+        tooltip: 'Physical pen',
+        textActive: widget.textActive,
+        onPicked: widget.onToolPicked,
+      ),
+      _InkToolButton(
+        controller: _c,
+        tool: StrokeTool.autoPen,
+        icon: const Icon(Icons.abc),
+        tooltip: 'Auto Alphabet Pen',
+        textActive: widget.textActive,
+        onPicked: widget.onToolPicked,
+      ),
+      _InkToolButton(
+        controller: _c,
         tool: StrokeTool.highlighter,
         icon: const GlassSvgIcon(ToolIcons.highlighter),
         tooltip: 'Highlighter',

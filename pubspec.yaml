@@ -9,7 +9,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # followed by an optional build number separated by a +.
 # Both the version and the builder number may be overridden in flutter
 # build by specifying --build-name and --build-number, respectively.
-# In Android, build-name is used as versionName while build-number used as versionCode.
+# In Android, build-name is used as versionName while build-number is used as versionCode.
 # Read more about Android versioning at https://developer.android.com/studio/publish/versioning
 # In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
 # Read more about iOS versioning at
@@ -59,6 +59,7 @@ dependencies:
   extension_google_sign_in_as_googleapis_auth: ^3.0.0
   package_info_plus: ^10.2.2
   flutter_svg: ^2.3.3
+  google_mlkit_digital_ink_recognition: ^1.0.3
 
 dev_dependencies:
   flutter_test:
@@ -76,8 +77,18 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
   assets:
     - assets/icon/
+
+  fonts:
+    - family: Caveat
+      fonts:
+        - asset: assets/fonts/Caveat/Caveat-VariableFont_wght.ttf
+
+    - family: Fasthand
+      fonts:
+        - asset: assets/fonts/Freehand/Fasthand-Regular.ttf
 
 flutter_launcher_icons:
   android: true

@@ -31,12 +31,14 @@ import '../../settings/domain/editor_position.dart';
 import '../../settings/domain/settings_repository.dart';
 import '../../sharing/application/sharing_providers.dart';
 import '../../sharing/presentation/export_options_dialog.dart';
+import '../application/auto_alphabet_controller.dart';
 import '../application/autosave_controller.dart';
 import '../application/canvas_motion.dart';
 import '../application/drawing_controller.dart';
 import '../application/editor_providers.dart';
 import '../application/measure_controller.dart';
 import '../application/page_images_controller.dart';
+import '../application/page_objects_adapter.dart';
 import '../application/page_texts_controller.dart';
 import '../application/tool_settings.dart';
 import '../domain/page_image.dart';
@@ -49,6 +51,7 @@ import 'dialogs/paper_template_dialog.dart';
 import 'drawing/drawing_surface.dart';
 import 'drawing/image_layer.dart';
 import 'drawing/ink_layers.dart';
+import 'drawing/page_text_style.dart';
 import 'drawing/selection_layer.dart';
 import 'drawing/text_layer.dart';
 import 'editor_stack.dart';
@@ -67,6 +70,7 @@ import 'toolbar/ink_palette.dart';
 import 'toolbar/selection_action_bar.dart';
 import 'toolbar/tool_icons.dart';
 import 'widgets/web_scrollbar.dart';
+import 'widgets/zoom_badge.dart';
 
 class EditorScreen extends ConsumerStatefulWidget {
   const EditorScreen({super.key, required this.notebookId});
@@ -136,6 +140,7 @@ class _PageSession {
     required this.imagePath,
     required this.images,
     required this.texts,
+    required this.autoAlphabet,
     required this.autosave,
   });
 
@@ -146,10 +151,12 @@ class _PageSession {
   final String? imagePath;
   final PageImagesController images;
   final PageTextsController texts;
+  final AutoAlphabetController autoAlphabet;
 
   AutosaveController autosave;
 
   void close() {
+    autoAlphabet.dispose();
     unawaited(autosave.dispose());
     unawaited(images.close());
     unawaited(texts.close());
@@ -218,8 +225,14 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   final ValueNotifier<bool> _zoomAllowed = ValueNotifier<bool>(true);
   final ValueNotifier<bool> _twoFingerScroll = ValueNotifier<bool>(false);
 
+  final ValueNotifier<double> _zoomRatio = ValueNotifier<double>(1);
+  final ValueNotifier<bool> _zoomVisible = ValueNotifier<bool>(false);
+
   Timer? _idleTimer;
   Timer? _snapTimer;
+  Timer? _hudTimer;
+
+  bool _pinched = false;
 
   double _lastTy = 0;
   double _lastScale = 1;
@@ -321,6 +334,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     final ty = m.storage[13];
 
     final scaleChanged = (scale - _lastScale).abs() > 0.001;
+    if (scaleChanged) _showZoomHud(scale / _baseScale);
 
     final moved = (ty - _lastTy).abs() > 0.5 || scaleChanged;
 
@@ -410,26 +424,52 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   double get _fitScale => _baseScale;
   double get _paperFitScale => _baseScale * _doubleTapZoomFraction;
 
+  void _showZoomHud(double ratio) {
+    _zoomRatio.value = ratio;
+    _zoomVisible.value = true;
+    _hudTimer?.cancel();
+    _hudTimer = Timer(
+      const Duration(milliseconds: 900),
+      () => _zoomVisible.value = false,
+    );
+  }
+
+  void _zoomAt(Offset focal, double factor) {
+    _view.zoomAt(focal, factor, minScale: _minScale, maxScale: _maxScale);
+  }
+
+  void _animateZoom(double target) {
+    final m = _transform.value;
+    final s = m.storage[0];
+    final f = Offset(_viewportW / 2, _viewportH / 2);
+    final sx = (f.dx - m.storage[12]) / s;
+    final sy = (f.dy - m.storage[13]) / s;
+    _view.animateTo(
+      scale: target,
+      translation: _clampTranslation(
+        Offset(f.dx - sx * target, f.dy - sy * target),
+        target,
+      ),
+    );
+  }
+
+  /// Two-finger double tap: fit to width, or 2x when already fitted.
   void _fitToWidth() {
     if (!_fitted || _sessions.isEmpty) return;
-
-    final m = _transform.value;
-
-    final target = _paperFitScale;
-
-    final sceneY = (_viewportH / 2 - m.storage[13]) / m.storage[0];
-
-    final translation = _clampTranslation(
-      Offset(
-        (_viewportW - _contentWidth * target) / 2,
-        _viewportH / 2 - sceneY * target,
-      ),
-      target,
-    );
-
-    _view.animateTo(scale: target, translation: translation);
-
+    final fit = _paperFitScale;
+    final atFit = (_scale() - fit).abs() / fit < 0.04;
+    _animateZoom(atFit ? math.min(fit * 2, _maxScale) : fit);
     unawaited(HapticFeedback.selectionClick());
+  }
+
+  /// After a pinch that ends close to 100%, glide to exactly 100%.
+  void _onPinchEnd() {
+    if (!_pinched) return;
+    _pinched = false;
+    final s = _scale();
+    final base = _baseScale;
+    if ((s - base).abs() < 0.002 || (s - base).abs() / base > 0.05) return;
+    _animateZoom(base);
   }
 
   /// When scrolling stops past the end of the last page, glide to the spot
@@ -537,21 +577,6 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     );
   }
 
-  void _zoomAt(Offset focal, double factor) {
-    final m = _transform.value;
-    final s = m.storage[0];
-    final target = (s * factor).clamp(_minScale, _maxScale).toDouble();
-    if (target == s) return;
-    final sceneX = (focal.dx - m.storage[12]) / s;
-    final sceneY = (focal.dy - m.storage[13]) / s;
-    final t = _clampTranslation(
-      Offset(focal.dx - sceneX * target, focal.dy - sceneY * target),
-      target,
-    );
-    _view.stop();
-    _setTransform(target, t.dx, t.dy);
-  }
-
   /// Mouse wheel scrolls the canvas. Ctrl + wheel zooms.
   void _onSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
@@ -626,27 +651,40 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       unawaited(HapticFeedback.selectionClick());
     };
 
+    final images = PageImagesController(
+      repository: _repository,
+      notebookId: widget.notebookId,
+      pageIndex: index,
+      pageSize: kPageSize,
+      initial: pageImages,
+    );
+    final texts = PageTextsController(
+      repository: _repository,
+      notebookId: widget.notebookId,
+      pageIndex: index,
+      pageSize: kPageSize,
+      initial: pageTexts,
+    );
+
     final session = _PageSession(
       index: index,
       controller: controller,
       template: template,
       imagePath: imagePath,
-      images: PageImagesController(
-        repository: _repository,
-        notebookId: widget.notebookId,
-        pageIndex: index,
-        pageSize: kPageSize,
-        initial: pageImages,
-      ),
-      texts: PageTextsController(
-        repository: _repository,
-        notebookId: widget.notebookId,
-        pageIndex: index,
-        pageSize: kPageSize,
-        initial: pageTexts,
+      images: images,
+      texts: texts,
+      autoAlphabet: AutoAlphabetController(
+        drawing: controller,
+        texts: texts,
+        recognizer: ref.read(handwritingRecognizerProvider),
+        language: () => ref.read(appSettingsProvider).handwritingLanguage,
+        measure: _measureHandwriting,
+        onMessage: _message,
       ),
       autosave: _newAutosave(controller, index),
     );
+
+    controller.pageObjects = PageObjectsAdapter(images: images, texts: texts);
 
     controller.snapSegments = () {
       return _measure.edgesRelativeTo(_paperOrigin(session.index));
@@ -655,6 +693,26 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     controller.viewScale = _scale;
 
     return session;
+  }
+
+  void _message(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  ({double width, double height}) _measureHandwriting(
+    String text,
+    double fontSize,
+  ) {
+    final p = TextPainter(
+      text: TextSpan(text: text, style: PageTextStyle.handwriting(fontSize)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final size = (width: p.width, height: p.height);
+    p.dispose();
+    return size;
   }
 
   Future<void> _load() async {
@@ -1331,6 +1389,9 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     _lastTy = _transform.value.storage[13];
 
     _lastScale = _transform.value.storage[0];
+
+    _hudTimer?.cancel();
+    _zoomVisible.value = false;
   }
 
   void _restorePosition(double scale) {
@@ -1444,11 +1505,14 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
     _idleTimer?.cancel();
     _snapTimer?.cancel();
+    _hudTimer?.cancel();
 
     _scrolling.dispose();
     _atBottom.dispose();
     _zoomAllowed.dispose();
     _twoFingerScroll.dispose();
+    _zoomRatio.dispose();
+    _zoomVisible.dispose();
 
     for (final s in _sessions) {
       s.close();
@@ -1619,9 +1683,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                       width: t.width - PageTextsController.innerPadding * 2,
                       child: Text(
                         t.text,
-                        style: TextStyle(
-                          fontSize: t.fontSize,
-                          height: 1.25,
+                        style: PageTextStyle.of(
+                          t,
                           color: Color(
                             PaperColors.inkFor(t.colorValue, darkPaper: dark),
                           ),
@@ -1827,6 +1890,11 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           isClaimed: (point) {
             if (_textMode) return true;
 
+            if (session.controller.hasObjectSelection &&
+                session.controller.hitsSelectionChrome(point.dx, point.dy)) {
+              return false;
+            }
+
             final selectTool = session.controller.tool == StrokeTool.select;
 
             final textHit = session.texts.claims(
@@ -1850,7 +1918,9 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           },
           onTap: (point) {
             final t = session.controller.tool;
-            if (t != StrokeTool.pen && t != StrokeTool.highlighter) {
+            if (t != StrokeTool.pen &&
+                t != StrokeTool.highlighter &&
+                !t.isNaturalPen) {
               return false;
             }
             if (session.controller.selectAt(
@@ -2232,6 +2302,12 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                                       onInteractionStart: (_) {
                                         _view.stop();
                                       },
+                                      onInteractionUpdate: (d) {
+                                        if ((d.scale - 1).abs() > 0.01) {
+                                          _pinched = true;
+                                        }
+                                      },
+                                      onInteractionEnd: (_) => _onPinchEnd(),
                                       child: pagesChild!,
                                     ),
                               );
@@ -2260,6 +2336,12 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
             ),
           ),
           Positioned.fill(child: _selectionBar()),
+          Positioned(
+            top: 84,
+            left: 0,
+            right: 0,
+            child: ZoomBadge(ratio: _zoomRatio, visible: _zoomVisible),
+          ),
         ],
       ),
     );

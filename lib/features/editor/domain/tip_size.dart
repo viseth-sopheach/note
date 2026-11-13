@@ -10,13 +10,15 @@ abstract final class TipSize {
   static const double highlighterMin = 1;
   static const double highlighterMax = 8;
 
-  static (double, double) _range(StrokeTool tool) => tool == StrokeTool.highlighter
+  static (double, double) _range(StrokeTool tool) =>
+      tool == StrokeTool.highlighter
       ? (highlighterMin, highlighterMax)
       : (penMin, penMax);
 
   static double widthFor(StrokeTool tool, int percent) {
     final (lo, hi) = _range(tool);
-    final f = (percent.clamp(minPercent, maxPercent) - minPercent) /
+    final f =
+        (percent.clamp(minPercent, maxPercent) - minPercent) /
         (maxPercent - minPercent);
     return lo + (hi - lo) * f;
   }

@@ -5,7 +5,8 @@ import 'package:flutter/animation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
-/// Animates the canvas transform: eased wheel scrolling and view resets.
+/// Animates the canvas transform: eased wheel scrolling, eased zooming and
+/// view resets.
 final class CanvasMotion {
   CanvasMotion({
     required TickerProvider vsync,
@@ -27,6 +28,7 @@ final class CanvasMotion {
   final TickerProvider _vsync;
   final double _tauMs;
   late final Ticker _ticker = _vsync.createTicker(_onTick);
+  late final Ticker _zoomTicker = _vsync.createTicker(_onZoomTick);
   late final AnimationController _anim;
 
   Offset _target = Offset.zero;
@@ -34,17 +36,39 @@ final class CanvasMotion {
   double _s0 = 1, _s1 = 1;
   Offset _t0 = Offset.zero, _t1 = Offset.zero;
 
+  double _zTarget = 1;
+  Offset _zFocal = Offset.zero;
+  Duration _zLast = Duration.zero;
+
   double get _scale => transform.value.storage[0];
   Offset get _translation =>
       Offset(transform.value.storage[12], transform.value.storage[13]);
 
   void _set(double s, Offset t) {
-    transform.value = Matrix4(s, 0, 0, 0, 0, s, 0, 0, 0, 0, 1, 0, t.dx, t.dy, 0, 1);
+    transform.value = Matrix4(
+      s,
+      0,
+      0,
+      0,
+      0,
+      s,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      t.dx,
+      t.dy,
+      0,
+      1,
+    );
   }
 
   /// Adds [delta] (screen pixels) to the scroll target and eases towards it.
   void scrollBy(Offset delta) {
     if (_anim.isAnimating) _anim.stop();
+    _zoomTicker.stop();
     final from = _ticker.isActive ? _target : _translation;
     _target = clamp(from + delta, _scale);
     if (reduceMotion()) {
@@ -70,6 +94,55 @@ final class CanvasMotion {
     }
     final k = 1 - math.exp(-dtMs / _tauMs);
     _set(_scale, current + remaining * k);
+  }
+
+  /// Multiplies the zoom by [factor] around [focal] (screen pixels) and
+  /// eases towards it. Repeated calls accumulate.
+  void zoomAt(
+    Offset focal,
+    double factor, {
+    required double minScale,
+    required double maxScale,
+  }) {
+    if (_anim.isAnimating) _anim.stop();
+    _ticker.stop();
+    final base = _zoomTicker.isActive ? _zTarget : _scale;
+    _zTarget = (base * factor).clamp(minScale, maxScale).toDouble();
+    _zFocal = focal;
+    if (reduceMotion()) {
+      _zoomTicker.stop();
+      _applyZoom(_zTarget);
+      return;
+    }
+    if (!_zoomTicker.isActive) {
+      _zLast = Duration.zero;
+      _zoomTicker.start();
+    }
+  }
+
+  void _applyZoom(double target) {
+    final s = _scale;
+    final t = _translation;
+    final sx = (_zFocal.dx - t.dx) / s;
+    final sy = (_zFocal.dy - t.dy) / s;
+    _set(
+      target,
+      clamp(Offset(_zFocal.dx - sx * target, _zFocal.dy - sy * target), target),
+    );
+  }
+
+  void _onZoomTick(Duration elapsed) {
+    final dtMs = (elapsed - _zLast).inMicroseconds / 1000.0;
+    _zLast = elapsed;
+    final cur = _scale;
+    final remaining = _zTarget - cur;
+    if (remaining.abs() < 0.0005 * _zTarget) {
+      _applyZoom(_zTarget);
+      _zoomTicker.stop();
+      return;
+    }
+    final k = 1 - math.exp(-dtMs / _tauMs);
+    _applyZoom(cur + remaining * k);
   }
 
   /// Animates to [scale] and [translation] (already clamped by the caller).
@@ -100,11 +173,13 @@ final class CanvasMotion {
   /// Call when the user takes over (touch, pinch, scrollbar drag).
   void stop() {
     _ticker.stop();
+    _zoomTicker.stop();
     _anim.stop();
   }
 
   void dispose() {
     _ticker.dispose();
+    _zoomTicker.dispose();
     _anim.dispose();
   }
 }

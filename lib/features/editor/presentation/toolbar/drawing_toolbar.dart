@@ -38,6 +38,8 @@ class DrawingToolbar extends StatelessWidget {
 
   static IconData _icon(StrokeTool t) => switch (t) {
     StrokeTool.pen => Icons.edit_outlined,
+    StrokeTool.physicalPen => Icons.draw_outlined,
+    StrokeTool.autoPen => Icons.abc,
     StrokeTool.highlighter => Icons.highlight_outlined,
     StrokeTool.eraser => Icons.cleaning_services_outlined,
     StrokeTool.select => Icons.gesture,
@@ -50,6 +52,8 @@ class DrawingToolbar extends StatelessWidget {
 
   static String _label(StrokeTool t) => switch (t) {
     StrokeTool.pen => 'Pen',
+    StrokeTool.physicalPen => 'Physical pen',
+    StrokeTool.autoPen => 'Auto Alphabet Pen',
     StrokeTool.highlighter => 'Highlighter',
     StrokeTool.eraser => 'Eraser',
     StrokeTool.select => 'Select',

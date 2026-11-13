@@ -9,6 +9,7 @@ import '../../domain/page_text.dart';
 import '../../domain/stroke_tool.dart';
 import '../paper/paper_colors.dart';
 import '../toolbar/ink_palette.dart';
+import 'page_text_style.dart';
 
 const Color _accent = Color(0xFF6366F1);
 const Color _ink = Color(0xFF374151);
@@ -32,7 +33,7 @@ double _neededHeight(PageText t, {String? text, double? fontSize}) {
   final painter = TextPainter(
     text: TextSpan(
       text: measured,
-      style: TextStyle(fontSize: fontSize ?? t.fontSize, height: 1.25),
+      style: PageTextStyle.of(t, fontSize: fontSize),
     ),
     textDirection: TextDirection.ltr,
   )..layout(maxWidth: math.max(1.0, t.width - _inner * 2));
@@ -121,9 +122,7 @@ class TextLayer extends StatelessWidget {
                   selected: t.id == controller.selectedId,
                   editing: t.id == controller.editingId,
                   grabbable:
-                      textMode ||
-                      t.id == controller.selectedId ||
-                      selectActive,
+                      textMode || t.id == controller.selectedId || selectActive,
                 ),
               if (bar != null && selected != null)
                 Positioned.fromRect(
@@ -212,12 +211,11 @@ class _TextItemState extends State<_TextItem> {
 
   TextStyle _style() {
     final t = widget.text;
-    return TextStyle(
+    return PageTextStyle.of(
+      t,
       color: Color(
         PaperColors.inkFor(t.colorValue, darkPaper: widget.darkPaper),
       ),
-      fontSize: t.fontSize,
-      height: 1.25,
     );
   }
 
@@ -479,8 +477,12 @@ class _GripState extends State<_Grip> {
   @override
   Widget build(BuildContext context) {
     final corner = widget.kind == _GripKind.corner;
-    final w = corner ? 12.0 : (widget.kind == _GripKind.horizontal ? 24.0 : 8.0);
-    final h = corner ? 12.0 : (widget.kind == _GripKind.horizontal ? 8.0 : 24.0);
+    final w = corner
+        ? 12.0
+        : (widget.kind == _GripKind.horizontal ? 24.0 : 8.0);
+    final h = corner
+        ? 12.0
+        : (widget.kind == _GripKind.horizontal ? 8.0 : 24.0);
 
     return Semantics(
       label: 'Resize text box',
@@ -567,11 +569,7 @@ class _TextToolbarState extends State<_TextToolbar> {
       tooltip: tip,
       selected: t.align == value,
       onTap: () => _apply(align: value),
-      child: Icon(
-        icon,
-        size: 18,
-        color: t.align == value ? _accent : _ink,
-      ),
+      child: Icon(icon, size: 18, color: t.align == value ? _accent : _ink),
     );
 
     return Material(

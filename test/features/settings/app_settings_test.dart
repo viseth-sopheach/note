@@ -72,17 +72,7 @@ void main() {
       'pen_width': 3.5,
       'undo_limit': 7,
       'toolbar_order': ['pen', 'pen', 'bogus'],
-      'toolbar_hidden': [
-        'pen',
-        'highlighter',
-        'eraser',
-        'select',
-        'line',
-        'rectangle',
-        'ellipse',
-        'triangle',
-        'arrow',
-      ],
+      'toolbar_hidden': [for (final t in StrokeTool.values) t.name],
     })).load();
 
     expect(s.themeMode, AppThemeMode.system);

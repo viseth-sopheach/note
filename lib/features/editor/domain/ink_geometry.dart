@@ -54,12 +54,12 @@ abstract final class InkGeometry {
     if (pts.length < 3) return null;
     final half = math.max(_minHalf, baseWidth / 2);
     final samples = [for (final p in pts) (x: p.x, y: p.y, r: half)];
-    return _offset(samples);
+    return offset(samples);
   }
 
   // ---- Centre line and outline ----
 
-  static InkOutline _offset(List<InkSample> c) {
+  static InkOutline offset(List<InkSample> c) {
     final left = <InkVertex>[];
     final right = <InkVertex>[];
     var tx = 1.0, ty = 0.0;

@@ -13,6 +13,7 @@ final class PageText {
     required this.colorValue,
     this.fontSize = 20,
     this.align = 0,
+    this.handwriting = false,
   });
 
   final String id;
@@ -27,6 +28,9 @@ final class PageText {
   /// 0 left, 1 center, 2 right.
   final int align;
 
+  /// Drawn with the handwriting fonts (Auto Alphabet Pen result).
+  final bool handwriting;
+
   PageText copyWith({
     String? text,
     double? x,
@@ -36,6 +40,7 @@ final class PageText {
     double? fontSize,
     int? colorValue,
     int? align,
+    bool? handwriting,
   }) => PageText(
     id: id,
     text: text ?? this.text,
@@ -46,6 +51,7 @@ final class PageText {
     colorValue: colorValue ?? this.colorValue,
     fontSize: fontSize ?? this.fontSize,
     align: align ?? this.align,
+    handwriting: handwriting ?? this.handwriting,
   );
 
   Map<String, Object> toJson() => {
@@ -58,6 +64,7 @@ final class PageText {
     'c': colorValue,
     's': fontSize,
     'a': align,
+    if (handwriting) 'hw': true,
   };
 
   /// Returns null for malformed entries instead of throwing.
@@ -87,6 +94,7 @@ final class PageText {
       colorValue: c is int ? c : 0xFF1B1B1F,
       fontSize: s != null && s > 0 ? s : 20,
       align: a is int && a >= 0 && a <= 2 ? a : 0,
+      handwriting: raw['hw'] == true,
     );
   }
 
@@ -115,9 +123,20 @@ final class PageText {
       other.height == height &&
       other.colorValue == colorValue &&
       other.fontSize == fontSize &&
-      other.align == align;
+      other.align == align &&
+      other.handwriting == handwriting;
 
   @override
-  int get hashCode =>
-      Object.hash(id, text, x, y, width, height, colorValue, fontSize, align);
+  int get hashCode => Object.hash(
+    id,
+    text,
+    x,
+    y,
+    width,
+    height,
+    colorValue,
+    fontSize,
+    align,
+    handwriting,
+  );
 }

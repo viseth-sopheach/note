@@ -46,8 +46,9 @@ class _ExportOptionsDialogState extends State<ExportOptionsDialog> {
                 ChoiceChip(
                   label: Text(paper.label),
                   selected: _options.paper == paper,
-                  onSelected: (_) =>
-                      setState(() => _options = _options.copyWith(paper: paper)),
+                  onSelected: (_) => setState(
+                    () => _options = _options.copyWith(paper: paper),
+                  ),
                 ),
             ],
           ),

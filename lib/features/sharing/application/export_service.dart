@@ -21,10 +21,12 @@ import 'package:pdfrx/pdfrx.dart' as rx;
 import '../../editor/domain/page_image.dart';
 import '../../editor/domain/page_repository.dart';
 import '../../editor/domain/page_text.dart';
+import '../../editor/domain/physical_ink.dart';
 import '../../editor/domain/stroke.dart';
 import '../../editor/domain/stroke_point.dart';
 import '../../editor/domain/stroke_tool.dart';
 import '../../editor/presentation/drawing/ink_renderer.dart';
+import '../../editor/presentation/drawing/page_text_style.dart';
 import '../../editor/presentation/paper/paper_colors.dart';
 import '../../editor/presentation/paper/paper_painter.dart';
 import '../../library/domain/paper_template.dart';
@@ -289,9 +291,37 @@ class ExportService {
         ..setFillColor(color);
 
       final pts = s.points;
+      final outline = s.tool.isNaturalPen && pts.length >= 3
+          ? PhysicalInk.build(pts, s.width)
+          : null;
       if (pts.length == 1) {
         g
           ..drawEllipse(_x(pts.first.x), _y(pts.first.y), width / 2, width / 2)
+          ..fillPath();
+      } else if (outline != null) {
+        g.moveTo(_x(outline.left.first.x), _y(outline.left.first.y));
+        for (final v in outline.left.skip(1)) {
+          g.lineTo(_x(v.x), _y(v.y));
+        }
+        for (final v in outline.right.reversed) {
+          g.lineTo(_x(v.x), _y(v.y));
+        }
+        g
+          ..closePath()
+          ..fillPath()
+          ..drawEllipse(
+            _x(outline.start.x),
+            _y(outline.start.y),
+            outline.start.r * _k,
+            outline.start.r * _k,
+          )
+          ..fillPath()
+          ..drawEllipse(
+            _x(outline.end.x),
+            _y(outline.end.y),
+            outline.end.r * _k,
+            outline.end.r * _k,
+          )
           ..fillPath();
       } else {
         g
@@ -398,10 +428,9 @@ class ExportService {
     final painter = TextPainter(
       text: TextSpan(
         text: t.text,
-        style: TextStyle(
+        style: PageTextStyle.of(
+          t,
           color: Color(PaperColors.inkFor(t.colorValue, darkPaper: dark)),
-          fontSize: t.fontSize,
-          height: 1.25,
         ),
       ),
       textAlign: switch (t.align) {

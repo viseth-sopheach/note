@@ -26,17 +26,49 @@ abstract final class StrokeSelection {
     return inside;
   }
 
-  /// Ids of strokes with at least half of their points inside [lasso].
-  static Set<String> insideLasso(List<Stroke> strokes, List<Vertex> lasso) {
+  /// Ids of strokes with at least [minFraction] of their path length inside
+  /// [lasso]. The path is sampled every [step] units, so long straight
+  /// segments count correctly.
+  static Set<String> insideLasso(
+    List<Stroke> strokes,
+    List<Vertex> lasso, {
+    double minFraction = 0.5,
+    double step = 4,
+  }) {
     if (lasso.length < 3) return {};
+    var l = lasso.first.x, r = l, t = lasso.first.y, b = t;
+    for (final v in lasso) {
+      l = math.min(l, v.x);
+      r = math.max(r, v.x);
+      t = math.min(t, v.y);
+      b = math.max(b, v.y);
+    }
     final ids = <String>{};
     for (final s in strokes) {
-      if (s.points.isEmpty) continue;
-      var inside = 0;
-      for (final p in s.points) {
-        if (contains(lasso, p.x, p.y)) inside++;
+      final p = s.points;
+      if (p.isEmpty) continue;
+      final box = pointBoundsOf([s]);
+      if (box == null ||
+          box.right < l ||
+          box.left > r ||
+          box.bottom < t ||
+          box.top > b) {
+        continue;
       }
-      if (inside * 2 >= s.points.length) ids.add(s.id);
+      var total = 1;
+      var inside = contains(lasso, p.first.x, p.first.y) ? 1 : 0;
+      for (var i = 1; i < p.length; i++) {
+        final a = p[i - 1], c = p[i];
+        final n = (_gap(a, c) / step).ceil();
+        for (var k = 1; k <= n; k++) {
+          final f = k / n;
+          total++;
+          if (contains(lasso, a.x + (c.x - a.x) * f, a.y + (c.y - a.y) * f)) {
+            inside++;
+          }
+        }
+      }
+      if (inside >= total * minFraction) ids.add(s.id);
     }
     return ids;
   }

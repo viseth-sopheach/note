@@ -1,3 +1,4 @@
+import '../../editor/domain/handwriting_language.dart';
 import '../../editor/domain/stroke_tool.dart';
 import '../../editor/domain/tip_size.dart';
 import '../../library/domain/paper_template.dart';
@@ -25,6 +26,7 @@ final class AppSettings {
     this.confirmDeletePage = true,
     this.rememberPosition = true,
     this.shapeRecognition = true, // hold ~1 s before lifting to snap to a shape
+    this.handwritingLanguage = HandwritingLanguage.auto,
   });
 
   static const List<double> zoomLevels = [0.5, 0.75, 1.0, 1.25, 1.5];
@@ -59,6 +61,9 @@ final class AppSettings {
   /// prefs key, so an old saved `false` value is ignored.
   final bool shapeRecognition;
 
+  /// Language used by the Auto Alphabet Pen when converting handwriting.
+  final HandwritingLanguage handwritingLanguage;
+
   AppSettings copyWith({
     AppThemeMode? themeMode,
     int? accentColorValue,
@@ -78,6 +83,7 @@ final class AppSettings {
     bool? confirmDeletePage,
     bool? rememberPosition,
     bool? shapeRecognition,
+    HandwritingLanguage? handwritingLanguage,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     accentColorValue: accentColorValue ?? this.accentColorValue,
@@ -97,6 +103,7 @@ final class AppSettings {
     confirmDeletePage: confirmDeletePage ?? this.confirmDeletePage,
     rememberPosition: rememberPosition ?? this.rememberPosition,
     shapeRecognition: shapeRecognition ?? this.shapeRecognition,
+    handwritingLanguage: handwritingLanguage ?? this.handwritingLanguage,
   );
 
   /// Returns a copy with every value forced into its supported range:

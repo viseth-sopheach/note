@@ -143,8 +143,7 @@ class PageImagesController extends ChangeNotifier {
     final img = _images[i];
     final left =
         corner == ImageCorner.topLeft || corner == ImageCorner.bottomLeft;
-    final top =
-        corner == ImageCorner.topLeft || corner == ImageCorner.topRight;
+    final top = corner == ImageCorner.topLeft || corner == ImageCorner.topRight;
 
     final fromX = left ? -dx : dx;
     final fromY = (top ? -dy : dy) * img.aspect;
@@ -172,6 +171,14 @@ class PageImagesController extends ChangeNotifier {
     _images.removeAt(i);
     _selectedId = null;
     _interacting = false;
+    _markChanged();
+  }
+
+  void removeById(String id) {
+    final i = _indexOf(id);
+    if (i < 0) return;
+    _images.removeAt(i);
+    if (_selectedId == id) _selectedId = null;
     _markChanged();
   }
 

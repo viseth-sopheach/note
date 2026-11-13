@@ -32,7 +32,10 @@ abstract final class StrokeSimplifier {
           ..add((index, e));
       }
     }
-    return [for (var i = 0; i < n; i++) if (keep[i]) pts[i]];
+    return [
+      for (var i = 0; i < n; i++)
+        if (keep[i]) pts[i],
+    ];
   }
 
   static double _sqDistToSegment(StrokePoint p, StrokePoint a, StrokePoint b) {

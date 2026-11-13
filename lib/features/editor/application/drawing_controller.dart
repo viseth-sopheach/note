@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../domain/arrow_shape.dart';
 import '../domain/command_history.dart';
 import '../domain/drawing_command.dart';
+import '../domain/object_selection.dart';
 import '../domain/pen_filter.dart';
 import '../domain/selection_handle.dart';
 import '../domain/shape_center.dart';
@@ -107,6 +108,15 @@ class DrawingController extends ChangeNotifier {
 
   /// Current zoom, set by the editor so handles keep a constant screen size.
   double Function()? viewScale;
+
+  /// Images and text boxes of this page. Set by the editor.
+  PageObjects? pageObjects;
+
+  /// Fired when a pen stroke starts / was committed.
+  VoidCallback? onStrokeBegan;
+  void Function(Stroke stroke)? onStrokeCommitted;
+
+  ObjectSelection _objects = ObjectSelection.empty;
 
   final String Function() _newId;
   final StrokeRecorder _recorder;
@@ -215,6 +225,7 @@ class DrawingController extends ChangeNotifier {
     if (_settings.tool != _seenTool) {
       _seenTool = _settings.tool;
       _selected.clear();
+      _objects = ObjectSelection.empty;
       _hoverId = null;
     }
     notifyListeners();
@@ -269,7 +280,7 @@ class DrawingController extends ChangeNotifier {
       clearHover();
       return;
     }
-    final id = _strokeAt(x, y);
+    final id = _strokeAt(x, y, freehand: _settings.tool == StrokeTool.select);
     if (id == _hoverId) return;
     _hoverId = id;
     _live.ping();
@@ -334,7 +345,9 @@ class DrawingController extends ChangeNotifier {
 
   Set<String> get selectedIds => UnmodifiableSetView(_selected);
 
-  bool get hasSelection => _selected.isNotEmpty;
+  bool get hasSelection => _selected.isNotEmpty || !_objects.isEmpty;
+
+  bool get hasObjectSelection => !_objects.isEmpty;
 
   bool get isMovingSelection => _mode == _Mode.move;
 
@@ -370,8 +383,19 @@ class DrawingController extends ChangeNotifier {
 
   // ---- Frame, preview, handles ----
 
+  static Bounds? _union(Bounds? a, Bounds? b) {
+    if (a == null) return b;
+    if (b == null) return a;
+    return (
+      left: math.min(a.left, b.left),
+      top: math.min(a.top, b.top),
+      right: math.max(a.right, b.right),
+      bottom: math.max(a.bottom, b.bottom),
+    );
+  }
+
   Bounds? get _rawFrame {
-    if (_selected.isEmpty) return null;
+    if (!hasSelection) return null;
     if (_mode == _Mode.rotate) {
       final c = math.cos(_rot), s = math.sin(_rot);
       return StrokeSelection.pointBoundsOf([
@@ -390,13 +414,17 @@ class DrawingController extends ChangeNotifier {
       );
     }
     final b = StrokeSelection.pointBoundsOf(selectedStrokes);
-    if (b == null) return null;
-    return (
-      left: b.left + _dx,
-      top: b.top + _dy,
-      right: b.right + _dx,
-      bottom: b.bottom + _dy,
-    );
+    final strokes = b == null
+        ? null
+        : (
+            left: b.left + _dx,
+            top: b.top + _dy,
+            right: b.right + _dx,
+            bottom: b.bottom + _dy,
+          );
+    // Objects are moved live, so their bounds are already current.
+    final objects = _objects.isEmpty ? null : pageObjects?.boundsOf(_objects);
+    return _union(strokes, objects);
   }
 
   /// Live selection bounds, never thinner than [minFramePx] on screen.
@@ -421,6 +449,7 @@ class DrawingController extends ChangeNotifier {
   /// The selected stroke when exactly one non-dot Line/Arrow shape is
   /// selected.
   Stroke? get _linearStroke {
+    if (!_objects.isEmpty) return null;
     if (_selected.length != 1) return null;
     for (final s in _strokes) {
       if (_selected.contains(s.id)) {
@@ -531,6 +560,7 @@ class DrawingController extends ChangeNotifier {
   /// Endpoint handles plus rotate for lines and arrows; up to eight box
   /// handles plus rotate for other shapes (document units).
   List<HandleSpot> get handleSpots {
+    if (!_objects.isEmpty) return const [];
     final ends = linearEnds;
     if (ends != null) {
       final rs = _lineRotateSpot(ends);
@@ -573,23 +603,28 @@ class DrawingController extends ChangeNotifier {
 
   /// True when (x, y) is on a handle or inside the selection frame.
   bool hitsSelectionChrome(double x, double y) {
-    if (_selected.isEmpty) return false;
+    if (!hasSelection) return false;
     return _handleAt(x, y) != null || _inFrame(x, y);
   }
 
   void clearSelection() {
-    if (isDrawing || _selected.isEmpty) return;
+    if (isDrawing || !hasSelection) return;
     _selected.clear();
+    _objects = ObjectSelection.empty;
     notifyListeners();
     _live.ping();
   }
 
   /// Deletes the selected strokes as one undoable step.
   void deleteSelection() {
-    if (isDrawing || _selected.isEmpty) return;
+    if (isDrawing || !hasSelection) return;
     final command = RemoveStrokesCommand();
     for (var i = _strokes.length - 1; i >= 0; i--) {
       if (_selected.contains(_strokes[i].id)) command.take(_strokes, i);
+    }
+    if (!_objects.isEmpty) {
+      pageObjects?.remove(_objects);
+      _objects = ObjectSelection.empty;
     }
     _selected.clear();
     if (!command.isEmpty) {
@@ -598,6 +633,35 @@ class DrawingController extends ChangeNotifier {
     }
     notifyListeners();
     _live.ping();
+  }
+
+  /// Removes strokes [ids] and runs [onApply] as one undo step ([onRevert]
+  /// on undo). Used by the Auto Alphabet Pen to swap ink for text.
+  bool replaceWithSideEffect(
+    Set<String> ids, {
+    required void Function() onApply,
+    required void Function() onRevert,
+  }) {
+    if (isDrawing || ids.isEmpty) return false;
+    final remove = RemoveStrokesCommand();
+    for (var i = _strokes.length - 1; i >= 0; i--) {
+      if (ids.contains(_strokes[i].id)) remove.take(_strokes, i);
+    }
+    if (remove.isEmpty) return false;
+    onApply();
+    _history.record(
+      CompositeCommand([
+        remove,
+        SideEffectCommand(onApply: onApply, onRevert: onRevert),
+      ]),
+    );
+    _selected.clear();
+    _objects = ObjectSelection.empty;
+    _hoverId = null;
+    _revision++;
+    notifyListeners();
+    _live.ping();
+    return true;
   }
 
   // ---- Convert selected shape ----
@@ -852,6 +916,7 @@ class DrawingController extends ChangeNotifier {
     _cancelRefine();
     if (!canUndo) return;
     _selected.clear();
+    _objects = ObjectSelection.empty;
     _hoverId = null;
     _history.undo(_strokes);
     _revision++;
@@ -863,6 +928,7 @@ class DrawingController extends ChangeNotifier {
     _cancelRefine();
     if (!canRedo) return;
     _selected.clear();
+    _objects = ObjectSelection.empty;
     _hoverId = null;
     _history.redo(_strokes);
     _revision++;
@@ -879,6 +945,7 @@ class DrawingController extends ChangeNotifier {
       ..clear()
       ..addAll(strokes);
     _selected.clear();
+    _objects = ObjectSelection.empty;
     _hoverId = null;
     _history.clear();
     notifyListeners();
@@ -920,7 +987,10 @@ class DrawingController extends ChangeNotifier {
   // ---- Hold to snap ----
 
   void _armHold(double x, double y) {
-    _holdArmed = _settings.shapeRecognition && _snap == null;
+    _holdArmed =
+        _settings.shapeRecognition &&
+        _snap == null &&
+        _settings.tool != StrokeTool.autoPen;
     if (!_holdArmed) return;
     _holdX = x;
     _holdY = y;
@@ -997,6 +1067,7 @@ class DrawingController extends ChangeNotifier {
   }) {
     if (isDrawing) return false;
     _activePointer = pointer;
+    onStrokeBegan?.call();
     _cancelRefine();
     _hoverId = null;
     _downX = x;
@@ -1020,9 +1091,11 @@ class DrawingController extends ChangeNotifier {
 
       case StrokeTool.pen:
       case StrokeTool.highlighter:
+      case StrokeTool.physicalPen:
+      case StrokeTool.autoPen:
         // A pen/highlighter down on a handle grabs the selection; on ink
         // or empty space it just clears the selection and starts drawing.
-        if (_selected.isNotEmpty) {
+        if (hasSelection) {
           // Handles and the frame body both grab the selection, so a selected
           // shape can be moved, resized or rotated without switching tools.
           if (_tryBeginSelectionGesture(x, y)) {
@@ -1031,6 +1104,7 @@ class DrawingController extends ChangeNotifier {
             return true;
           }
           _selected.clear();
+          _objects = ObjectSelection.empty;
         }
         _mode = _Mode.draw;
         _originMs = timeMs;
@@ -1068,13 +1142,14 @@ class DrawingController extends ChangeNotifier {
   /// Starts a move/resize when the pointer is on the current selection.
   /// Otherwise clears the selection and returns false.
   bool _grabSelection(double x, double y) {
-    if (_selected.isEmpty) return false;
+    if (!hasSelection) return false;
     if (_tryBeginSelectionGesture(x, y)) {
       notifyListeners();
       _live.ping();
       return true;
     }
     _selected.clear();
+    _objects = ObjectSelection.empty;
     return false;
   }
 
@@ -1129,8 +1204,13 @@ class DrawingController extends ChangeNotifier {
           _live.ping();
         }
       case _Mode.move:
-        _dx = x - _moveFromX;
-        _dy = y - _moveFromY;
+        final nx = x - _moveFromX;
+        final ny = y - _moveFromY;
+        if (!_objects.isEmpty) {
+          pageObjects?.moveBy(_objects, nx - _dx, ny - _dy);
+        }
+        _dx = nx;
+        _dy = ny;
         _live.ping();
       case _Mode.shape:
         _updateShape(x, y);
@@ -1248,8 +1328,9 @@ class DrawingController extends ChangeNotifier {
       case _Mode.lasso:
         _lasso.add((x: x, y: y));
         _selected.clear();
+        _objects = ObjectSelection.empty;
         if (_isNear(x, y, _downX, _downY)) {
-          final hit = _strokeAt(x, y);
+          final hit = _strokeAt(x, y, freehand: true);
           if (hit != null) _selected.add(hit);
         } else {
           final candidates = [
@@ -1257,6 +1338,9 @@ class DrawingController extends ChangeNotifier {
               if (_selectable(s)) s,
           ];
           _selected.addAll(StrokeSelection.insideLasso(candidates, _lasso));
+          _objects =
+              pageObjects?.pickInside(List<Vertex>.of(_lasso)) ??
+              ObjectSelection.empty;
         }
         _expandSelection();
         _lasso.clear();
@@ -1268,11 +1352,28 @@ class DrawingController extends ChangeNotifier {
         final dx = x - _moveFromX;
         final dy = y - _moveFromY;
         final ids = Set<String>.of(_selected);
+        final objs = _objects;
+        final bridge = pageObjects;
+        if (!objs.isEmpty) bridge?.moveBy(objs, dx - _dx, dy - _dy);
         _dx = 0;
         _dy = 0;
         _finish();
         if (dx.abs() >= 0.5 || dy.abs() >= 0.5) {
-          _history.execute(MoveStrokesCommand(ids, dx, dy), _strokes);
+          final move = MoveStrokesCommand(ids, dx, dy);
+          if (objs.isEmpty || bridge == null) {
+            _history.execute(move, _strokes);
+          } else {
+            move.apply(_strokes);
+            _history.record(
+              CompositeCommand([
+                move,
+                SideEffectCommand(
+                  onApply: () => bridge.moveBy(objs, dx, dy),
+                  onRevert: () => bridge.moveBy(objs, -dx, -dy),
+                ),
+              ]),
+            );
+          }
           _revision++;
         }
         notifyListeners();
@@ -1314,6 +1415,7 @@ class DrawingController extends ChangeNotifier {
 
       case _Mode.draw:
         final recognized = _recognized;
+        Stroke? committedByDraw;
 
         if (recognized == null) {
           final p = _snapPoint(x, y);
@@ -1370,11 +1472,14 @@ class DrawingController extends ChangeNotifier {
             _expandSelection();
           }
           if (stroke.tool == StrokeTool.pen) _remember(stroke.id);
+          if (recognized == null) committedByDraw = stroke;
         }
         _finish();
         if (refine) _scheduleRefine(stroke.id);
         notifyListeners();
         _live.ping();
+        final done = committedByDraw;
+        if (done != null) onStrokeCommitted?.call(done);
 
       case _Mode.none:
         break;
@@ -1398,6 +1503,7 @@ class DrawingController extends ChangeNotifier {
       case _Mode.lasso:
         _lasso.clear();
       case _Mode.move:
+        if (!_objects.isEmpty) pageObjects?.moveBy(_objects, -_dx, -_dy);
         _dx = 0;
         _dy = 0;
       case _Mode.resize:
@@ -1433,6 +1539,7 @@ class DrawingController extends ChangeNotifier {
   void _beginSelect(double x, double y) {
     if (!_tryBeginSelectionGesture(x, y)) {
       _selected.clear();
+      _objects = ObjectSelection.empty;
       _mode = _Mode.lasso;
       _lasso
         ..clear()
@@ -1643,12 +1750,12 @@ class DrawingController extends ChangeNotifier {
 
   /// Id of the top-most selectable shape under (x, y), or null. Freehand
   /// strokes and ellipse center dots are skipped.
-  String? _strokeAt(double x, double y) {
+  String? _strokeAt(double x, double y, {bool freehand = false}) {
     final radius = 10 / _scale;
     for (var i = _strokes.length - 1; i >= 0; i--) {
       final s = _strokes[i];
       if (!_selectable(s)) continue;
-      if (s.shape == null) continue;
+      if (s.shape == null && !freehand) continue;
       if (StrokeHitTest.hitsSegment(
         s,
         ax: x,

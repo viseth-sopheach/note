@@ -143,3 +143,21 @@ class SnapshotCommand implements DrawingCommand {
       ..addAll(_before);
   }
 }
+
+/// Runs code outside the stroke list as part of one undo step.
+class SideEffectCommand implements DrawingCommand {
+  SideEffectCommand({
+    required void Function() onApply,
+    required void Function() onRevert,
+  }) : _onApply = onApply,
+       _onRevert = onRevert;
+
+  final void Function() _onApply;
+  final void Function() _onRevert;
+
+  @override
+  void apply(List<Stroke> strokes) => _onApply();
+
+  @override
+  void revert(List<Stroke> strokes) => _onRevert();
+}

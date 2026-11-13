@@ -207,6 +207,26 @@ class PageTextsController extends ChangeNotifier {
     _markChanged();
   }
 
+  /// Inserts or replaces a finished box without selecting it.
+  PageText insert(PageText t) {
+    final n = _normalized(t);
+    _texts.removeWhere((e) => e.id == n.id);
+    _texts.add(n);
+    _markChanged();
+    return n;
+  }
+
+  void removeById(String id) {
+    final i = _indexOf(id);
+    if (i < 0) return;
+    _texts.removeAt(i);
+    if (_selectedId == id) {
+      _selectedId = null;
+      _editingId = null;
+    }
+    _markChanged();
+  }
+
   // ---- Hit testing (paper units) ----
 
   PageText? textAt(Offset p) {
@@ -316,6 +336,7 @@ class PageTextsController extends ChangeNotifier {
       colorValue: t.colorValue,
       fontSize: t.fontSize,
       align: t.align,
+      handwriting: t.handwriting,
     );
   }
 }

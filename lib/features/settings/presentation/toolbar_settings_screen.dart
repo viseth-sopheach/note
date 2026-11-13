@@ -15,6 +15,8 @@ class ToolbarSettingsScreen extends ConsumerWidget {
 
   static String _label(StrokeTool tool) => switch (tool) {
     StrokeTool.pen => 'Pen',
+    StrokeTool.physicalPen => 'Physical pen',
+    StrokeTool.autoPen => 'Auto Alphabet Pen',
     StrokeTool.highlighter => 'Highlighter',
     StrokeTool.eraser => 'Eraser',
     StrokeTool.select => 'Select',

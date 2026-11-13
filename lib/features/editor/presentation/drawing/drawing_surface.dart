@@ -98,9 +98,18 @@ class _DrawingSurfaceState extends State<DrawingSurface> {
       e.kind == PointerDeviceKind.invertedStylus ||
       (widget.allowTouch && e.kind == PointerDeviceKind.touch);
 
-  /// Always report full pressure. Pen width is a user setting, not a
-  /// function of device pressure, so every input kind draws the same line.
-  static double _pressure(PointerEvent e) => 1.0;
+  /// Real stylus pressure only for the natural pens; everything else stays 1.0.
+  double _pressure(PointerEvent e) {
+    if (_c.tool.isNaturalPen && e.kind == PointerDeviceKind.stylus) {
+      final range = e.pressureMax - e.pressureMin;
+      if (range > 0) {
+        return ((e.pressure - e.pressureMin) / range)
+            .clamp(0.05, 1.0)
+            .toDouble();
+      }
+    }
+    return 1.0;
+  }
 
   void _hover(PointerHoverEvent e) {
     final p = _local(e);

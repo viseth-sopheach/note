@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../editor/domain/handwriting_language.dart';
 import '../../editor/domain/stroke_tool.dart';
 import '../../library/domain/paper_template.dart';
 import '../domain/app_settings.dart';
@@ -29,6 +30,7 @@ class SharedPrefsSettingsRepository implements SettingsRepository {
   static const String _confirm = 'confirm_delete_page';
   static const String _remember = 'remember_position';
   static const String _shapes = 'shape_recognition_v3';
+  static const String _handwriting = 'handwriting_language';
   static const String _positionPrefix = 'editor_position_';
 
   final SharedPreferences _prefs;
@@ -91,6 +93,9 @@ class SharedPrefsSettingsRepository implements SettingsRepository {
           _safe(() => _prefs.getBool(_remember)) ?? d.rememberPosition,
       shapeRecognition:
           _safe(() => _prefs.getBool(_shapes)) ?? d.shapeRecognition,
+      handwritingLanguage: HandwritingLanguage.fromName(
+        _safe(() => _prefs.getString(_handwriting)),
+      ),
     ).normalized();
   }
 
@@ -116,6 +121,7 @@ class SharedPrefsSettingsRepository implements SettingsRepository {
       _prefs.setBool(_confirm, s.confirmDeletePage),
       _prefs.setBool(_remember, s.rememberPosition),
       _prefs.setBool(_shapes, s.shapeRecognition),
+      _prefs.setString(_handwriting, s.handwritingLanguage.name),
     ]);
   }
 

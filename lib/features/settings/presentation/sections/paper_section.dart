@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/glass/glass_divider.dart';
+import '../../../editor/domain/handwriting_language.dart';
 import '../../../editor/domain/stroke_tool.dart';
 import '../../../editor/domain/tip_size.dart';
 import '../../../editor/presentation/toolbar/ink_palette.dart';
@@ -44,6 +45,18 @@ class PaperSection extends ConsumerWidget {
             (value: StrokeTool.highlighter, label: 'Highlighter'),
           ],
           onChanged: (t) => notifier.update((s) => s.copyWith(defaultTool: t)),
+        ),
+        const GlassDivider(),
+        SettingsChoiceTile<HandwritingLanguage>(
+          title: 'Auto Alphabet Pen language',
+          subtitle: 'Converts handwriting 0.6 s after you lift the pen',
+          value: settings.handwritingLanguage,
+          options: [
+            for (final l in HandwritingLanguage.values)
+              (value: l, label: l.label),
+          ],
+          onChanged: (l) =>
+              notifier.update((s) => s.copyWith(handwritingLanguage: l)),
         ),
         const GlassDivider(),
         SettingsColorRow(
