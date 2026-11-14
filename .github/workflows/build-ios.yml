@@ -9,6 +9,9 @@ concurrency:
   group: build-ios-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: macos-latest
@@ -22,7 +25,10 @@ jobs:
           flutter-version: 3.50.0
           cache: true
 
-      - run: flutter --version
+      - name: Show toolchain versions
+        run: |
+          flutter --version
+          xcodebuild -version
 
       - name: Enable Swift Package Manager
         run: flutter config --enable-swift-package-manager
@@ -35,6 +41,15 @@ jobs:
           set -o pipefail
           flutter pub get 2>&1 | tee -a build.log
 
+      - name: Prepare Share Extension target
+        env:
+          BUNDLE_ID: com.viset.visethnote
+          APP_GROUP: group.com.viset.visethnote
+        run: |
+          set -o pipefail
+          gem install xcodeproj --no-document 2>&1 | tee -a build.log
+          ruby ios/add_share_extension.rb 2>&1 | tee -a build.log
+
       - name: Build unsigned iOS app
         run: |
           set -o pipefail
@@ -43,15 +58,24 @@ jobs:
       - name: Package IPA
         run: |
           set -euo pipefail
-          rm -rf Payload app.ipa
-          mkdir Payload
-          cp -R build/ios/iphoneos/Runner.app Payload/
-          ditto -c -k --sequesterRsrc --keepParent Payload app.ipa
+          app_path="build/ios/iphoneos/Runner.app"
+          ipa_path="build/ios/ipa/Viseth.ipa"
+          test -d "$app_path"
+          test -d "$app_path/PlugIns/ShareExtension.appex"
+          mkdir -p "$(dirname "$ipa_path")"
+          rm -f "$ipa_path"
+          package_dir="$(mktemp -d)"
+          trap 'rm -rf "$package_dir"' EXIT
+          mkdir "$package_dir/Payload"
+          ditto "$app_path" "$package_dir/Payload/Runner.app"
+          (cd "$package_dir" && ditto -c -k --sequesterRsrc --keepParent Payload "$GITHUB_WORKSPACE/$ipa_path")
+          unzip -l "$ipa_path" | grep -F 'Payload/Runner.app/PlugIns/ShareExtension.appex/' > /dev/null
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
         with:
-          name: unsigned-ipa
-          path: app.ipa
+          name: viseth-ios-ipa
+          path: build/ios/ipa/Viseth.ipa
           if-no-files-found: error
 
       - name: Upload build log on failure
