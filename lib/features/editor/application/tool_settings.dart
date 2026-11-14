@@ -14,6 +14,7 @@ class ToolSettings extends ChangeNotifier {
     double highlighterWidth = 3,
     bool shapeRecognition = true,
     double eraserRadius = eraserDefault,
+    double laserScale = laserDefault,
   }) : _tool = tool,
        _penColor = penColorValue,
        _highlighterColor = highlighterColorValue,
@@ -23,7 +24,8 @@ class ToolSettings extends ChangeNotifier {
        _highlighterWidth = highlighterWidth,
        // ignore: prefer_initializing_formals
        _shapeRecognition = shapeRecognition,
-       _eraserRadius = eraserRadius {
+       _eraserRadius = eraserRadius,
+       _laserScale = laserScale {
     _colorValue = tool == StrokeTool.highlighter
         ? _highlighterColor
         : _penColor;
@@ -34,6 +36,10 @@ class ToolSettings extends ChangeNotifier {
   static const double eraserMax = 48;
   static const double eraserDefault = 10;
 
+  static const double laserMin = 0.4;
+  static const double laserMax = 3.0;
+  static const double laserDefault = 1.0;
+
   StrokeTool _tool;
   int _penColor;
   int _highlighterColor;
@@ -41,6 +47,7 @@ class ToolSettings extends ChangeNotifier {
   double _highlighterWidth;
   bool _shapeRecognition;
   double _eraserRadius;
+  double _laserScale;
   late int _colorValue;
   late double _width;
 
@@ -50,6 +57,7 @@ class ToolSettings extends ChangeNotifier {
   double get penWidth => _penWidth;
   double get highlighterWidth => _highlighterWidth;
   double get eraserRadius => _eraserRadius;
+  double get laserScale => _laserScale;
 
   /// Hold at the end of a pen or highlighter stroke to snap it to a shape.
   bool get shapeRecognition => _shapeRecognition;
@@ -109,6 +117,13 @@ class ToolSettings extends ChangeNotifier {
     final v = radius.clamp(eraserMin, eraserMax).toDouble();
     if (v == _eraserRadius) return;
     _eraserRadius = v;
+    notifyListeners();
+  }
+
+  void selectLaserScale(double v) {
+    final s = v.clamp(laserMin, laserMax).toDouble();
+    if (s == _laserScale) return;
+    _laserScale = s;
     notifyListeners();
   }
 }

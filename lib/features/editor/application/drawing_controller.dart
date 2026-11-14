@@ -95,18 +95,33 @@ class DrawingController extends ChangeNotifier {
   bool get hasLaser => _laser.isNotEmpty || _laserHead != null;
   int get laserClockMs => _clock.elapsedMilliseconds;
 
+  double get laserScale => _settings.laserScale;
+  void selectLaserScale(double v) => _settings.selectLaserScale(v);
+
   void _addLaser(double x, double y) {
+    if (_laser.isNotEmpty) {
+      final l = _laser.last;
+      final dx = x - l.x, dy = y - l.y;
+      if (dx * dx + dy * dy < 0.5) {
+        _laserSignal.ping();
+        return;
+      }
+    }
     _laser.add((x: x, y: y, t: _clock.elapsedMilliseconds));
     if (_laser.length > _laserMaxPoints) {
       _laser.removeRange(0, _laser.length - _laserMaxPoints);
     }
-    _live.ping();
+    _laserSignal.ping();
   }
 
   /// Drops faded points. True while something is still visible.
   bool pruneLaser() {
     final cutoff = _clock.elapsedMilliseconds - laserLifetimeMs;
-    _laser.removeWhere((p) => p.t < cutoff);
+    var n = 0;
+    while (n < _laser.length && _laser[n].t < cutoff) {
+      n++;
+    }
+    if (n > 0) _laser.removeRange(0, n);
     return _laser.isNotEmpty;
   }
 
@@ -167,6 +182,7 @@ class DrawingController extends ChangeNotifier {
   final ToolSettings _settings;
   final bool _ownsSettings;
   final _Signal _live = _Signal();
+  final _Signal _laserSignal = _Signal();
   final List<Stroke> _strokes = [];
   final CommandHistory _history;
   final PenFilter _pen = PenFilter();
@@ -182,6 +198,7 @@ class DrawingController extends ChangeNotifier {
   final List<Vertex> _lasso = [];
   final Set<String> _selected = {};
   String? _hoverId;
+  ({double x, double y})? _eraserPos;
   double _moveFromX = 0;
   double _moveFromY = 0;
   double _dx = 0;
@@ -271,6 +288,7 @@ class DrawingController extends ChangeNotifier {
       _selected.clear();
       _objects = ObjectSelection.empty;
       _hoverId = null;
+      _eraserPos = null;
     }
     notifyListeners();
     _live.ping();
@@ -294,6 +312,9 @@ class DrawingController extends ChangeNotifier {
 
   Listenable get live => _live;
 
+  /// Repaints only when the laser trail changes.
+  Listenable get laserRepaint => _laserSignal;
+
   bool get isDrawing => _activePointer != null;
 
   /// Shape the held stroke was snapped to, or null while nothing snapped.
@@ -314,13 +335,24 @@ class DrawingController extends ChangeNotifier {
   /// Unlike [revision], it is safe to use as a render-cache key.
   int get inkEpoch => _inkEpoch + _revision;
 
-  // ---- Hover ----
+  // ---- Hover / eraser cursor ----
 
   /// Id of the selectable shape under the mouse, or null.
   String? get hoverId => _hoverId;
 
+  /// Pointer position for the eraser cursor, or null when the eraser tool
+  /// is not active.
+  ({double x, double y})? get eraserCursor =>
+      _settings.tool == StrokeTool.eraser ? _eraserPos : null;
+
   void hoverAt(double x, double y) {
-    if (isDrawing || _settings.tool == StrokeTool.eraser) {
+    if (_settings.tool == StrokeTool.eraser) {
+      _hoverId = null;
+      _eraserPos = (x: x, y: y);
+      _live.ping();
+      return;
+    }
+    if (isDrawing) {
       clearHover();
       return;
     }
@@ -331,9 +363,10 @@ class DrawingController extends ChangeNotifier {
   }
 
   void clearHover() {
-    if (_hoverId == null) return;
+    final had = _hoverId != null || _eraserPos != null;
     _hoverId = null;
-    _live.ping();
+    _eraserPos = null;
+    if (had) _live.ping();
   }
 
   /// Selects the top-most stroke under (x, y). With [shapesOnly], only
@@ -1540,6 +1573,7 @@ class DrawingController extends ChangeNotifier {
       case _Mode.laser:
         _addLaser(x, y);
         _laserHead = null;
+        _laserSignal.ping();
         _finish();
         notifyListeners();
         _live.ping();
@@ -1579,6 +1613,7 @@ class DrawingController extends ChangeNotifier {
         _recorder.cancel();
       case _Mode.laser:
         _laserHead = null;
+        _laserSignal.ping();
       case _Mode.none:
         break;
     }
@@ -1949,6 +1984,9 @@ class DrawingController extends ChangeNotifier {
     _lastX = x;
     _lastY = y;
 
+    _eraserPos = (x: x, y: y);
+    _live.ping();
+
     final next = <Stroke>[];
     final modified = <String>{};
     var changed = false;
@@ -2084,6 +2122,7 @@ class DrawingController extends ChangeNotifier {
     _cancelRefine();
     _settings.removeListener(_onSettingsChanged);
     if (_ownsSettings) _settings.dispose();
+    _laserSignal.dispose();
     _live.dispose();
     super.dispose();
   }
