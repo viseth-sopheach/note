@@ -23,6 +23,7 @@ import '../../../app/glass/glass_list_tile.dart';
 import '../../../app/glass/glass_menu.dart';
 import '../../../app/glass/glass_theme.dart';
 import '../../../app/routes.dart';
+import '../../library/application/favorites.dart';
 import '../../library/application/library_providers.dart';
 import '../../library/domain/paper_template.dart';
 import '../../library/presentation/dialogs/confirm_delete_dialog.dart';
@@ -1662,9 +1663,16 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // ------------------------------------------------------------
 
   Future<void> _showMoreSheet() async {
+    final isFav = ref.read(favoritesProvider).contains(widget.notebookId);
+
     final items = <({String value, IconData icon, String label})>[
       (value: 'ruler', icon: Icons.straighten, label: 'Ruler'),
       (value: 'protractor', icon: Icons.architecture, label: 'Protractor'),
+      (
+        value: 'favorite',
+        icon: isFav ? Icons.star_rounded : Icons.star_border_rounded,
+        label: isFav ? 'Remove from favorites' : 'Add to favorites',
+      ),
       if (!_busy)
         (
           value: 'duplicate',
@@ -1732,6 +1740,11 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
 
       case 'protractor':
         _toggleMeasure(MeasureKind.protractor);
+
+      case 'favorite':
+        unawaited(
+          ref.read(favoritesProvider.notifier).toggle(widget.notebookId),
+        );
 
       case 'duplicate':
         unawaited(_duplicatePage());
@@ -2401,6 +2414,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     // Floating toolbar
     // ----------------------------------------------------------
 
+    final isFavorite = ref.watch(
+      favoritesProvider.select((s) => s.contains(widget.notebookId)),
+    );
+
     final toolbar = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -2454,6 +2471,9 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           onToolPicked: () {
             _setTextMode(false);
           },
+          isFavorite: isFavorite,
+          onToggleFavorite: () =>
+              ref.read(favoritesProvider.notifier).toggle(widget.notebookId),
         ),
         SizedBox(
           height: 2,

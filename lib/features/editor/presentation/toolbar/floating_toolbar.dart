@@ -41,6 +41,8 @@ class FloatingToolbar extends StatefulWidget {
     required this.textActive,
     required this.onTextTool,
     required this.onToolPicked,
+    required this.isFavorite,
+    required this.onToggleFavorite,
     this.busy = false,
   });
 
@@ -74,6 +76,12 @@ class FloatingToolbar extends StatefulWidget {
 
   /// Called before any drawing tool is selected (leaves the text tool).
   final VoidCallback onToolPicked;
+
+  /// Whether the open notebook is in the favorites set.
+  final bool isFavorite;
+
+  /// Toggles the current notebook's favorite state.
+  final VoidCallback onToggleFavorite;
 
   @override
   State<FloatingToolbar> createState() => _FloatingToolbarState();
@@ -141,6 +149,13 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
         icon: Icons.architecture,
         label: 'Protractor',
       ),
+      GlassMenuItem(
+        value: 'favorite',
+        icon: widget.isFavorite
+            ? Icons.star_rounded
+            : Icons.star_border_rounded,
+        label: widget.isFavorite ? 'Remove from favorites' : 'Add to favorites',
+      ),
       if (!widget.busy)
         const GlassMenuItem(
           value: 'duplicate',
@@ -182,6 +197,8 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
         widget.onToggleMeasure(MeasureKind.ruler);
       case 'protractor':
         widget.onToggleMeasure(MeasureKind.protractor);
+      case 'favorite':
+        widget.onToggleFavorite();
       case 'duplicate':
         widget.onDuplicatePage();
       case 'copy':

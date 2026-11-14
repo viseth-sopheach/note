@@ -84,11 +84,13 @@ class HomeSidebar extends ConsumerWidget {
     super.key,
     required this.compact,
     required this.isRoot,
+    this.favoritesSelected = false,
     this.afterTap,
   });
 
   final bool compact;
   final bool isRoot;
+  final bool favoritesSelected;
   final VoidCallback? afterTap;
 
   void _go(VoidCallback nav) {
@@ -118,23 +120,18 @@ class HomeSidebar extends ConsumerWidget {
               compact: compact,
               onTap: () => _go(() => context.go(AppRoutes.library)),
             ),
-            if (!compact)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(12, 16, 12, 8),
-                child: Text(
-                  'FOLDERS',
-                  style: TextStyle(
-                    color: HomeColors.muted,
-                    fontSize: 11,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+            _NavTile(
+              icon: Icons.star_rounded,
+              label: 'Favorites',
+              selected: favoritesSelected,
+              compact: compact,
+              onTap: () => _go(() => context.go(AppRoutes.favorites)),
+            ),
             Expanded(
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
+                  if (!compact) const _SectionLabel('FOLDERS'),
                   for (final f in folders)
                     _NavTile(
                       icon: Icons.folder_outlined,
@@ -159,6 +156,25 @@ class HomeSidebar extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(12, 16, 12, 8),
+    child: Text(
+      text,
+      style: const TextStyle(
+        color: HomeColors.muted,
+        fontSize: 11,
+        letterSpacing: 1.2,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
 }
 
 class _Brand extends StatelessWidget {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/glass/glass_theme.dart';
 import '../../domain/folder.dart';
+import 'favorite_star.dart';
 
 class FolderCard extends StatelessWidget {
   const FolderCard({super.key, required this.folder, required this.onTap});
@@ -56,6 +57,8 @@ class FolderCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                FavoriteStar(id: folder.id, name: folder.name),
+                const SizedBox(width: 4),
                 Icon(Icons.chevron_right, size: 20, color: colors.outline),
               ],
             ),

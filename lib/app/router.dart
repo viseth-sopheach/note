@@ -2,11 +2,12 @@ import 'package:go_router/go_router.dart';
 
 import '../features/editor/presentation/dual_document_screen.dart';
 import '../features/editor/presentation/editor_screen.dart';
-import '../features/sharing/presentation/import_pdf_screen.dart';
+import '../features/library/presentation/favorites_screen.dart';
 import '../features/library/presentation/library_screen.dart';
 import '../features/pdf_viewer/presentation/pdf_viewer_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/settings/presentation/toolbar_settings_screen.dart';
+import '../features/sharing/presentation/import_pdf_screen.dart';
 import 'routes.dart';
 
 final GoRouter appRouter = GoRouter(
@@ -15,6 +16,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.library,
       builder: (context, state) => const LibraryScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.favorites,
+      builder: (context, state) => const FavoritesScreen(),
     ),
     GoRoute(
       path: AppRoutes.folderPattern,

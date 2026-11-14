@@ -7,6 +7,7 @@ import '../../../../app/routes.dart';
 import '../../domain/folder.dart';
 import '../../domain/notebook.dart';
 import 'empty_library_view.dart';
+import 'favorite_star.dart';
 import 'folder_card.dart';
 import 'item_actions_menu.dart';
 import 'notebook_card.dart';
@@ -87,10 +88,25 @@ class LibraryContent extends StatelessWidget {
                 canPin: true,
                 isPinned: pinnedIds.contains(notebook.id),
                 onSelected: (action) => onNotebookAction(notebook, action),
-                child: NotebookCard(
-                  notebook: notebook,
-                  showCover: showCovers,
-                  onTap: () => context.push(AppRoutes.notebook(notebook.id)),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    NotebookCard(
+                      notebook: notebook,
+                      showCover: showCovers,
+                      onTap: () =>
+                          context.push(AppRoutes.notebook(notebook.id)),
+                    ),
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: FavoriteStar(
+                        id: notebook.id,
+                        name: notebook.title,
+                        onCover: showCovers,
+                      ),
+                    ),
+                  ],
                 ),
               );
             },

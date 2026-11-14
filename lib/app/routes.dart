@@ -1,5 +1,6 @@
 abstract final class AppRoutes {
   static const String library = '/';
+  static const String favorites = '/favorites';
   static const String settings = '/settings';
   static const String settingsToolbar = '/settings/toolbar';
   static const String pdfViewer = '/pdf';
