@@ -73,6 +73,7 @@ class LibraryActions {
     _ref.invalidate(folderProvider);
     _ref.invalidate(notebookProvider);
     _ref.invalidate(allFoldersProvider);
+    _ref.invalidate(allNotebooksProvider);
   }
 }
 

@@ -17,6 +17,51 @@ class ImportService {
 
   final Ref _ref;
 
+  static const int maxPdfBytes = 500 << 20;
+
+  /// Throws when the file is missing, empty, too large or not a PDF.
+  Future<({String name, int bytes})> inspectPdf(String path) async {
+    final file = File(path);
+    if (!await file.exists()) throw const FileSystemException('File not found');
+    final bytes = await file.length();
+    if (bytes == 0 || bytes > maxPdfBytes) {
+      throw const FormatException('Unsupported file size');
+    }
+    final raf = await file.open();
+    try {
+      final head = await raf.read(1024);
+      const magic = [0x25, 0x50, 0x44, 0x46, 0x2D]; // %PDF-
+      var found = false;
+      for (var i = 0; i + magic.length <= head.length && !found; i++) {
+        found = true;
+        for (var j = 0; j < magic.length; j++) {
+          if (head[i + j] != magic[j]) {
+            found = false;
+            break;
+          }
+        }
+      }
+      if (!found) throw const FormatException('Not a PDF');
+    } finally {
+      await raf.close();
+    }
+    return (name: p.basename(path), bytes: bytes);
+  }
+
+  /// Deletes temporary copies made by the share intent / extension.
+  Future<void> discardSources(List<String> paths) async {
+    final tmp = (await getTemporaryDirectory()).path;
+    for (final path in paths) {
+      final temp = p.isWithin(tmp, path);
+      final group = path.contains('/Shared/AppGroup/');
+      if (!temp && !group) continue;
+      try {
+        final f = File(path);
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
+    }
+  }
+
   Future<Notebook?> importPdf(String sourcePath, {String? folderId}) async {
     final source = File(sourcePath);
     if (!await source.exists()) return null;

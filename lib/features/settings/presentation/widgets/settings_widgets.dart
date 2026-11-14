@@ -5,6 +5,7 @@ import '../../../../app/glass/glass_dialog.dart';
 import '../../../../app/glass/glass_icon_button.dart';
 import '../../../../app/glass/glass_list_tile.dart';
 import '../../../../app/glass/glass_surface.dart';
+import '../../../../app/glass/glass_theme.dart';
 import '../../../../app/routes.dart';
 import '../../../library/presentation/cover_palette.dart';
 
@@ -57,10 +58,18 @@ class SettingsSection extends StatelessWidget {
               ],
             ),
           ),
-          GlassSurface(
-            child: Material(
-              type: MaterialType.transparency,
-              child: Column(children: children),
+          DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: context.glass.border),
+            ),
+            child: GlassSurface(
+              radius: 20,
+              child: Material(
+                type: MaterialType.transparency,
+                child: Column(children: children),
+              ),
             ),
           ),
         ],
@@ -161,12 +170,14 @@ class SettingsColorRow extends StatelessWidget {
     required this.options,
     required this.selected,
     required this.onChanged,
+    this.onCustom,
   });
 
   final String title;
   final List<ColorOption> options;
   final Color selected;
   final ValueChanged<Color> onChanged;
+  final VoidCallback? onCustom;
 
   @override
   Widget build(BuildContext context) {
@@ -211,6 +222,49 @@ class SettingsColorRow extends StatelessWidget {
                                 color: CoverPalette.onColor(o.color),
                               )
                             : null,
+                      ),
+                    ),
+                  ),
+                ),
+              if (onCustom != null)
+                Semantics(
+                  button: true,
+                  label: 'Custom $title',
+                  child: Tooltip(
+                    message: 'Custom color',
+                    child: InkResponse(
+                      onTap: onCustom,
+                      radius: 24,
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: options.any((o) => o.color == selected)
+                              ? null
+                              : selected,
+                          gradient: options.any((o) => o.color == selected)
+                              ? const SweepGradient(
+                                  colors: [
+                                    Color(0xFFFF0000),
+                                    Color(0xFFFFFF00),
+                                    Color(0xFF00FF00),
+                                    Color(0xFF00FFFF),
+                                    Color(0xFF0000FF),
+                                    Color(0xFFFF00FF),
+                                    Color(0xFFFF0000),
+                                  ],
+                                )
+                              : null,
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.add,
+                          size: 18,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),

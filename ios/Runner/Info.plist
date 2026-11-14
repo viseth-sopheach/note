@@ -33,7 +33,7 @@
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>AppGroupId</key>
-	<string>$(CUSTOM_GROUP_ID)</string>
+	<string>group.YOUR.BUNDLE.ID</string>
 	<key>GIDClientID</key>
 	<string>YOUR_CLIENT_ID</string>
 	<key>LSApplicationQueriesSchemes</key>
@@ -51,21 +51,22 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>PDF Document</string>
+			<string>PDF</string>
 			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
+			<string>Viewer</string>
 			<key>LSHandlerRank</key>
 			<string>Alternate</string>
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>com.adobe.pdf</string>
-				<string>public.image</string>
 			</array>
 		</dict>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>ShareMedia-$(PRODUCT_BUNDLE_IDENTIFIER)</string>

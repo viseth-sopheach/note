@@ -29,7 +29,18 @@ class _Signal extends ChangeNotifier {
   void ping() => notifyListeners();
 }
 
-enum _Mode { none, draw, erase, lasso, move, shape, resize, endpoint, rotate }
+enum _Mode {
+  none,
+  draw,
+  erase,
+  lasso,
+  move,
+  shape,
+  resize,
+  endpoint,
+  rotate,
+  laser,
+}
 
 /// Holds the strokes of one page, the stroke being drawn and the current
 /// selection. Tool, color and width come from [settings], which can be
@@ -64,7 +75,40 @@ class DrawingController extends ChangeNotifier {
   }
 
   /// Eraser radius in document units.
-  static const double eraserRadius = 10;
+  static const double defaultEraserRadius = ToolSettings.eraserDefault;
+  double get eraserRadius => _settings.eraserRadius;
+
+  void selectEraserRadius(double v) {
+    if (isDrawing) return;
+    _settings.selectEraserRadius(v);
+  }
+
+  // ---- Laser pointer: never saved, never undoable ----
+  static const int laserLifetimeMs = 900;
+  static const int _laserMaxPoints = 400;
+  final List<({double x, double y, int t})> _laser = [];
+  ({double x, double y})? _laserHead;
+
+  List<({double x, double y, int t})> get laserTrail =>
+      UnmodifiableListView(_laser);
+  ({double x, double y})? get laserHead => _laserHead;
+  bool get hasLaser => _laser.isNotEmpty || _laserHead != null;
+  int get laserClockMs => _clock.elapsedMilliseconds;
+
+  void _addLaser(double x, double y) {
+    _laser.add((x: x, y: y, t: _clock.elapsedMilliseconds));
+    if (_laser.length > _laserMaxPoints) {
+      _laser.removeRange(0, _laser.length - _laserMaxPoints);
+    }
+    _live.ping();
+  }
+
+  /// Drops faded points. True while something is still visible.
+  bool pruneLaser() {
+    final cutoff = _clock.elapsedMilliseconds - laserLifetimeMs;
+    _laser.removeWhere((p) => p.t < cutoff);
+    return _laser.isNotEmpty;
+  }
 
   /// Extra area around the selection that still grabs it, in screen px.
   static const double _grabSlop = 8;
@@ -1136,6 +1180,15 @@ class DrawingController extends ChangeNotifier {
       case StrokeTool.ellipse:
       case StrokeTool.triangle:
         return _grabSelection(x, y) || _beginShape(x, y, snapToRuler: false);
+
+      case StrokeTool.laser:
+        _mode = _Mode.laser;
+        _selected.clear();
+        _objects = ObjectSelection.empty;
+        _laserHead = (x: x, y: y);
+        _addLaser(x, y);
+        notifyListeners();
+        return true;
     }
   }
 
@@ -1238,6 +1291,9 @@ class DrawingController extends ChangeNotifier {
         );
         _live.ping(); // always, so the tip follows even when no point is kept
         _trackHold(x, y);
+      case _Mode.laser:
+        _laserHead = (x: x, y: y);
+        _addLaser(x, y);
       case _Mode.none:
         break;
     }
@@ -1481,6 +1537,13 @@ class DrawingController extends ChangeNotifier {
         final done = committedByDraw;
         if (done != null) onStrokeCommitted?.call(done);
 
+      case _Mode.laser:
+        _addLaser(x, y);
+        _laserHead = null;
+        _finish();
+        notifyListeners();
+        _live.ping();
+
       case _Mode.none:
         break;
     }
@@ -1514,6 +1577,8 @@ class DrawingController extends ChangeNotifier {
         _shape.clear();
       case _Mode.draw:
         _recorder.cancel();
+      case _Mode.laser:
+        _laserHead = null;
       case _Mode.none:
         break;
     }

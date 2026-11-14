@@ -42,24 +42,29 @@ import '../application/page_objects_adapter.dart';
 import '../application/page_texts_controller.dart';
 import '../application/tool_settings.dart';
 import '../domain/page_image.dart';
+import '../domain/page_layout.dart';
 import '../domain/page_repository.dart';
 import '../domain/page_text.dart';
 import '../domain/shape_choice.dart';
 import '../domain/stroke.dart';
 import '../domain/stroke_tool.dart';
+import 'dialogs/page_layout_sheet.dart';
 import 'dialogs/paper_template_dialog.dart';
 import 'drawing/drawing_surface.dart';
 import 'drawing/image_layer.dart';
 import 'drawing/ink_layers.dart';
+import 'drawing/laser_layer.dart';
 import 'drawing/page_text_style.dart';
 import 'drawing/selection_layer.dart';
 import 'drawing/text_layer.dart';
+import 'dual_document_screen.dart';
 import 'editor_stack.dart';
 import 'gestures/one_finger_double_tap.dart';
 import 'gestures/stylus_gate.dart';
 import 'gestures/two_finger_double_tap.dart';
 import 'gestures/two_finger_scroll_guard.dart';
 import 'measure/measure_overlay.dart';
+import 'panels/pages_panel.dart';
 import 'paper/page_metrics.dart';
 import 'paper/paper_colors.dart';
 import 'paper/paper_painter.dart';
@@ -202,8 +207,6 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   /// Space kept below the last page so the New Page card never covers it.
   static double get _bottomInset => NewPageCard.height + 32;
 
-  static double get _contentWidth => kCellSize.width + _pad * 2;
-
   static double get _cellH => kCellSize.height;
 
   static const String _highlightAction = 'highlight';
@@ -260,6 +263,18 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS;
 
+  late PageLayout _layout;
+  final ValueNotifier<int> _currentPage = ValueNotifier<int>(0);
+  bool _pagesOpen = false;
+
+  int get _cols => _layout.columns;
+  int get _lead => _layout.leading;
+  int get _rows => ((_sessions.length + _lead) / _cols).ceil();
+  double get _contentWidth => kCellSize.width * _cols + _pad * 2;
+  double get _contentHeight => _pad * 2 + _rows * _cellH;
+  double get _fitSpan => kCellSize.width * _cols - kBleedX * 2;
+  double get _baseScale => _viewportW / _fitSpan; // 100% = fit all columns
+
   DrawingController get _active => _sessions[_activeIndex].controller;
 
   @override
@@ -283,6 +298,8 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     _settingsRepository = ref.read(settingsRepositoryProvider);
 
     final saved = ref.read(appSettingsProvider);
+
+    _layout = saved.pageLayout;
 
     _rememberPosition = saved.rememberPosition;
 
@@ -308,11 +325,10 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     final scale = m.storage[0];
     final top = -m.storage[13] / scale;
     final bottom = (_viewportH - m.storage[13]) / scale;
-    final lo = (((top - _pad) / _cellH).floor() - 1).clamp(
-      0,
-      _sessions.length - 1,
-    );
-    final hi = (((bottom - _pad) / _cellH).floor() + 1).clamp(
+    final loRow = (((top - _pad) / _cellH).floor() - 1).clamp(0, _rows - 1);
+    final hiRow = (((bottom - _pad) / _cellH).floor() + 1).clamp(0, _rows - 1);
+    final lo = (loRow * _cols - _lead).clamp(0, _sessions.length - 1);
+    final hi = (hiRow * _cols + _cols - 1 - _lead).clamp(
       0,
       _sessions.length - 1,
     );
@@ -327,6 +343,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     if (!_fitted || _sessions.isEmpty) return;
 
     _updateVisibleRange();
+    _currentPage.value = _visiblePage;
 
     final m = _transform.value;
 
@@ -380,7 +397,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       x = (_viewportW - scaledW) / 2;
     } else {
       final left = (_pad + kBleedX) * scale;
-      final right = (_pad + kBleedX + kPageSize.width) * scale;
+      final right = (_contentWidth - _pad - kBleedX) * scale;
       x = t.dx.clamp(_viewportW - right, -left).toDouble();
     }
 
@@ -418,8 +435,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // Canvas motion and scrolling
   // ------------------------------------------------------------
 
-  double get _baseScale => _viewportW / kPageSize.width; // 100% = fit width
-  double get _minScale => _viewportW * _minPaperWidthFraction / kPageSize.width;
+  double get _minScale => _viewportW * _minPaperWidthFraction / _fitSpan;
   double get _maxScale => _baseScale * _maxZoomMultiplier;
   double get _fitScale => _baseScale;
   double get _paperFitScale => _baseScale * _doubleTapZoomFraction;
@@ -612,7 +628,11 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   }
 
   Offset _paperOrigin(int index) {
-    return Offset(_pad + kBleedX, _pad + index * _cellH + kBleedY);
+    final slot = index + _lead;
+    return Offset(
+      _pad + (slot % _cols) * kCellSize.width + kBleedX,
+      _pad + (slot ~/ _cols) * _cellH + kBleedY,
+    );
   }
 
   Future<_PageSession> _openPage(int index) async {
@@ -1333,13 +1353,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // Scrolling and zooming
   // ------------------------------------------------------------
 
-  double _pageTop(int index) {
-    return _pad + index * _cellH;
-  }
-
-  double get _contentHeight {
-    return _pad * 2 + _sessions.length * _cellH;
-  }
+  double _pageTop(int index) => _pad + ((index + _lead) ~/ _cols) * _cellH;
 
   double _clampTy(double ty, double scale) {
     final lowest = math.min(
@@ -1440,15 +1454,13 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   }
 
   int get _visiblePage {
-    final scale = _transform.value.storage[0];
-
-    final ty = _transform.value.storage[13];
-
-    final sceneY = (_viewportH / 2 - ty) / scale;
-
-    final i = ((sceneY - _pad) / _cellH).floor();
-
-    return i.clamp(0, _sessions.length - 1);
+    final m = _transform.value;
+    final scale = m.storage[0];
+    final sceneY = (_viewportH / 2 - m.storage[13]) / scale;
+    final sceneX = (_viewportW / 2 - m.storage[12]) / scale;
+    final row = ((sceneY - _pad) / _cellH).floor().clamp(0, _rows - 1);
+    final col = ((sceneX - _pad) / kCellSize.width).floor().clamp(0, _cols - 1);
+    return (row * _cols + col - _lead).clamp(0, _sessions.length - 1);
   }
 
   void _scrollToPage(int index) {
@@ -1513,6 +1525,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
     _twoFingerScroll.dispose();
     _zoomRatio.dispose();
     _zoomVisible.dispose();
+    _currentPage.dispose();
 
     for (final s in _sessions) {
       s.close();
@@ -1569,81 +1582,19 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // Page list
   // ------------------------------------------------------------
 
-  void _showPages() {
-    final current = _visiblePage;
-    showGlassSheet<void>(
-      context: context,
-      builder: (sheet) {
-        final colors = Theme.of(sheet).colorScheme;
-        return Material(
-          type: MaterialType.transparency,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 460),
-            child: ListView.builder(
-              shrinkWrap: true,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: _sessions.length,
-              itemBuilder: (_, i) {
-                final selected = i == current;
-                return Semantics(
-                  button: true,
-                  selected: selected,
-                  label: 'Page ${i + 1}',
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.of(sheet).pop();
-                      _scrollToPage(i);
-                    },
-                    child: Container(
-                      color: selected
-                          ? colors.primary.withValues(alpha: 0.14)
-                          : null,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: selected
-                                    ? colors.primary
-                                    : colors.outlineVariant,
-                                width: selected ? 2 : 1,
-                              ),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(5),
-                              child: _pageThumb(_sessions[i], 60),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Text(
-                              'Page ${i + 1}',
-                              style: Theme.of(sheet).textTheme.bodyLarge
-                                  ?.copyWith(
-                                    fontWeight: selected
-                                        ? FontWeight.w600
-                                        : FontWeight.w400,
-                                    color: selected ? colors.primary : null,
-                                  ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
+  void _togglePages() => setState(() => _pagesOpen = !_pagesOpen);
+
+  void _selectFromPanel(int i) {
+    _scrollToPage(i);
+    if (MediaQuery.sizeOf(context).width < 600) {
+      setState(() => _pagesOpen = false);
+    }
   }
+
+  Widget _panelThumb(int i, double width) => ClipRRect(
+    borderRadius: BorderRadius.circular(5),
+    child: _pageThumb(_sessions[i], width),
+  );
 
   /// Read-only miniature of a page: paper, images, text and ink.
   Widget _pageThumb(_PageSession s, double width) {
@@ -1742,6 +1693,11 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           icon: Icons.picture_as_pdf_outlined,
           label: 'Export PDF',
         ),
+      (
+        value: 'layout',
+        icon: Icons.view_column_outlined,
+        label: 'Page layout…',
+      ),
       (value: 'settings', icon: Icons.settings_outlined, label: 'Settings'),
     ];
 
@@ -1795,6 +1751,9 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       case 'export':
         unawaited(exportPdf(widget.title));
 
+      case 'layout':
+        unawaited(_pickLayout());
+
       case 'settings':
         unawaited(context.push(AppRoutes.settings));
     }
@@ -1804,8 +1763,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // Paper
   // ------------------------------------------------------------
 
-  bool _darkPaper(_PageSession s) =>
-      Theme.of(context).brightness == Brightness.dark;
+  bool _darkPaper(_PageSession s) => false;
 
   Widget _paper(_PageSession session) {
     final image = session.imagePath;
@@ -1992,6 +1950,12 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
                   darkPaper: dark,
                 ),
               ),
+              Positioned.fill(
+                child: LaserLayer(
+                  controller: session.controller,
+                  origin: kPaperOrigin,
+                ),
+              ),
             ],
           ),
         ),
@@ -2170,6 +2134,69 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   }
 
   // ------------------------------------------------------------
+  // Page layout
+  // ------------------------------------------------------------
+
+  Widget _slot(int i) {
+    if (i < 0 || i >= _sessions.length) {
+      return SizedBox.fromSize(size: kCellSize);
+    }
+    return KeyedSubtree(
+      key: ObjectKey(_sessions[i]),
+      child: (i >= _firstVisible && i <= _lastVisible)
+          ? _buildPage(_sessions[i])
+          : SizedBox.fromSize(size: kCellSize),
+    );
+  }
+
+  void _setLayout(PageLayout next) {
+    if (next == _layout || _sessions.isEmpty) return;
+    final page = _visiblePage;
+    setState(() {
+      _layout = next;
+      _fitted = false;
+    });
+    unawaited(
+      ref
+          .read(appSettingsProvider.notifier)
+          .update((s) => s.copyWith(pageLayout: next)),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _fitWidth();
+      _scrollToPage(page);
+      _updateVisibleRange();
+    });
+  }
+
+  Future<void> _pickLayout() async {
+    final r = await showPageLayoutSheet(context, current: _layout);
+    if (r == null || !mounted) return;
+    if (r.dualDocument) {
+      await _openDualDocument();
+    } else if (r.layout != null) {
+      _setLayout(r.layout!);
+    }
+  }
+
+  Future<void> _openDualDocument() async {
+    if (_busy) return;
+    final other = await DualDocumentPicker.show(
+      context,
+      excludeId: widget.notebookId,
+    );
+    if (other == null || !mounted) return;
+    await _runExclusive('Could not open the second notebook.', () async {
+      if (!await _flushAll()) {
+        throw StateError('Unsaved changes could not be saved.');
+      }
+      if (mounted) {
+        context.pushReplacement(AppRoutes.dual(widget.notebookId, other));
+      }
+    });
+  }
+
+  // ------------------------------------------------------------
   // Main UI
   // ------------------------------------------------------------
 
@@ -2201,12 +2228,13 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                for (var i = 0; i < _sessions.length; i++)
-                  KeyedSubtree(
-                    key: ObjectKey(_sessions[i]),
-                    child: (i >= _firstVisible && i <= _lastVisible)
-                        ? _buildPage(_sessions[i])
-                        : SizedBox.fromSize(size: kCellSize),
+                for (var r = 0; r < _rows; r++)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var c = 0; c < _cols; c++)
+                        _slot(r * _cols + c - _lead),
+                    ],
                   ),
               ],
             ),
@@ -2378,7 +2406,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           onBack: () {
             context.canPop() ? context.pop() : context.go(AppRoutes.library);
           },
-          onPages: _showPages,
+          onPages: _togglePages,
           onExport: () {
             unawaited(exportPdf(widget.title));
           },
@@ -2398,6 +2426,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
           onSettings: () {
             context.push(AppRoutes.settings);
           },
+          onLayout: () => unawaited(_pickLayout()),
           onDuplicatePage: () {
             unawaited(_duplicatePage());
           },
@@ -2425,7 +2454,7 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       ],
     );
 
-    return EditorStack(
+    final stack = EditorStack(
       canvas: canvas,
       toolbar: toolbar,
       transform: _transform,
@@ -2455,6 +2484,26 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
       onMore: () {
         unawaited(_showMoreSheet());
       },
+    );
+
+    return Stack(
+      children: [
+        Positioned.fill(child: stack),
+        if (_pagesOpen)
+          Positioned(
+            left: 8,
+            top: 64,
+            bottom: 8,
+            width: 148,
+            child: PagesPanel(
+              count: _sessions.length,
+              current: _currentPage,
+              thumbBuilder: _panelThumb,
+              onSelect: _selectFromPanel,
+              onClose: _togglePages,
+            ),
+          ),
+      ],
     );
   }
 }

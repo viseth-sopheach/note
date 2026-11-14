@@ -34,6 +34,16 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Add share extension target
+        env:
+          BUNDLE_ID: YOUR.BUNDLE.ID
+        run: |
+          sudo gem install xcodeproj
+          ruby ios/add_share_extension.rb
+
+      - name: Install pods
+        run: cd ios && pod install --repo-update
+
       - name: Build iOS (no code signing)
         run: flutter build ios --release --no-codesign
 

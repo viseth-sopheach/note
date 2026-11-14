@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/glass/glass_backdrop.dart';
@@ -72,11 +73,17 @@ class LibrarySearchDelegate extends SearchDelegate<void> {
                       ),
                     for (final n in r.notebooks)
                       ListTile(
-                        leading: Icon(
-                          n.pdfPath != null
-                              ? Icons.picture_as_pdf_outlined
-                              : Icons.menu_book_outlined,
-                        ),
+                        leading: n.pdfPath != null
+                            ? const Icon(Icons.picture_as_pdf_outlined)
+                            : SvgPicture.asset(
+                                'assets/icon/notebook-of-paper-with-spring.svg',
+                                width: 24,
+                                height: 24,
+                                colorFilter: ColorFilter.mode(
+                                  IconTheme.of(context).color ?? Colors.white,
+                                  BlendMode.srcIn,
+                                ),
+                              ),
                         title: Text(n.title),
                         onTap: () => open(AppRoutes.notebook(n.id)),
                       ),

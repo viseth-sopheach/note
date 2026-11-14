@@ -35,6 +35,18 @@ final allFoldersProvider = FutureProvider<List<Folder>>(
   (ref) => ref.watch(libraryRepositoryProvider).getAllFolders(),
 );
 
+/// Every notebook in the library, sorted by title (case-insensitive).
+final allNotebooksProvider = FutureProvider<List<Notebook>>((ref) async {
+  final repo = ref.watch(libraryRepositoryProvider);
+  final folders = await repo.getAllFolders();
+  final lists = await Future.wait([
+    repo.getNotebooks(),
+    for (final f in folders) repo.getNotebooks(folderId: f.id),
+  ]);
+  return [for (final l in lists) ...l]
+    ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+});
+
 final searchProvider = FutureProvider.autoDispose
     .family<({List<Folder> folders, List<Notebook> notebooks}), String>((
       ref,

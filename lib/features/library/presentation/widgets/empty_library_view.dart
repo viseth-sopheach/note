@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/glass/glass_button.dart';
 import '../../../../app/glass/glass_surface.dart';
+import '../../../../app/glass/glass_svg_icon.dart';
 import '../../../../app/glass/glass_tokens.dart';
 
 class EmptyLibraryView extends StatelessWidget {
@@ -36,10 +37,13 @@ class EmptyLibraryView extends StatelessWidget {
               child: SizedBox(
                 width: 88,
                 height: 88,
-                child: Icon(
-                  Icons.menu_book_outlined,
-                  size: 40,
-                  color: colors.primary,
+                child: Center(
+                  child: IconTheme(
+                    data: IconThemeData(size: 40, color: colors.primary),
+                    child: const GlassSvgIcon(
+                      'assets/icon/notebook-of-paper-with-spring.svg',
+                    ),
+                  ),
                 ),
               ),
             ),

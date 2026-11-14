@@ -51,31 +51,26 @@ class _ShareIntentListenerState extends ConsumerState<ShareIntentListener> {
     _busy = true;
     try {
       const imgExt = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'};
+      final pdfs = <String>[];
       final images = <String>[];
       for (final file in files) {
         final path = file.path;
         final lower = path.toLowerCase();
         if (!_handled.add(path)) continue;
-        if (lower.endsWith('.pdf')) {
-          try {
-            final nb = await ref.read(importServiceProvider).importPdf(path);
-            if (nb != null) {
-              appRouter.push(AppRoutes.notebook(nb.id));
-            } else {
-              _toast('Could not read the PDF.');
-            }
-          } catch (_) {
-            _toast('Could not import the PDF.');
-          }
+        if (lower.endsWith('.pdf') || file.mimeType == 'application/pdf') {
+          pdfs.add(path);
         } else if (file.type == SharedMediaType.image ||
             imgExt.any(lower.endsWith)) {
           images.add(path);
         }
       }
+      if (pdfs.isNotEmpty) {
+        unawaited(appRouter.push(AppRoutes.importPdf, extra: pdfs));
+      }
       if (images.isNotEmpty) {
         try {
           final nb = await ref.read(importServiceProvider).importImages(images);
-          if (nb != null) appRouter.push(AppRoutes.notebook(nb.id));
+          if (nb != null) unawaited(appRouter.push(AppRoutes.notebook(nb.id)));
         } catch (_) {
           _toast('Could not import the images.');
         }
@@ -83,6 +78,9 @@ class _ShareIntentListenerState extends ConsumerState<ShareIntentListener> {
     } finally {
       ReceiveSharingIntent.instance.reset();
       _busy = false;
+      unawaited(
+        Future<void>.delayed(const Duration(seconds: 5), _handled.clear),
+      );
     }
   }
 

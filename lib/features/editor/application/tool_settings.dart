@@ -13,6 +13,7 @@ class ToolSettings extends ChangeNotifier {
     double penWidth = 2,
     double highlighterWidth = 3,
     bool shapeRecognition = true,
+    double eraserRadius = eraserDefault,
   }) : _tool = tool,
        _penColor = penColorValue,
        _highlighterColor = highlighterColorValue,
@@ -21,12 +22,17 @@ class ToolSettings extends ChangeNotifier {
        // ignore: prefer_initializing_formals
        _highlighterWidth = highlighterWidth,
        // ignore: prefer_initializing_formals
-       _shapeRecognition = shapeRecognition {
+       _shapeRecognition = shapeRecognition,
+       _eraserRadius = eraserRadius {
     _colorValue = tool == StrokeTool.highlighter
         ? _highlighterColor
         : _penColor;
     _width = tool == StrokeTool.highlighter ? _highlighterWidth : _penWidth;
   }
+
+  static const double eraserMin = 4;
+  static const double eraserMax = 48;
+  static const double eraserDefault = 10;
 
   StrokeTool _tool;
   int _penColor;
@@ -34,6 +40,7 @@ class ToolSettings extends ChangeNotifier {
   double _penWidth;
   double _highlighterWidth;
   bool _shapeRecognition;
+  double _eraserRadius;
   late int _colorValue;
   late double _width;
 
@@ -42,6 +49,7 @@ class ToolSettings extends ChangeNotifier {
   double get width => _width;
   double get penWidth => _penWidth;
   double get highlighterWidth => _highlighterWidth;
+  double get eraserRadius => _eraserRadius;
 
   /// Hold at the end of a pen or highlighter stroke to snap it to a shape.
   bool get shapeRecognition => _shapeRecognition;
@@ -94,6 +102,13 @@ class ToolSettings extends ChangeNotifier {
     if (_usesPenSlot) _penWidth = width;
     if (_tool == StrokeTool.highlighter) _highlighterWidth = width;
 
+    notifyListeners();
+  }
+
+  void selectEraserRadius(double radius) {
+    final v = radius.clamp(eraserMin, eraserMax).toDouble();
+    if (v == _eraserRadius) return;
+    _eraserRadius = v;
     notifyListeners();
   }
 }

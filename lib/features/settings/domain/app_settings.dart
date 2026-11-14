@@ -1,4 +1,5 @@
 import '../../editor/domain/handwriting_language.dart';
+import '../../editor/domain/page_layout.dart';
 import '../../editor/domain/stroke_tool.dart';
 import '../../editor/domain/tip_size.dart';
 import '../../library/domain/paper_template.dart';
@@ -27,6 +28,7 @@ final class AppSettings {
     this.rememberPosition = true,
     this.shapeRecognition = true, // hold ~1 s before lifting to snap to a shape
     this.handwritingLanguage = HandwritingLanguage.auto,
+    this.pageLayout = PageLayout.single,
   });
 
   static const List<double> zoomLevels = [0.5, 0.75, 1.0, 1.25, 1.5];
@@ -64,6 +66,9 @@ final class AppSettings {
   /// Language used by the Auto Alphabet Pen when converting handwriting.
   final HandwritingLanguage handwritingLanguage;
 
+  /// Page arrangement used when a notebook opens.
+  final PageLayout pageLayout;
+
   AppSettings copyWith({
     AppThemeMode? themeMode,
     int? accentColorValue,
@@ -84,6 +89,7 @@ final class AppSettings {
     bool? rememberPosition,
     bool? shapeRecognition,
     HandwritingLanguage? handwritingLanguage,
+    PageLayout? pageLayout,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     accentColorValue: accentColorValue ?? this.accentColorValue,
@@ -104,6 +110,7 @@ final class AppSettings {
     rememberPosition: rememberPosition ?? this.rememberPosition,
     shapeRecognition: shapeRecognition ?? this.shapeRecognition,
     handwritingLanguage: handwritingLanguage ?? this.handwritingLanguage,
+    pageLayout: pageLayout ?? this.pageLayout,
   );
 
   /// Returns a copy with every value forced into its supported range:

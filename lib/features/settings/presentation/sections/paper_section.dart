@@ -6,6 +6,7 @@ import '../../../editor/domain/handwriting_language.dart';
 import '../../../editor/domain/stroke_tool.dart';
 import '../../../editor/domain/tip_size.dart';
 import '../../../editor/presentation/toolbar/ink_palette.dart';
+import '../../../editor/presentation/toolbar/rgb_color_dialog.dart';
 import '../../../library/domain/paper_template.dart';
 import '../../application/settings_providers.dart';
 import '../widgets/settings_widgets.dart';
@@ -65,6 +66,13 @@ class PaperSection extends ConsumerWidget {
           selected: Color(settings.penColorValue),
           onChanged: (c) =>
               notifier.update((s) => s.copyWith(penColorValue: c.toARGB32())),
+          onCustom: () async {
+            final v = await RgbColorDialog.show(
+              context,
+              initial: settings.penColorValue,
+            );
+            if (v != null) notifier.update((s) => s.copyWith(penColorValue: v));
+          },
         ),
         const GlassDivider(),
         SettingsPercentTile(
@@ -82,6 +90,14 @@ class PaperSection extends ConsumerWidget {
           onChanged: (c) => notifier.update(
             (s) => s.copyWith(highlighterColorValue: c.toARGB32()),
           ),
+          onCustom: () async {
+            final v = await RgbColorDialog.show(
+              context,
+              initial: settings.highlighterColorValue,
+            );
+            if (v != null)
+              notifier.update((s) => s.copyWith(highlighterColorValue: v));
+          },
         ),
         const GlassDivider(),
         SettingsPercentTile(

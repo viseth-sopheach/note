@@ -10,7 +10,8 @@ enum StrokeTool {
   arrow,
   // Appended: the index is stored in saved pages. Never reorder.
   physicalPen,
-  autoPen;
+  autoPen,
+  laser;
 
   bool get isShape => switch (this) {
     StrokeTool.line ||

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/glass/glass_svg_icon.dart';
 import '../../../../app/glass/glass_theme.dart';
 import '../../domain/notebook.dart';
 import '../cover_palette.dart';
@@ -119,13 +120,21 @@ class NotebookCard extends StatelessWidget {
                           ),
                         ),
                       Center(
-                        child: Icon(
-                          isPdf
-                              ? Icons.picture_as_pdf_outlined
-                              : Icons.menu_book_outlined,
-                          size: 36,
-                          color: foreground.withValues(alpha: 0.9),
-                        ),
+                        child: isPdf
+                            ? Icon(
+                                Icons.picture_as_pdf_outlined,
+                                size: 36,
+                                color: foreground.withValues(alpha: 0.9),
+                              )
+                            : IconTheme(
+                                data: IconThemeData(
+                                  size: 44,
+                                  color: foreground.withValues(alpha: 0.9),
+                                ),
+                                child: const GlassSvgIcon(
+                                  'assets/icon/notebook-of-paper-with-spring.svg',
+                                ),
+                              ),
                       ),
                     ],
                   ),

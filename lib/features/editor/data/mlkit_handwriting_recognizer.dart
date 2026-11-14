@@ -50,6 +50,9 @@ class MlKitHandwritingRecognizer implements HandwritingRecognizer {
     final data = _toInk(strokes);
     if (data.strokes.isEmpty) return null;
 
+    final pointCount = data.strokes.fold<int>(0, (n, s) => n + s.points.length);
+    if (data.strokes.isEmpty || pointCount < 4) return null;
+
     switch (language) {
       case HandwritingLanguage.english:
         return (await _run(_english, HandwritingLanguage.english, data))?.value;
@@ -89,17 +92,31 @@ class MlKitHandwritingRecognizer implements HandwritingRecognizer {
       code,
       () => ink.DigitalInkRecognizer(languageCode: code),
     );
-    final candidates = await engine.recognize(data);
-    if (candidates.isEmpty) return null;
-    final best = candidates.first;
-    return _Scored(RecognizedText(best.text, lang), best.score);
+    try {
+      final candidates = await engine
+          .recognize(data)
+          .timeout(const Duration(seconds: 20));
+      if (candidates.isEmpty) return null;
+      final best = candidates.first;
+      return _Scored(RecognizedText(best.text, lang), best.score);
+    } catch (_) {
+      _engines.remove(code);
+      try {
+        await engine.close();
+      } catch (_) {}
+      rethrow;
+    }
   }
 
   Future<bool> _ensureModel(String code) async {
     if (_ready.contains(code)) return true;
     try {
-      if (!await _models.isModelDownloaded(code)) {
-        if (!await _models.downloadModel(code, isWifiRequired: false)) {
+      if (!await _models
+          .isModelDownloaded(code)
+          .timeout(const Duration(seconds: 10))) {
+        if (!await _models
+            .downloadModel(code, isWifiRequired: false)
+            .timeout(const Duration(minutes: 2))) {
           return false;
         }
       }

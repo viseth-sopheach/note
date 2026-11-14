@@ -48,6 +48,7 @@ class DrawingToolbar extends StatelessWidget {
     StrokeTool.ellipse => Icons.circle_outlined,
     StrokeTool.triangle => Icons.change_history_outlined,
     StrokeTool.arrow => Icons.arrow_right_alt,
+    StrokeTool.laser => Icons.flare,
   };
 
   static String _label(StrokeTool t) => switch (t) {
@@ -62,6 +63,7 @@ class DrawingToolbar extends StatelessWidget {
     StrokeTool.ellipse => 'Ellipse',
     StrokeTool.triangle => 'Triangle',
     StrokeTool.arrow => 'Arrow',
+    StrokeTool.laser => 'Laser pen',
   };
 
   @override

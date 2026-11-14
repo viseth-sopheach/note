@@ -9,9 +9,11 @@ import '../../../../app/glass/glass_theme.dart';
 import '../../../../app/glass/glass_tokens.dart';
 import '../../application/drawing_controller.dart';
 import '../../application/measure_controller.dart';
+import '../../application/tool_settings.dart';
 import '../../domain/stroke_tool.dart';
 import '../../domain/tip_size.dart';
 import 'ink_palette.dart';
+import 'rgb_color_dialog.dart';
 import 'tool_icons.dart';
 
 const double _menuWidth = 248;
@@ -31,6 +33,7 @@ class FloatingToolbar extends StatefulWidget {
     required this.onAddTemplate,
     required this.onToggleMeasure,
     required this.onSettings,
+    required this.onLayout,
     required this.onDuplicatePage,
     required this.onDeletePage,
     required this.onCopyPage,
@@ -53,6 +56,7 @@ class FloatingToolbar extends StatefulWidget {
   final VoidCallback onAddTemplate;
   final void Function(MeasureKind kind) onToggleMeasure;
   final VoidCallback onSettings;
+  final VoidCallback onLayout;
   final VoidCallback onDuplicatePage;
 
   /// Null hides the delete item (only one page left).
@@ -163,6 +167,11 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
           destructive: true,
         ),
       const GlassMenuItem(
+        value: 'layout',
+        icon: Icons.view_column_outlined,
+        label: 'Page layout…',
+      ),
+      const GlassMenuItem(
         value: 'settings',
         icon: Icons.settings_outlined,
         label: 'Settings',
@@ -181,6 +190,8 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
         widget.onPastePage?.call();
       case 'delete':
         widget.onDeletePage?.call();
+      case 'layout':
+        widget.onLayout();
       case 'settings':
         widget.onSettings();
     }
@@ -317,12 +328,17 @@ class _FloatingToolbarState extends State<FloatingToolbar> {
         textActive: widget.textActive,
         onPicked: widget.onToolPicked,
       ),
-      tool(StrokeTool.eraser, const GlassSvgIcon(ToolIcons.eraser), 'Eraser'),
+      _EraserToolButton(
+        controller: _c,
+        textActive: widget.textActive,
+        onPicked: widget.onToolPicked,
+      ),
       tool(
         StrokeTool.select,
         const GlassSvgIcon(ToolIcons.lasso),
         'Lasso select',
       ),
+      tool(StrokeTool.laser, const Icon(Icons.flare), 'Laser pen'),
       GlassIconButton(
         tooltip: 'Text box',
         icon: const Icon(Icons.text_fields),
@@ -456,6 +472,10 @@ class _InkOptions extends StatelessWidget {
                       ),
                     ),
                   ),
+                _CustomColorSwatch(
+                  current: controller.colorValue,
+                  onPick: controller.selectColor,
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -514,6 +534,173 @@ class _InkOptions extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CustomColorSwatch extends StatelessWidget {
+  const _CustomColorSwatch({required this.current, required this.onPick});
+
+  final int current;
+  final ValueChanged<int> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isPreset = kInkColors.any((c) => c.value == current);
+    return Semantics(
+      button: true,
+      selected: !isPreset,
+      label: 'Custom color',
+      child: Tooltip(
+        message: 'Custom color',
+        child: GestureDetector(
+          onTap: () async {
+            final v = await RgbColorDialog.show(context, initial: current);
+            if (v != null) onPick(v);
+          },
+          child: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isPreset ? null : Color(current),
+              gradient: isPreset
+                  ? const SweepGradient(
+                      colors: [
+                        Color(0xFFFF0000),
+                        Color(0xFFFFFF00),
+                        Color(0xFF00FF00),
+                        Color(0xFF00FFFF),
+                        Color(0xFF0000FF),
+                        Color(0xFFFF00FF),
+                        Color(0xFFFF0000),
+                      ],
+                    )
+                  : null,
+              border: Border.all(
+                color: isPreset ? context.glass.border : scheme.primary,
+                width: isPreset ? 1 : 3,
+              ),
+            ),
+            child: isPreset
+                ? const Icon(Icons.add, size: 16, color: Colors.white)
+                : null,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EraserToolButton extends StatefulWidget {
+  const _EraserToolButton({
+    required this.controller,
+    required this.textActive,
+    required this.onPicked,
+  });
+
+  final DrawingController controller;
+  final bool textActive;
+  final VoidCallback onPicked;
+
+  @override
+  State<_EraserToolButton> createState() => _EraserToolButtonState();
+}
+
+class _EraserToolButtonState extends State<_EraserToolButton> {
+  final MenuController _menu = MenuController();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.controller;
+    final selected = !widget.textActive && c.tool == StrokeTool.eraser;
+    return MenuAnchor(
+      controller: _menu,
+      style: const MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(Colors.transparent),
+        surfaceTintColor: WidgetStatePropertyAll(Colors.transparent),
+        shadowColor: WidgetStatePropertyAll(Colors.transparent),
+        elevation: WidgetStatePropertyAll(0),
+        padding: WidgetStatePropertyAll(EdgeInsets.zero),
+      ),
+      menuChildren: [_EraserOptions(controller: c)],
+      child: GlassIconButton(
+        tooltip: 'Eraser',
+        icon: const GlassSvgIcon(ToolIcons.eraser),
+        selected: selected,
+        onPressed: () {
+          if (!selected) {
+            widget.onPicked();
+            c.selectTool(StrokeTool.eraser);
+          } else {
+            _menu.isOpen ? _menu.close() : _menu.open();
+          }
+        },
+      ),
+    );
+  }
+}
+
+class _EraserOptions extends StatelessWidget {
+  const _EraserOptions({required this.controller});
+
+  final DrawingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return GlassSurface(
+      intensity: GlassIntensity.thick,
+      padding: const EdgeInsets.all(GlassTokens.space3),
+      child: ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) {
+          final r = controller.eraserRadius;
+          return SizedBox(
+            width: 248,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Text('Eraser size'),
+                    const Spacer(),
+                    Text('${(r * 2).round()} px'),
+                  ],
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Slider(
+                        min: ToolSettings.eraserMin,
+                        max: ToolSettings.eraserMax,
+                        value: r,
+                        label: '${(r * 2).round()}',
+                        onChanged: controller.selectEraserRadius,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 52,
+                      height: 52,
+                      child: Center(
+                        child: Container(
+                          width: r * 2,
+                          height: r * 2,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: scheme.primary, width: 2),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
