@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../app/glass/glass_backdrop.dart';
 import '../../../app/glass/glass_button.dart';
 import '../../../app/routes.dart';
 import '../../../app/theme.dart';
