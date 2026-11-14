@@ -33,9 +33,7 @@
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>AppGroupId</key>
-	<string>group.YOUR.BUNDLE.ID</string>
-	<key>GIDClientID</key>
-	<string>YOUR_CLIENT_ID</string>
+	<string>group.com.viset.visethnote</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>tg</string>
@@ -70,12 +68,6 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>ShareMedia-$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-			</array>
-		</dict>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>YOUR_REVERSED_CLIENT_ID</string>
 			</array>
 		</dict>
 	</array>

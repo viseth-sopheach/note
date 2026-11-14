@@ -1763,7 +1763,15 @@ class _EditorCanvasState extends ConsumerState<_EditorCanvas>
   // Paper
   // ------------------------------------------------------------
 
-  bool _darkPaper(_PageSession s) => false;
+  /// Dark paper follows the app theme. Pages with a PDF or background image
+  /// stay white, so imported content is never recolored.
+  bool _darkPaper(_PageSession s) {
+    if (Theme.of(context).brightness != Brightness.dark) return false;
+    if (s.imagePath != null) return false;
+    final pdf = _pdf;
+    if (pdf != null && s.index < pdf.pages.length) return false;
+    return true;
+  }
 
   Widget _paper(_PageSession session) {
     final image = session.imagePath;

@@ -36,13 +36,11 @@ jobs:
 
       - name: Add share extension target
         env:
-          BUNDLE_ID: YOUR.BUNDLE.ID
+          BUNDLE_ID: com.viset.visethnote
+          APP_GROUP: group.com.viset.visethnote
         run: |
           sudo gem install xcodeproj
           ruby ios/add_share_extension.rb
-
-      - name: Install pods
-        run: cd ios && pod install --repo-update
 
       - name: Build iOS (no code signing)
         run: flutter build ios --release --no-codesign
@@ -57,11 +55,9 @@ jobs:
           mkdir Payload
           cp -R "$APP_PATH" Payload/Runner.app
 
-          # Remove any stray signature/metadata files
           find Payload -name ".DS_Store" -delete
           rm -rf Payload/Runner.app/_CodeSignature
 
-          # zip -y keeps symlinks; ditto would also work
           zip -qry Viseth-unsigned.ipa Payload
 
           unzip -l Viseth-unsigned.ipa | head -n 20
