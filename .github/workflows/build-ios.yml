@@ -14,7 +14,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15
+    # Flutter 3.50 targets the current Xcode generation. Keep this explicit so
+    # the job does not silently move between older and newer Xcode images.
+    runs-on: macos-26
     timeout-minutes: 90
     env:
       APP_BUNDLE_ID: com.viset.visethnote
@@ -116,13 +118,23 @@ jobs:
           [[ "$ext_identifier" == *".$EXTENSION_BUNDLE_ID" ]]
           [[ "$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$RUNNER_TEMP/app-profile.plist")" == "$TEAM_ID" ]]
           [[ "$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$RUNNER_TEMP/extension-profile.plist")" == "$TEAM_ID" ]]
-          /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.security.application-groups' "$RUNNER_TEMP/app-profile.plist" | grep -Fx "$APP_GROUP"
-          /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.security.application-groups' "$RUNNER_TEMP/extension-profile.plist" | grep -Fx "$APP_GROUP"
+          profile_has_app_group() {
+            /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.security.application-groups' "$1" \
+              | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
+              | grep -Fxq "$APP_GROUP"
+          }
+          profile_has_app_group "$RUNNER_TEMP/app-profile.plist"
+          profile_has_app_group "$RUNNER_TEMP/extension-profile.plist"
 
           app_profile_name=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/app-profile.plist")
           ext_profile_name=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/extension-profile.plist")
           cp "$RUNNER_TEMP/app.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$app_profile_name.mobileprovision"
           cp "$RUNNER_TEMP/extension.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$ext_profile_name.mobileprovision"
+
+          # Persist the exact profile names for the idempotent project setup
+          # script to apply to the Runner and ShareExtension targets.
+          echo "IOS_APP_PROFILE_NAME=$app_profile_name" >> "$GITHUB_ENV"
+          echo "IOS_EXTENSION_PROFILE_NAME=$ext_profile_name" >> "$GITHUB_ENV"
 
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
@@ -138,6 +150,14 @@ jobs:
             </dict>
           </dict></plist>
           PLIST
+
+      - name: Configure manual signing for both targets
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          BUNDLE_ID: ${{ env.APP_BUNDLE_ID }}
+          APP_GROUP: ${{ env.APP_GROUP }}
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: ruby ios/add_share_extension.rb
 
       - name: Build signed App Store IPA
         if: steps.signing.outputs.enabled == 'true'
@@ -160,6 +180,9 @@ jobs:
           mkdir "$package_dir/Payload"
           ditto "$app_path" "$package_dir/Payload/Runner.app"
           (cd "$package_dir" && ditto -c -k --sequesterRsrc --keepParent Payload "$GITHUB_WORKSPACE/$ipa_path")
+          unzip -tq "$ipa_path"
+          unzip -Z1 "$ipa_path" | grep -Fx 'Payload/Runner.app/Info.plist'
+          unzip -Z1 "$ipa_path" | grep -Fx 'Payload/Runner.app/PlugIns/ShareExtension.appex/Info.plist'
 
       - name: Verify signed IPA and Share Extension
         if: steps.signing.outputs.enabled == 'true'
