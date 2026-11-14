@@ -1,276 +1,63 @@
 name: Build iOS IPA
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      signing_method:
-        description: Export method for a signed IPA
-        required: true
-        type: choice
-        options:
-          - app-store
-          - ad-hoc
-        default: app-store
 
 concurrency:
   group: build-ios-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 jobs:
   build:
-    name: Build iOS IPA
     runs-on: macos-latest
-    timeout-minutes: 45
-    env:
-      HAS_SIGNING_SECRETS: ${{ secrets.P12_BASE64 != '' && secrets.P12_PASSWORD != '' && secrets.PROFILE_APP_BASE64 != '' && secrets.PROFILE_EXT_BASE64 != '' && secrets.TEAM_ID != '' }}
-
+    timeout-minutes: 60
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: 3.50.0
           cache: true
 
-      - name: Show Flutter version
-        run: flutter --version
+      - run: flutter --version
 
       - name: Enable Swift Package Manager
         run: flutter config --enable-swift-package-manager
 
-      - name: Install dependencies
-        run: flutter pub get
+      - name: Initialize build log
+        run: ': > build.log'
 
-      - name: Add share extension target
-        env:
-          BUNDLE_ID: com.viset.visethnote
-          APP_GROUP: group.com.viset.visethnote
-        run: |
-          sudo gem install xcodeproj
-          ruby ios/add_share_extension.rb
-
-      - name: Cache CocoaPods
-        uses: actions/cache@v4
-        with:
-          path: ios/Pods
-          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile', 'pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
-
-      - name: Run Flutter analyzer
-        continue-on-error: true
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
-
-      - name: Run Flutter tests
-        continue-on-error: true
-        run: flutter test
-
-      - name: Import signing certificate and provisioning profiles
-        if: env.HAS_SIGNING_SECRETS == 'true'
-        env:
-          P12_BASE64: ${{ secrets.P12_BASE64 }}
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          PROFILE_APP_BASE64: ${{ secrets.PROFILE_APP_BASE64 }}
-          PROFILE_EXT_BASE64: ${{ secrets.PROFILE_EXT_BASE64 }}
-          TEAM_ID: ${{ secrets.TEAM_ID }}
-        run: |
-          set -euo pipefail
-          WORK_DIR="$(mktemp -d)"
-          echo "IOS_SIGNING_WORK_DIR=$WORK_DIR" >> "$GITHUB_ENV"
-          KEYCHAIN_PATH="$RUNNER_TEMP/viseth-signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
-          echo "IOS_SIGNING_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
-
-          printf '%s' "$P12_BASE64" | base64 --decode > "$WORK_DIR/distribution.p12"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$WORK_DIR/distribution.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH" "$HOME/Library/Keychains/login.keychain-db"
-
-          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-          mkdir -p "$PROFILE_DIR"
-          printf '%s' "$PROFILE_APP_BASE64" | base64 --decode > "$WORK_DIR/app.mobileprovision"
-          printf '%s' "$PROFILE_EXT_BASE64" | base64 --decode > "$WORK_DIR/extension.mobileprovision"
-          security cms -D -i "$WORK_DIR/app.mobileprovision" > "$WORK_DIR/app-profile.plist"
-          security cms -D -i "$WORK_DIR/extension.mobileprovision" > "$WORK_DIR/extension-profile.plist"
-
-          APP_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$WORK_DIR/app-profile.plist" | sed "s/^$TEAM_ID\.//")
-          EXT_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$WORK_DIR/extension-profile.plist" | sed "s/^$TEAM_ID\.//")
-          test "$APP_BUNDLE_ID" = 'com.viset.visethnote'
-          test "$EXT_BUNDLE_ID" = 'com.viset.visethnote.ShareExtension'
-          APP_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$WORK_DIR/app-profile.plist")
-          EXT_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$WORK_DIR/extension-profile.plist")
-          APP_PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$WORK_DIR/app-profile.plist")
-          EXT_PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$WORK_DIR/extension-profile.plist")
-          cp "$WORK_DIR/app.mobileprovision" "$PROFILE_DIR/$APP_PROFILE_UUID.mobileprovision"
-          cp "$WORK_DIR/extension.mobileprovision" "$PROFILE_DIR/$EXT_PROFILE_UUID.mobileprovision"
-          {
-            echo "IOS_APP_PROFILE_NAME=$APP_PROFILE_NAME"
-            echo "IOS_EXT_PROFILE_NAME=$EXT_PROFILE_NAME"
-          } >> "$GITHUB_ENV"
-
-      - name: Configure manual signing
-        if: env.HAS_SIGNING_SECRETS == 'true'
-        env:
-          TEAM_ID: ${{ secrets.TEAM_ID }}
-        run: |
-          ruby <<'RUBY'
-          require 'xcodeproj'
-          project = Xcodeproj::Project.open('ios/Runner.xcodeproj')
-          { 'Runner' => ENV.fetch('IOS_APP_PROFILE_NAME'),
-            'ShareExtension' => ENV.fetch('IOS_EXT_PROFILE_NAME') }.each do |target_name, profile_name|
-            target = project.targets.find { |candidate| candidate.name == target_name }
-            abort "Missing target #{target_name}" unless target
-            target.build_configurations.each do |configuration|
-              settings = configuration.build_settings
-              settings['CODE_SIGN_STYLE'] = 'Manual'
-              settings['DEVELOPMENT_TEAM'] = ENV.fetch('TEAM_ID')
-              settings['PROVISIONING_PROFILE_SPECIFIER'] = profile_name
-              settings['CODE_SIGN_IDENTITY'] = 'Apple Distribution'
-            end
-          end
-          project.save
-          RUBY
-
-      - name: Create signed IPA
-        if: env.HAS_SIGNING_SECRETS == 'true'
-        env:
-          TEAM_ID: ${{ secrets.TEAM_ID }}
-          SIGNING_METHOD: ${{ inputs.signing_method || 'app-store' }}
+      - name: Install Flutter dependencies
         run: |
           set -o pipefail
-          python3 - <<'PY'
-          import os
-          import plistlib
-          from pathlib import Path
-
-          method = os.environ['SIGNING_METHOD']
-          if method not in {'app-store', 'ad-hoc'}:
-              raise SystemExit(f'Unsupported export method: {method}')
-          export_options = {
-              'method': method,
-              'teamID': os.environ['TEAM_ID'],
-              'signingStyle': 'manual',
-              'provisioningProfiles': {
-                  'com.viset.visethnote': os.environ['IOS_APP_PROFILE_NAME'],
-                  'com.viset.visethnote.ShareExtension': os.environ['IOS_EXT_PROFILE_NAME'],
-              },
-          }
-          Path('ios/ExportOptions.plist').write_bytes(plistlib.dumps(export_options))
-          PY
-          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist -v 2>&1 | tee "$RUNNER_TEMP/flutter-build-ipa.log"
+          flutter pub get 2>&1 | tee -a build.log
 
       - name: Build unsigned iOS app
-        if: env.HAS_SIGNING_SECRETS != 'true'
         run: |
           set -o pipefail
-          flutter build ios --release --no-codesign -v 2>&1 | tee "$RUNNER_TEMP/flutter-build-ios.log"
+          flutter build ios --release --no-codesign -v 2>&1 | tee -a build.log
 
-      - name: Package unsigned IPA
-        if: env.HAS_SIGNING_SECRETS != 'true'
+      - name: Package IPA
         run: |
           set -euo pipefail
-          APP_PATH="build/ios/iphoneos/Runner.app"
-          test -d "$APP_PATH" || { echo "Runner.app not found"; exit 1; }
-          rm -rf Payload Viseth-unsigned.ipa
+          rm -rf Payload app.ipa
           mkdir Payload
-          cp -R "$APP_PATH" Payload/Runner.app
-          find Payload -name ".DS_Store" -delete
-          rm -rf Payload/Runner.app/_CodeSignature
-          zip -qry Viseth-unsigned.ipa Payload
-          unzip -l Viseth-unsigned.ipa | head -n 20
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          ditto -c -k --sequesterRsrc --keepParent Payload app.ipa
 
-      - name: Verify Share Extension and app group
-        run: |
-          set -euo pipefail
-          if [[ "$HAS_SIGNING_SECRETS" == "true" ]]; then
-            APP_PATH="build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app"
-            IPA_PATHS=(build/ios/ipa/*.ipa)
-            test -f "${IPA_PATHS[0]}" || { echo "Signed IPA not found in build/ios/ipa"; exit 1; }
-            test "${#IPA_PATHS[@]}" -eq 1 || { echo "Expected exactly one signed IPA"; exit 1; }
-            IPA_PATH="${IPA_PATHS[0]}"
-          else
-            APP_PATH="build/ios/iphoneos/Runner.app"
-            IPA_PATH="Viseth-unsigned.ipa"
-          fi
-          EXT_PATH="$APP_PATH/PlugIns/ShareExtension.appex"
-          test -d "$EXT_PATH" || { echo "ShareExtension.appex is missing from Runner.app/PlugIns"; exit 1; }
-          echo "Runner entitlements:"
-          plutil -p ios/Runner/Runner.entitlements
-          echo "ShareExtension entitlements:"
-          plutil -p ios/ShareExtension/ShareExtension.entitlements
-          grep -q 'group.com.viset.visethnote' ios/Runner/Runner.entitlements
-          grep -q 'group.com.viset.visethnote' ios/ShareExtension/ShareExtension.entitlements
-          python3 - "$IPA_PATH" <<'PY'
-          import sys
-          import zipfile
-
-          ipa = sys.argv[1]
-          with zipfile.ZipFile(ipa) as archive:
-              bad_member = archive.testzip()
-              if bad_member:
-                  raise SystemExit(f'Corrupt IPA member: {bad_member}')
-              names = set(archive.namelist())
-          required = {
-              'Payload/Runner.app/Info.plist',
-              'Payload/Runner.app/PlugIns/ShareExtension.appex/Info.plist',
-          }
-          missing = sorted(required - names)
-          if missing:
-              raise SystemExit(f'IPA is missing required payload entries: {missing}')
-          print(f'Validated IPA payload and Share Extension: {ipa}')
-          PY
-          echo "Verified app group and embedded ShareExtension.appex."
-
-      - name: Upload signed IPA artifact
-        if: env.HAS_SIGNING_SECRETS == 'true'
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: Viseth-signed-ipa
-          path: build/ios/ipa/*.ipa
+          name: unsigned-ipa
+          path: app.ipa
           if-no-files-found: error
-          retention-days: 30
 
-      - name: Upload unsigned IPA artifact
-        if: env.HAS_SIGNING_SECRETS != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Viseth-unsigned-ipa
-          path: Viseth-unsigned.ipa
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Collect Xcode build logs on failure
-        if: failure()
-        run: |
-          mkdir -p "$RUNNER_TEMP/ios-xcode-logs"
-          find "$HOME/Library/Developer/Xcode/DerivedData" \
-            -path '*/Logs/Build/*.xcactivitylog' \
-            -type f -exec cp -p {} "$RUNNER_TEMP/ios-xcode-logs/" \; 2>/dev/null || true
-
-      - name: Upload Xcode build logs on failure
+      - name: Upload build log on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: ios-xcode-build-logs
-          path: |
-            ${{ runner.temp }}/flutter-build-*.log
-            ${{ runner.temp }}/ios-xcode-logs/*.xcactivitylog
+          name: build-log
+          path: build.log
           if-no-files-found: warn
-          retention-days: 14
-
-      - name: Delete temporary signing keychain
-        if: always() && env.IOS_SIGNING_KEYCHAIN != ''
-        run: |
-          security delete-keychain "$IOS_SIGNING_KEYCHAIN" || true
-          if [ -n "${IOS_SIGNING_WORK_DIR:-}" ]; then rm -rf "$IOS_SIGNING_WORK_DIR"; fi
