@@ -55,7 +55,36 @@ jobs:
           test -f "$PACKAGE"
           grep -q 'name: "FlutterGeneratedPluginSwiftPackage"' "$PACKAGE"
           grep -q 'FlutterGeneratedPluginSwiftPackage' ios/Runner.xcodeproj/project.pbxproj
-          ! rg -ni 'Pods' ios/Runner.xcodeproj ios/Runner.xcworkspace
+          if grep -Rni 'Pods' ios/Runner.xcodeproj ios/Runner.xcworkspace; then
+            echo "Unexpected Pods reference in the Xcode project/workspace."
+            exit 1
+          fi
+          if [[ -e ios/Podfile || -e ios/Podfile.lock ]]; then
+            echo "CocoaPods files were generated; this workflow requires SPM-only plugins."
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          import re
+          import sys
+          from pathlib import Path
+
+          metadata = json.loads(Path('.flutter-plugins-dependencies').read_text())
+          if not metadata.get('swift_package_manager_enabled', {}).get('ios'):
+              sys.exit('Flutter reports iOS Swift Package Manager is disabled.')
+
+          manifest = Path('ios/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift').read_text()
+          plugins = [plugin for plugin in metadata['plugins']['ios'] if plugin.get('native_build', True)]
+          missing = [
+              plugin['name']
+              for plugin in plugins
+              if not re.search(r'\.package\(name:\s*"' + re.escape(plugin['name']) + r'"', manifest)
+          ]
+          if missing:
+              sys.exit('iOS plugins missing from FlutterGeneratedPluginSwiftPackage: ' + ', '.join(missing))
+          print(f"FlutterGeneratedPluginSwiftPackage includes {len(plugins)} native iOS plugins:")
+          print('\n'.join(f"- {plugin['name']}" for plugin in plugins))
+          PY
           echo "Generated Swift package manifest:"
           cat "$PACKAGE"
 
@@ -76,7 +105,7 @@ jobs:
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
             -verbose 2>&1 | tee "$RUNNER_TEMP/xcode-package-resolution.log"
           echo "Swift package products referenced by FlutterGeneratedPluginSwiftPackage:"
-          rg -n 'dependencies:|\.product\(|\.package\(' ios/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift || true
+          grep -nE 'dependencies:|\.product\(|\.package\(' ios/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift || true
           echo "Package resolution completed for Runner and ShareExtension."
 
       - name: Run Flutter analyzer
@@ -206,7 +235,16 @@ jobs:
       - name: Verify Share Extension and app group
         run: |
           set -euo pipefail
-          APP_PATH="build/ios/iphoneos/Runner.app"
+          if [[ "$HAS_SIGNING_SECRETS" == "true" ]]; then
+            APP_PATH="build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app"
+            IPA_PATHS=(build/ios/ipa/*.ipa)
+            test -f "${IPA_PATHS[0]}" || { echo "Signed IPA not found in build/ios/ipa"; exit 1; }
+            test "${#IPA_PATHS[@]}" -eq 1 || { echo "Expected exactly one signed IPA"; exit 1; }
+            IPA_PATH="${IPA_PATHS[0]}"
+          else
+            APP_PATH="build/ios/iphoneos/Runner.app"
+            IPA_PATH="Viseth-unsigned.ipa"
+          fi
           EXT_PATH="$APP_PATH/PlugIns/ShareExtension.appex"
           test -d "$EXT_PATH" || { echo "ShareExtension.appex is missing from Runner.app/PlugIns"; exit 1; }
           echo "Runner entitlements:"
@@ -215,6 +253,25 @@ jobs:
           plutil -p ios/ShareExtension/ShareExtension.entitlements
           grep -q 'group.com.viset.visethnote' ios/Runner/Runner.entitlements
           grep -q 'group.com.viset.visethnote' ios/ShareExtension/ShareExtension.entitlements
+          python3 - "$IPA_PATH" <<'PY'
+          import sys
+          import zipfile
+
+          ipa = sys.argv[1]
+          with zipfile.ZipFile(ipa) as archive:
+              bad_member = archive.testzip()
+              if bad_member:
+                  raise SystemExit(f'Corrupt IPA member: {bad_member}')
+              names = set(archive.namelist())
+          required = {
+              'Payload/Runner.app/Info.plist',
+              'Payload/Runner.app/PlugIns/ShareExtension.appex/Info.plist',
+          }
+          missing = sorted(required - names)
+          if missing:
+              raise SystemExit(f'IPA is missing required payload entries: {missing}')
+          print(f'Validated IPA payload and Share Extension: {ipa}')
+          PY
           echo "Verified app group and embedded ShareExtension.appex."
 
       - name: Upload signed IPA artifact
