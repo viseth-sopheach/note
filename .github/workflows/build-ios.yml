@@ -14,18 +14,20 @@ permissions:
 
 jobs:
   build:
-    # Flutter 3.50 targets the current Xcode generation. Keep this explicit so
-    # the job does not silently move between older and newer Xcode images.
     runs-on: macos-26
     timeout-minutes: 90
+
     env:
       APP_BUNDLE_ID: com.viset.visethnote
       EXTENSION_BUNDLE_ID: com.viset.visethnote.ShareExtension
       APP_GROUP: group.com.viset.visethnote
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: subosito/flutter-action@v2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: 3.50.0
@@ -43,8 +45,7 @@ jobs:
       - name: Install Flutter dependencies
         run: flutter pub get
 
-      - name: Detect signing configuration
-        id: signing
+      - name: Validate signing secrets
         env:
           P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
@@ -53,145 +54,157 @@ jobs:
           TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
         run: |
           set -euo pipefail
-          if [[ -z "$P12_BASE64" ]]; then
-            if [[ -n "$P12_PASSWORD$APP_PROFILE_BASE64$EXT_PROFILE_BASE64$TEAM_ID" ]]; then
-              echo "Signing secrets are incomplete; provide all five IOS_* signing secrets." >&2
-              exit 1
-            fi
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-          else
-            for name in P12_PASSWORD APP_PROFILE_BASE64 EXT_PROFILE_BASE64 TEAM_ID; do
-              if [[ -z "${!name}" ]]; then
-                echo "Missing required signing secret: $name" >&2
-                exit 1
-              fi
-            done
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          fi
 
-      - name: Install Apple distribution signing assets
-        if: steps.signing.outputs.enabled == 'true'
-        env:
-          P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
-          P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
-          APP_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_APP_BASE64 }}
-          EXT_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_EXTENSION_BASE64 }}
-          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          for name in P12_PASSWORD APP_PROFILE_BASE64 EXT_PROFILE_BASE64 TEAM_ID; do
+          for name in P12_BASE64 P12_PASSWORD APP_PROFILE_BASE64 EXT_PROFILE_BASE64 TEAM_ID; do
             if [[ -z "${!name}" ]]; then
-              echo "Missing required signing secret for signed IPA: $name" >&2
+              echo "Missing required GitHub secret: $name"
               exit 1
             fi
           done
 
-          keychain="$RUNNER_TEMP/ios-signing.keychain-db"
-          keychain_password="$(openssl rand -hex 24)"
-          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/distribution.p12"
-          security create-keychain -p "$keychain_password" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$keychain_password" "$keychain"
-          security import "$RUNNER_TEMP/distribution.p12" -P "$P12_PASSWORD" \
-            -A -t cert -f pkcs12 -k "$keychain"
-          security set-key-partition-list -S apple-tool:,apple: -s \
-            -k "$keychain_password" "$keychain"
-          security list-keychains -d user -s "$keychain"
+      - name: Install Apple signing assets
+        env:
+          P12_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          APP_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_APP_BASE64 }}
+          EXT_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_EXTENSION_BASE64 }}
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          set -euo pipefail
 
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          KEYCHAIN="$RUNNER_TEMP/ios-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+
+          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/distribution.p12"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          security import "$RUNNER_TEMP/distribution.p12" \
+            -P "$P12_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN"
+
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          security list-keychains -d user -s "$KEYCHAIN"
+
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+
           echo "$APP_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/app.mobileprovision"
           echo "$EXT_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/extension.mobileprovision"
+
           security cms -D -i "$RUNNER_TEMP/app.mobileprovision" > "$RUNNER_TEMP/app-profile.plist"
           security cms -D -i "$RUNNER_TEMP/extension.mobileprovision" > "$RUNNER_TEMP/extension-profile.plist"
-          app_identifier=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/app-profile.plist")
-          ext_identifier=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/extension-profile.plist")
-          [[ "$app_identifier" == *".$APP_BUNDLE_ID" ]]
-          [[ "$ext_identifier" == *".$EXTENSION_BUNDLE_ID" ]]
+
+          APP_IDENTIFIER=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/app-profile.plist")
+          EXT_IDENTIFIER=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/extension-profile.plist")
+
+          [[ "$APP_IDENTIFIER" == *".$APP_BUNDLE_ID" ]]
+          [[ "$EXT_IDENTIFIER" == *".$EXTENSION_BUNDLE_ID" ]]
+
           [[ "$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$RUNNER_TEMP/app-profile.plist")" == "$TEAM_ID" ]]
           [[ "$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$RUNNER_TEMP/extension-profile.plist")" == "$TEAM_ID" ]]
-          profile_has_app_group() {
-            /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.security.application-groups' "$1" \
-              | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
-              | grep -Fxq "$APP_GROUP"
+
+          check_app_group() {
+            /usr/libexec/PlistBuddy \
+              -c 'Print :Entitlements:com.apple.security.application-groups' "$1" \
+              | grep -Fq "$APP_GROUP"
           }
-          profile_has_app_group "$RUNNER_TEMP/app-profile.plist"
-          profile_has_app_group "$RUNNER_TEMP/extension-profile.plist"
 
-          app_profile_name=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/app-profile.plist")
-          ext_profile_name=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/extension-profile.plist")
-          cp "$RUNNER_TEMP/app.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$app_profile_name.mobileprovision"
-          cp "$RUNNER_TEMP/extension.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$ext_profile_name.mobileprovision"
+          check_app_group "$RUNNER_TEMP/app-profile.plist"
+          check_app_group "$RUNNER_TEMP/extension-profile.plist"
 
-          # Persist the exact profile names for the idempotent project setup
-          # script to apply to the Runner and ShareExtension targets.
-          echo "IOS_APP_PROFILE_NAME=$app_profile_name" >> "$GITHUB_ENV"
-          echo "IOS_EXTENSION_PROFILE_NAME=$ext_profile_name" >> "$GITHUB_ENV"
+          APP_PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/app-profile.plist")
+          EXT_PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/extension-profile.plist")
+
+          cp "$RUNNER_TEMP/app.mobileprovision" "$PROFILE_DIR/$APP_PROFILE_NAME.mobileprovision"
+          cp "$RUNNER_TEMP/extension.mobileprovision" "$PROFILE_DIR/$EXT_PROFILE_NAME.mobileprovision"
+
+          echo "IOS_APP_PROFILE_NAME=$APP_PROFILE_NAME" >> "$GITHUB_ENV"
+          echo "IOS_EXTENSION_PROFILE_NAME=$EXT_PROFILE_NAME" >> "$GITHUB_ENV"
 
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>destination</key><string>export</string>
-            <key>method</key><string>app-store-connect</string>
-            <key>signingStyle</key><string>manual</string>
-            <key>teamID</key><string>$TEAM_ID</string>
-            <key>provisioningProfiles</key><dict>
-              <key>$APP_BUNDLE_ID</key><string>$app_profile_name</string>
-              <key>$EXTENSION_BUNDLE_ID</key><string>$ext_profile_name</string>
+          <plist version="1.0">
+          <dict>
+            <key>destination</key>
+            <string>export</string>
+
+            <key>method</key>
+            <string>release-testing</string>
+
+            <key>signingStyle</key>
+            <string>manual</string>
+
+            <key>teamID</key>
+            <string>$TEAM_ID</string>
+
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>$APP_BUNDLE_ID</key>
+              <string>$APP_PROFILE_NAME</string>
+
+              <key>$EXTENSION_BUNDLE_ID</key>
+              <string>$EXT_PROFILE_NAME</string>
             </dict>
-          </dict></plist>
+          </dict>
+          </plist>
           PLIST
 
-      - name: Configure manual signing for both targets
-        if: steps.signing.outputs.enabled == 'true'
+      - name: Configure manual signing
         env:
           BUNDLE_ID: ${{ env.APP_BUNDLE_ID }}
           APP_GROUP: ${{ env.APP_GROUP }}
           TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
         run: ruby ios/add_share_extension.rb
 
-      - name: Build signed App Store IPA
-        if: steps.signing.outputs.enabled == 'true'
+      - name: Build Ad Hoc IPA
         run: |
           set -o pipefail
-          flutter build ipa --release --build-number "$GITHUB_RUN_NUMBER" --export-options-plist="$RUNNER_TEMP/ExportOptions.plist" -v 2>&1 | tee build.log
 
-      - name: Build unsigned app and package IPA
-        if: steps.signing.outputs.enabled != 'true'
+          flutter build ipa \
+            --release \
+            --build-number "$GITHUB_RUN_NUMBER" \
+            --export-options-plist="$RUNNER_TEMP/ExportOptions.plist" \
+            -v 2>&1 | tee build.log
+
+      - name: Verify signed IPA
         run: |
           set -euo pipefail
-          flutter build ios --release --build-number "$GITHUB_RUN_NUMBER" --no-codesign -v 2>&1 | tee build.log
-          app_path="build/ios/iphoneos/Runner.app"
-          ipa_path="build/ios/ipa/Viseth-unsigned.ipa"
-          test -d "$app_path"
-          mkdir -p "$(dirname "$ipa_path")"
-          package_dir="$(mktemp -d)"
-          trap 'rm -rf "$package_dir"' EXIT
-          mkdir "$package_dir/Payload"
-          ditto "$app_path" "$package_dir/Payload/Runner.app"
-          (cd "$package_dir" && ditto -c -k --sequesterRsrc --keepParent Payload "$GITHUB_WORKSPACE/$ipa_path")
-          unzip -tq "$ipa_path"
-          unzip -Z1 "$ipa_path" | grep -Fx 'Payload/Runner.app/Info.plist'
 
-      - name: Verify signed IPA and Share Extension
-        if: steps.signing.outputs.enabled == 'true'
-        run: |
-          set -euo pipefail
-          ipa_path="$(find build/ios/ipa -maxdepth 1 -name '*.ipa' -print -quit)"
-          test -n "$ipa_path"
-          unzip -q "$ipa_path" -d "$RUNNER_TEMP/ipa-check"
-          app_path="$RUNNER_TEMP/ipa-check/Payload/Runner.app"
-          test -d "$app_path/PlugIns/ShareExtension.appex"
-          codesign --verify --deep --strict "$app_path"
-          codesign --verify --strict "$app_path/PlugIns/ShareExtension.appex"
+          IPA_PATH="$(find build/ios/ipa -maxdepth 1 -name '*.ipa' -print -quit)"
+
+          test -n "$IPA_PATH"
+
+          mkdir -p "$RUNNER_TEMP/ipa-check"
+          unzip -q "$IPA_PATH" -d "$RUNNER_TEMP/ipa-check"
+
+          APP_PATH="$RUNNER_TEMP/ipa-check/Payload/Runner.app"
+          EXT_PATH="$APP_PATH/PlugIns/ShareExtension.appex"
+
+          test -d "$APP_PATH"
+          test -d "$EXT_PATH"
+          test -f "$APP_PATH/embedded.mobileprovision"
+          test -f "$EXT_PATH/embedded.mobileprovision"
+
+          codesign --verify --deep --strict "$APP_PATH"
+          codesign --verify --strict "$EXT_PATH"
+
+          echo "IPA signing verification successful"
+
           mkdir -p build/ios/ipa
-          cp "$ipa_path" build/ios/ipa/Viseth-signed.ipa
+          cp "$IPA_PATH" build/ios/ipa/Viseth-AdHoc.ipa
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: viseth-ios-ipa
-          path: build/ios/ipa/*.ipa
+          name: viseth-ios-adhoc-ipa
+          path: build/ios/ipa/Viseth-AdHoc.ipa
           if-no-files-found: error
 
       - name: Upload build log on failure
