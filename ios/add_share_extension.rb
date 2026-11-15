@@ -61,9 +61,15 @@ end
 
 ext.build_configurations.each do |c|
   s = c.build_settings
+  runner_configuration = runner.build_configurations.find { |configuration| configuration.name == c.name }
+  abort "Runner build configuration not found: #{c.name}" unless runner_configuration
+  runner_settings = runner_configuration.build_settings
+
   s['PRODUCT_BUNDLE_IDENTIFIER'] = "#{BUNDLE_ID}.ShareExtension"
   s['INFOPLIST_FILE'] = 'ShareExtension/Info.plist'
   s['CODE_SIGN_ENTITLEMENTS'] = 'ShareExtension/ShareExtension.entitlements'
+  s['CURRENT_PROJECT_VERSION'] = runner_settings.fetch('CURRENT_PROJECT_VERSION', '$(FLUTTER_BUILD_NUMBER)')
+  s['MARKETING_VERSION'] = runner_settings.fetch('MARKETING_VERSION', '$(FLUTTER_BUILD_NAME)')
   s['PRODUCT_NAME'] = '$(TARGET_NAME)'
   s['SWIFT_VERSION'] = '5.0'
   s['IPHONEOS_DEPLOYMENT_TARGET'] = deployment

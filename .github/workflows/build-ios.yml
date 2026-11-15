@@ -169,6 +169,57 @@ jobs:
           test -s build/ios/ipa/Viseth-UNSIGNED.ipa
           echo "Created unsigned IPA; it is not installable on a registered iPhone until signed."
 
+      - name: Validate app and Share Extension version metadata
+        run: |
+          set -euo pipefail
+          IPA_PATH="$(find build/ios/ipa -maxdepth 1 -name '*.ipa' -print -quit)"
+          if [[ -z "$IPA_PATH" ]]; then
+            echo "::error::No IPA was generated; cannot validate bundle version metadata."
+            exit 1
+          fi
+
+          CHECK_DIR="$RUNNER_TEMP/ipa-version-check"
+          rm -rf "$CHECK_DIR"
+          mkdir -p "$CHECK_DIR"
+          unzip -q "$IPA_PATH" -d "$CHECK_DIR"
+          APP_PLIST="$CHECK_DIR/Payload/Runner.app/Info.plist"
+          EXTENSION_PLIST="$CHECK_DIR/Payload/Runner.app/PlugIns/ShareExtension.appex/Info.plist"
+
+          read_version() {
+            local plist_path="$1"
+            local key="$2"
+            local label="$3"
+            local value
+            if [[ ! -f "$plist_path" ]]; then
+              echo "::error::$label Info.plist is missing from the IPA: $plist_path"
+              return 1
+            fi
+            if ! value=$(/usr/libexec/PlistBuddy -c "Print :$key" "$plist_path" 2>/dev/null); then
+              echo "::error::$label is missing $key in the IPA."
+              return 1
+            fi
+            if [[ -z "$value" || "$value" == *'$('* ]]; then
+              echo "::error::$label has an empty or unresolved $key value: '$value'"
+              return 1
+            fi
+            printf '%s' "$value"
+          }
+
+          APP_BUILD_VERSION="$(read_version "$APP_PLIST" CFBundleVersion Runner)"
+          EXTENSION_BUILD_VERSION="$(read_version "$EXTENSION_PLIST" CFBundleVersion ShareExtension)"
+          APP_MARKETING_VERSION="$(read_version "$APP_PLIST" CFBundleShortVersionString Runner)"
+          EXTENSION_MARKETING_VERSION="$(read_version "$EXTENSION_PLIST" CFBundleShortVersionString ShareExtension)"
+
+          if [[ "$APP_BUILD_VERSION" != "$EXTENSION_BUILD_VERSION" ]]; then
+            echo "::error::Runner CFBundleVersion ($APP_BUILD_VERSION) does not match ShareExtension CFBundleVersion ($EXTENSION_BUILD_VERSION)."
+            exit 1
+          fi
+          if [[ "$APP_MARKETING_VERSION" != "$EXTENSION_MARKETING_VERSION" ]]; then
+            echo "::error::Runner CFBundleShortVersionString ($APP_MARKETING_VERSION) does not match ShareExtension CFBundleShortVersionString ($EXTENSION_MARKETING_VERSION)."
+            exit 1
+          fi
+          echo "Validated IPA version metadata: $APP_MARKETING_VERSION ($APP_BUILD_VERSION) in Runner and ShareExtension."
+
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
