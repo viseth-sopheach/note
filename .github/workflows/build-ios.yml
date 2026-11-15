@@ -55,12 +55,20 @@ jobs:
         run: |
           set -euo pipefail
 
-          for name in P12_BASE64 P12_PASSWORD APP_PROFILE_BASE64 EXT_PROFILE_BASE64 TEAM_ID; do
-            if [[ -z "${!name}" ]]; then
-              echo "Missing required GitHub secret: $name"
+          check_secret() {
+            local variable_name="$1"
+            local secret_name="$2"
+            if [[ -z "${!variable_name}" ]]; then
+              echo "Missing required GitHub Actions repository secret: $secret_name"
               exit 1
             fi
-          done
+          }
+
+          check_secret P12_BASE64 IOS_DISTRIBUTION_CERTIFICATE_BASE64
+          check_secret P12_PASSWORD IOS_DISTRIBUTION_CERTIFICATE_PASSWORD
+          check_secret APP_PROFILE_BASE64 IOS_PROVISIONING_PROFILE_APP_BASE64
+          check_secret EXT_PROFILE_BASE64 IOS_PROVISIONING_PROFILE_EXTENSION_BASE64
+          check_secret TEAM_ID IOS_TEAM_ID
 
       - name: Install Apple signing assets
         env:
