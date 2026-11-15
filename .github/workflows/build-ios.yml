@@ -223,7 +223,7 @@ jobs:
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.signing.outputs.available == 'true' && steps.signed_build.outcome == 'success' && 'viseth-ios-adhoc-ipa' || 'viseth-ios-unsigned-ipa' }}
+          name: viseth-ios-ipa
           path: build/ios/ipa/*.ipa
           if-no-files-found: error
           compression-level: 0

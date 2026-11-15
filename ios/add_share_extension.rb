@@ -65,6 +65,11 @@ ext.build_configurations.each do |c|
   abort "Runner build configuration not found: #{c.name}" unless runner_configuration
   runner_settings = runner_configuration.build_settings
 
+  # The Runner xcconfig chain includes Flutter's Generated.xcconfig, which
+  # supplies FLUTTER_BUILD_NAME and FLUTTER_BUILD_NUMBER from pubspec.yaml.
+  # The dynamically-created extension target must load the matching config too
+  # or its Info.plist version placeholders remain unresolved.
+  c.base_configuration_reference = runner_configuration.base_configuration_reference
   s['PRODUCT_BUNDLE_IDENTIFIER'] = "#{BUNDLE_ID}.ShareExtension"
   s['INFOPLIST_FILE'] = 'ShareExtension/Info.plist'
   s['CODE_SIGN_ENTITLEMENTS'] = 'ShareExtension/ShareExtension.entitlements'
