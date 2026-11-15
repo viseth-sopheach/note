@@ -26,10 +26,14 @@ end
 team_id = ENV['TEAM_ID']
 app_profile_name = ENV['IOS_APP_PROFILE_NAME']
 extension_profile_name = ENV['IOS_EXTENSION_PROFILE_NAME']
-if team_id || app_profile_name || extension_profile_name
+signing_enabled = ENV['IOS_SIGNING_ENABLED'] == 'true'
+
+if signing_enabled
   abort 'Manual signing requires TEAM_ID, IOS_APP_PROFILE_NAME, and IOS_EXTENSION_PROFILE_NAME' unless
     [team_id, app_profile_name, extension_profile_name].all? { |value| value && !value.empty? }
   configure_manual_signing(runner, team_id, app_profile_name)
+else
+  puts 'Apple signing assets are unavailable; leaving manual signing disabled for the unsigned IPA build.'
 end
 
 %w[Runner/Runner.entitlements ShareExtension/ShareExtension.entitlements].each do |path|
@@ -67,7 +71,7 @@ ext.build_configurations.each do |c|
   s['LD_RUNPATH_SEARCH_PATHS'] = '$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks'
 end
 
-if team_id
+if signing_enabled
   configure_manual_signing(ext, team_id, extension_profile_name)
 end
 

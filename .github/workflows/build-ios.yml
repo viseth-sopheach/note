@@ -92,11 +92,6 @@ jobs:
             EXT_PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/extension-profile.plist")
             cp "$RUNNER_TEMP/app.mobileprovision" "$PROFILE_DIR/$APP_PROFILE_NAME.mobileprovision"
             cp "$RUNNER_TEMP/extension.mobileprovision" "$PROFILE_DIR/$EXT_PROFILE_NAME.mobileprovision"
-            {
-              echo "IOS_APP_PROFILE_NAME=$APP_PROFILE_NAME"
-              echo "IOS_EXTENSION_PROFILE_NAME=$EXT_PROFILE_NAME"
-            } >> "$GITHUB_ENV"
-
             cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -111,19 +106,27 @@ jobs:
             </dict>
           </dict></plist>
           PLIST
+            {
+              echo "available=true"
+              echo "team_id=$TEAM_ID"
+              echo "app_profile_name=$APP_PROFILE_NAME"
+              echo "extension_profile_name=$EXT_PROFILE_NAME"
+            } >> "$GITHUB_OUTPUT"
           ); then
             echo "Signing assets are invalid or inconsistent; building an unsigned IPA instead."
             echo "available=false" >> "$GITHUB_OUTPUT"
           else
             echo "Complete Ad Hoc signing assets are ready."
-            echo "available=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Configure iOS project and Share Extension
         env:
           BUNDLE_ID: ${{ env.APP_BUNDLE_ID }}
           APP_GROUP: ${{ env.APP_GROUP }}
-          TEAM_ID: ${{ steps.signing.outputs.available == 'true' && secrets.TEAM_ID || '' }}
+          IOS_SIGNING_ENABLED: ${{ steps.signing.outputs.available }}
+          TEAM_ID: ${{ steps.signing.outputs.team_id }}
+          IOS_APP_PROFILE_NAME: ${{ steps.signing.outputs.app_profile_name }}
+          IOS_EXTENSION_PROFILE_NAME: ${{ steps.signing.outputs.extension_profile_name }}
         run: |
           gem install xcodeproj --no-document
           ruby -c ios/add_share_extension.rb
