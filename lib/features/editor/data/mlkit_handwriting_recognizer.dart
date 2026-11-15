@@ -5,6 +5,7 @@ import 'package:google_mlkit_digital_ink_recognition/google_mlkit_digital_ink_re
 
 import '../domain/handwriting_language.dart';
 import '../domain/handwriting_recognizer.dart';
+import '../domain/ink_normalizer.dart';
 import '../domain/stroke.dart';
 
 class _Scored {
@@ -16,15 +17,19 @@ class _Scored {
 
 /// On-device recognition (Android and iOS). Each language model is
 /// downloaded once, so the first conversion needs internet.
-/// All native calls run one at a time (shared by every page).
+/// Recognition calls run one at a time (shared by every page); model
+/// downloads are shared, de-duplicated and rate limited after a failure.
 class MlKitHandwritingRecognizer implements HandwritingRecognizer {
   static const String _english = 'en-US';
   static const String _khmer = 'km';
+  static const Duration _retryAfter = Duration(seconds: 30);
 
   final ink.DigitalInkRecognizerModelManager _models =
       ink.DigitalInkRecognizerModelManager();
   final Map<String, ink.DigitalInkRecognizer> _engines = {};
   final Set<String> _ready = {};
+  final Map<String, Future<bool>> _downloads = {};
+  final Map<String, DateTime> _failedAt = {};
   Future<void> _lock = Future<void>.value();
 
   @override
@@ -48,10 +53,8 @@ class MlKitHandwritingRecognizer implements HandwritingRecognizer {
     HandwritingLanguage language,
   ) async {
     final data = _toInk(strokes);
-    if (data.strokes.isEmpty) return null;
-
     final pointCount = data.strokes.fold<int>(0, (n, s) => n + s.points.length);
-    if (data.strokes.isEmpty || pointCount < 4) return null;
+    if (pointCount < 2) return null;
 
     switch (language) {
       case HandwritingLanguage.english:
@@ -59,25 +62,47 @@ class MlKitHandwritingRecognizer implements HandwritingRecognizer {
       case HandwritingLanguage.khmer:
         return (await _run(_khmer, HandwritingLanguage.khmer, data))?.value;
       case HandwritingLanguage.auto:
-        _Scored? best;
-        var ok = 0;
-        final models = [
-          (_english, HandwritingLanguage.english),
-          (_khmer, HandwritingLanguage.khmer),
-        ];
-        for (final (code, lang) in models) {
-          try {
-            final r = await _run(code, lang, data);
-            ok++;
-            // Verify on a device: ML Kit ranks lower scores as better.
-            if (r != null && (best == null || r.score < best.score)) best = r;
-          } catch (_) {}
-        }
-        if (ok == 0) {
-          throw StateError('No handwriting language model is available.');
-        }
-        return best?.value;
+        return _recognizeAuto(data);
     }
+  }
+
+  Future<RecognizedText?> _recognizeAuto(ink.Ink data) async {
+    const models = [
+      (_english, HandwritingLanguage.english),
+      (_khmer, HandwritingLanguage.khmer),
+    ];
+
+    // Never wait for a download when another model is already usable;
+    // fetch the missing one in the background instead.
+    final ready = <(String, HandwritingLanguage)>[];
+    for (final m in models) {
+      if (await _isDownloaded(m.$1)) {
+        ready.add(m);
+      } else {
+        unawaited(_ensureModel(m.$1));
+      }
+    }
+
+    _Scored? best;
+    var ok = 0;
+    HandwritingModelException? modelError;
+    for (final (code, lang) in ready.isEmpty ? models : ready) {
+      try {
+        final r = await _run(code, lang, data);
+        ok++;
+        // ML Kit ranks lower scores as better. Scores from different models
+        // may not be strictly comparable: pick the language explicitly in
+        // Settings for the most reliable results.
+        if (r != null && (best == null || r.score < best.score)) best = r;
+      } on HandwritingModelException catch (e) {
+        modelError ??= e;
+      } catch (_) {}
+    }
+    if (ok == 0) {
+      throw modelError ??
+          StateError('No handwriting language model is available.');
+    }
+    return best?.value;
   }
 
   Future<_Scored?> _run(
@@ -86,7 +111,12 @@ class MlKitHandwritingRecognizer implements HandwritingRecognizer {
     ink.Ink data,
   ) async {
     if (!await _ensureModel(code)) {
-      throw StateError('Language model not available: $code');
+      final name = lang == HandwritingLanguage.khmer ? 'Khmer' : 'English';
+      throw HandwritingModelException(
+        lang,
+        'The $name handwriting model is not ready. '
+        'Connect to the internet once so it can download, then try again.',
+      );
     }
     final engine = _engines.putIfAbsent(
       code,
@@ -108,39 +138,60 @@ class MlKitHandwritingRecognizer implements HandwritingRecognizer {
     }
   }
 
-  Future<bool> _ensureModel(String code) async {
+  Future<bool> _isDownloaded(String code) async {
     if (_ready.contains(code)) return true;
     try {
-      if (!await _models
+      final ok = await _models
           .isModelDownloaded(code)
-          .timeout(const Duration(seconds: 10))) {
-        if (!await _models
-            .downloadModel(code, isWifiRequired: false)
-            .timeout(const Duration(minutes: 2))) {
-          return false;
-        }
-      }
+          .timeout(const Duration(seconds: 10));
+      if (ok) _ready.add(code);
+      return ok;
     } catch (_) {
       return false;
     }
-    _ready.add(code);
-    return true;
+  }
+
+  /// Shared per model: concurrent callers wait for the same download, and a
+  /// failed download is not retried for [_retryAfter].
+  Future<bool> _ensureModel(String code) {
+    if (_ready.contains(code)) return Future<bool>.value(true);
+    final failed = _failedAt[code];
+    if (failed != null && DateTime.now().difference(failed) < _retryAfter) {
+      return Future<bool>.value(false);
+    }
+    return _downloads.putIfAbsent(
+      code,
+      () => _download(code).whenComplete(() => _downloads.remove(code)),
+    );
+  }
+
+  Future<bool> _download(String code) async {
+    try {
+      if (!await _isDownloaded(code)) {
+        final ok = await _models
+            .downloadModel(code, isWifiRequired: false)
+            .timeout(const Duration(minutes: 2));
+        if (!ok) {
+          _failedAt[code] = DateTime.now();
+          return false;
+        }
+      }
+      _ready.add(code);
+      _failedAt.remove(code);
+      return true;
+    } catch (_) {
+      _failedAt[code] = DateTime.now();
+      return false;
+    }
   }
 
   ink.Ink _toInk(List<Stroke> strokes) {
     final data = ink.Ink();
-    var base = 0;
-    for (final s in strokes) {
+    for (final points in InkNormalizer.normalize(strokes)) {
       final out = ink.Stroke();
-      var last = base;
-      for (final p in s.points) {
-        if (!p.x.isFinite || !p.y.isFinite) continue;
-        final t = (base + p.timestampMs) < last ? last : base + p.timestampMs;
-        out.points.add(ink.StrokePoint(x: p.x, y: p.y, t: t));
-        last = t;
+      for (final p in points) {
+        out.points.add(ink.StrokePoint(x: p.x, y: p.y, t: p.t));
       }
-      if (out.points.isEmpty) continue;
-      base = last + 120;
       data.strokes.add(out);
     }
     return data;

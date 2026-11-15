@@ -32,19 +32,15 @@ Future<LayoutChoice?> showPageLayoutSheet(
                         color: Theme.of(sheet).colorScheme.primary,
                       )
                     : null,
-                onTap: () => Navigator.of(sheet).pop((
-                  layout: l,
-                  dualDocument: false,
-                )),
+                onTap: () =>
+                    Navigator.of(sheet).pop((layout: l, dualDocument: false)),
               ),
             GlassListTile(
               leading: Icons.vertical_split_outlined,
               title: 'Dual document view',
               subtitle: 'Two notebooks side by side',
-              onTap: () => Navigator.of(sheet).pop((
-                layout: null,
-                dualDocument: true,
-              )),
+              onTap: () =>
+                  Navigator.of(sheet).pop((layout: null, dualDocument: true)),
             ),
           ],
         ),

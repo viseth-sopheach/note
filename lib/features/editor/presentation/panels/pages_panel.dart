@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show ValueListenable;import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/material.dart';
 
 import '../../../../app/glass/glass_icon_button.dart';
 import '../../../../app/glass/glass_surface.dart';
@@ -48,10 +49,10 @@ class _PagesPanelState extends State<PagesPanel> {
   void _follow({bool jump = false}) {
     if (!mounted || !_scroll.hasClients) return;
     final pos = _scroll.position;
-    final target = (widget.current.value * _extent -
-            (pos.viewportDimension - _extent) / 2)
-        .clamp(0.0, pos.maxScrollExtent)
-        .toDouble();
+    final target =
+        (widget.current.value * _extent - (pos.viewportDimension - _extent) / 2)
+            .clamp(0.0, pos.maxScrollExtent)
+            .toDouble();
     if (jump || MediaQuery.disableAnimationsOf(context)) {
       _scroll.jumpTo(target);
     } else {
@@ -122,7 +123,10 @@ class _PagesPanelState extends State<PagesPanel> {
       curve: GlassTokens.curve,
       builder: (context, t, child) => Opacity(
         opacity: t,
-        child: Transform.translate(offset: Offset(-24 * (1 - t), 0), child: child),
+        child: Transform.translate(
+          offset: Offset(-24 * (1 - t), 0),
+          child: child,
+        ),
       ),
       child: GlassSurface(
         intensity: GlassIntensity.thick,

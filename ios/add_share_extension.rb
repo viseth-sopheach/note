@@ -9,6 +9,35 @@ proj = Xcodeproj::Project.open('ios/Runner.xcodeproj')
 runner = proj.targets.find { |t| t.name == 'Runner' }
 abort 'Runner target not found' unless runner
 
+runner.build_configurations.each do |configuration|
+  configuration.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = BUNDLE_ID
+end
+
+def configure_manual_signing(target, team_id, profile_name)
+  target.build_configurations.each do |configuration|
+    settings = configuration.build_settings
+    settings['CODE_SIGN_STYLE'] = 'Manual'
+    settings['DEVELOPMENT_TEAM'] = team_id
+    settings['PROVISIONING_PROFILE_SPECIFIER'] = profile_name
+    settings['CODE_SIGN_IDENTITY'] = 'Apple Distribution'
+  end
+end
+
+team_id = ENV['TEAM_ID']
+app_profile_name = ENV['IOS_APP_PROFILE_NAME']
+extension_profile_name = ENV['IOS_EXTENSION_PROFILE_NAME']
+if team_id || app_profile_name || extension_profile_name
+  abort 'Manual signing requires TEAM_ID, IOS_APP_PROFILE_NAME, and IOS_EXTENSION_PROFILE_NAME' unless
+    [team_id, app_profile_name, extension_profile_name].all? { |value| value && !value.empty? }
+  configure_manual_signing(runner, team_id, app_profile_name)
+end
+
+%w[Runner/Runner.entitlements ShareExtension/ShareExtension.entitlements].each do |path|
+  abort "Missing entitlements file: ios/#{path}" unless File.file?(File.join('ios', path))
+  entitlement_contents = File.read(File.join('ios', path))
+  abort "#{path} must contain App Group #{APP_GROUP}" unless entitlement_contents.include?(APP_GROUP)
+end
+
 deployment = DEPLOYMENT_TARGET
 proj.targets.each do |target|
   target.build_configurations.each do |configuration|
@@ -36,6 +65,10 @@ ext.build_configurations.each do |c|
   s['IPHONEOS_DEPLOYMENT_TARGET'] = deployment
   s['TARGETED_DEVICE_FAMILY'] = '1,2'
   s['LD_RUNPATH_SEARCH_PATHS'] = '$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks'
+end
+
+if team_id
+  configure_manual_signing(ext, team_id, extension_profile_name)
 end
 
 # Flutter 3.50 creates this versioned plugin symlink during `flutter pub get`.

@@ -37,3 +37,14 @@ final class UnsupportedHandwritingRecognizer implements HandwritingRecognizer {
   @override
   Future<void> dispose() async {}
 }
+
+/// A language model is missing, still downloading or failed to download.
+final class HandwritingModelException implements Exception {
+  const HandwritingModelException(this.language, this.message);
+
+  final HandwritingLanguage language;
+  final String message;
+
+  @override
+  String toString() => 'HandwritingModelException: $message';
+}

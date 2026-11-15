@@ -50,7 +50,7 @@ class PaperSection extends ConsumerWidget {
         const GlassDivider(),
         SettingsChoiceTile<HandwritingLanguage>(
           title: 'Auto Alphabet Pen language',
-          subtitle: 'Converts handwriting 0.6 s after you lift the pen',
+          subtitle: 'Converts handwriting 0.7 s after you lift the pen',
           value: settings.handwritingLanguage,
           options: [
             for (final l in HandwritingLanguage.values)

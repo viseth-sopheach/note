@@ -39,7 +39,8 @@ class _EraserCursorPainter extends CustomPainter {
     final r = c.eraserRadius;
     canvas.drawCircle(center, r, Paint()..color = const Color(0x1A808080));
     canvas.drawCircle(
-      center, r,
+      center,
+      r,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.5 * k
@@ -47,7 +48,8 @@ class _EraserCursorPainter extends CustomPainter {
         ..isAntiAlias = true,
     );
     canvas.drawCircle(
-      center, r,
+      center,
+      r,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.2 * k
