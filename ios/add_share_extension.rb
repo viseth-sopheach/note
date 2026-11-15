@@ -52,11 +52,21 @@ end
 ext = proj.targets.find { |target| target.name == 'ShareExtension' }
 unless ext
   ext = proj.new_target(:app_extension, 'ShareExtension', :ios, deployment)
-  group = proj.main_group.new_group('ShareExtension', 'ShareExtension')
-  src = group.new_file('ShareViewController.swift')
-  group.new_file('Info.plist')
-  group.new_file('ShareExtension.entitlements')
-  ext.add_file_references([src])
+end
+
+share_group = proj.main_group.groups.find do |group|
+  group.name == 'ShareExtension' || group.path == 'ShareExtension'
+end
+share_group ||= proj.main_group.new_group('ShareExtension', 'ShareExtension')
+source_file = share_group.files.find { |file| file.path == 'ShareViewController.swift' }
+source_file ||= share_group.new_file('ShareViewController.swift')
+share_group.files.find { |file| file.path == 'Info.plist' } || share_group.new_file('Info.plist')
+share_group.files.find { |file| file.path == 'ShareExtension.entitlements' } || share_group.new_file('ShareExtension.entitlements')
+
+# Ensure the Swift implementation is compiled even if this script is rerun on
+# a project where the ShareExtension target already existed.
+unless ext.source_build_phase.files_references.include?(source_file)
+  ext.source_build_phase.add_file_reference(source_file)
 end
 
 ext.build_configurations.each do |c|
@@ -75,7 +85,9 @@ ext.build_configurations.each do |c|
   s['CODE_SIGN_ENTITLEMENTS'] = 'ShareExtension/ShareExtension.entitlements'
   s['CURRENT_PROJECT_VERSION'] = runner_settings.fetch('CURRENT_PROJECT_VERSION', '$(FLUTTER_BUILD_NUMBER)')
   s['MARKETING_VERSION'] = runner_settings.fetch('MARKETING_VERSION', '$(FLUTTER_BUILD_NAME)')
-  s['PRODUCT_NAME'] = '$(TARGET_NAME)'
+  s['PRODUCT_NAME'] = 'ShareExtension'
+  s['EXECUTABLE_NAME'] = '$(PRODUCT_NAME)'
+  s['GENERATE_INFOPLIST_FILE'] = 'NO'
   s['SWIFT_VERSION'] = '5.0'
   s['IPHONEOS_DEPLOYMENT_TARGET'] = deployment
   s['TARGETED_DEVICE_FAMILY'] = '1,2'
