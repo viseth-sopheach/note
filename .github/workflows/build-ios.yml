@@ -1,4 +1,4 @@
-name: Build unsigned iOS IPA
+name: Build iOS IPA
 
 on:
   workflow_dispatch:
@@ -17,37 +17,78 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 90
     steps:
-      - name: Checkout latest repository revision
+      - name: Checkout repository revision
         uses: actions/checkout@v4
 
-      - name: Set up latest stable Flutter
+      - name: Set up current stable Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      - name: Show toolchain versions
+      - name: Show Apple and Flutter toolchain
         run: |
           flutter --version
           xcodebuild -version
+          ruby --version
 
-      # This app uses receive_sharing_intent and its iOS share extension.
-      # Generate the plugin's SPM package before adding the extension target.
-      - name: Enable Swift Package Manager
+      - name: Enable Flutter Swift Package Manager integration
         run: flutter config --enable-swift-package-manager
 
-      - name: Install Flutter dependencies
-        run: flutter pub get
+      - name: Clean and resolve Flutter dependencies
+        run: |
+          flutter clean
+          flutter pub get
 
-      - name: Configure iOS share extension
+      - name: Install CocoaPods dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pod >/dev/null 2>&1; then
+            sudo gem install cocoapods --no-document
+          fi
+          pod --version
+          pod install --project-directory=ios --repo-update
+
+      - name: Validate icon catalog source files
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import plistlib
+
+          catalog = pathlib.Path("ios/Runner/Assets.xcassets/AppIcon.appiconset")
+          contents = json.loads((catalog / "Contents.json").read_text())
+          images = contents.get("images", [])
+          assert len(images) == 2, f"Expected universal light and dark icons, found {len(images)} entries"
+          by_appearance = {
+              "dark" if any(a.get("appearance") == "luminosity" and a.get("value") == "dark" for a in item.get("appearances", [])) else "light": item
+              for item in images
+          }
+          assert set(by_appearance) == {"light", "dark"}, f"Unexpected icon appearances: {set(by_appearance)}"
+          for appearance, item in by_appearance.items():
+              assert item.get("idiom") == "universal" and item.get("platform") == "ios"
+              assert item.get("size") == "1024x1024"
+              icon = catalog / item["filename"]
+              assert icon.is_file(), f"Missing {appearance} icon: {icon}"
+              with icon.open("rb") as stream:
+                  header = stream.read(26)
+              assert header[:8] == b"\x89PNG\r\n\x1a\n", f"Invalid PNG: {icon}"
+              width = int.from_bytes(header[16:20], "big")
+              height = int.from_bytes(header[20:24], "big")
+              color_type = header[25]
+              assert (width, height) == (1024, 1024), f"Wrong dimensions for {icon}: {(width, height)}"
+              assert color_type == 2, f"Icon must be opaque RGB PNG: {icon} (PNG color type {color_type})"
+          print("Validated universal 1024x1024 light/dark icons; both are opaque RGB PNGs.")
+          PY
+
+      - name: Determine app identifiers
+        id: project
         shell: bash
         run: |
           set -euo pipefail
           gem install xcodeproj --no-document
           ruby -c ios/add_share_extension.rb
-
-          # Read the Runner bundle ID from the checked-out Xcode project so
-          # the script always configures the app and extension consistently.
           BUNDLE_ID="$(ruby -rxcodeproj -e '
             project = Xcodeproj::Project.open("ios/Runner.xcodeproj")
             runner = project.targets.find { |target| target.name == "Runner" } or abort "Runner target not found"
@@ -58,35 +99,320 @@ jobs:
               identifiers.length == 1 && identifiers.first.match?(/\A[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+\z/)
             puts identifiers.first
           ')"
-          export BUNDLE_ID
-          echo "Configuring Runner bundle ID: $BUNDLE_ID"
-          ruby ios/add_share_extension.rb
+          APP_GROUP="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups:0' ios/Runner/Runner.entitlements)"
+          EXTENSION_APP_GROUP="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups:0' ios/ShareExtension/ShareExtension.entitlements)"
+          [[ "$APP_GROUP" == "$EXTENSION_APP_GROUP" ]]
+          {
+            echo "bundle_id=$BUNDLE_ID"
+            echo "extension_bundle_id=$BUNDLE_ID.ShareExtension"
+            echo "app_group=$APP_GROUP"
+          } >> "$GITHUB_OUTPUT"
+          echo "Runner bundle ID: $BUNDLE_ID"
+          echo "Share Extension bundle ID: $BUNDLE_ID.ShareExtension"
 
-      - name: Build unsigned iOS app
-        run: flutter build ios --release --no-codesign --build-number "$GITHUB_RUN_NUMBER"
+      - name: Prepare optional Ad Hoc signing
+        id: signing
+        shell: bash
+        env:
+          P12_BASE64: ${{ secrets.P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          APP_PROFILE_BASE64: ${{ secrets.APP_PROFILE_BASE64 }}
+          EXT_PROFILE_BASE64: ${{ secrets.EXT_PROFILE_BASE64 }}
+          APP_BUNDLE_ID: ${{ steps.project.outputs.bundle_id }}
+          EXTENSION_BUNDLE_ID: ${{ steps.project.outputs.extension_bundle_id }}
+          APP_GROUP: ${{ steps.project.outputs.app_group }}
+        run: |
+          set -euo pipefail
+          REQUIRED_VALUES=("$P12_BASE64" "$APP_PROFILE_BASE64" "$EXT_PROFILE_BASE64")
+          PRESENT=0
+          for value in "${REQUIRED_VALUES[@]}"; do
+            [[ -n "$value" ]] && PRESENT=$((PRESENT + 1))
+          done
 
-      - name: Package unsigned IPA
+          if [[ "$PRESENT" -eq 0 ]]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Apple signing secrets are absent. The workflow will upload an unsigned IPA that must be re-signed by Scarlet or another signing tool before installation."
+            exit 0
+          fi
+          if [[ "$PRESENT" -ne "${#REQUIRED_VALUES[@]}" ]]; then
+            echo "::error::Signing secrets are incomplete. Provide P12_BASE64, APP_PROFILE_BASE64, and EXT_PROFILE_BASE64 together, or leave all three unset."
+            exit 1
+          fi
+
+          KEYCHAIN="$RUNNER_TEMP/viseth-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+          printf '%s' "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/viseth-distribution.p12"
+          printf '%s' "$APP_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/viseth-app.mobileprovision"
+          printf '%s' "$EXT_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/viseth-extension.mobileprovision"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/viseth-distribution.p12" \
+            -P "$P12_PASSWORD" -t cert -f pkcs12 -k "$KEYCHAIN" \
+            -T /usr/bin/codesign -T /usr/bin/xcodebuild
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN"
+          security default-keychain -d user -s "$KEYCHAIN"
+          IDENTITY_COUNT="$(security find-identity -v -p codesigning "$KEYCHAIN" | awk '/valid identities found/ {print $1}')"
+          [[ "$IDENTITY_COUNT" =~ ^[1-9][0-9]*$ ]]
+
+          security cms -D -i "$RUNNER_TEMP/viseth-app.mobileprovision" > "$RUNNER_TEMP/viseth-app-profile.plist"
+          security cms -D -i "$RUNNER_TEMP/viseth-extension.mobileprovision" > "$RUNNER_TEMP/viseth-extension-profile.plist"
+          APP_PROFILE="$RUNNER_TEMP/viseth-app-profile.plist"
+          EXT_PROFILE="$RUNNER_TEMP/viseth-extension-profile.plist"
+          APP_TEAM=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$APP_PROFILE")
+          EXT_TEAM=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$EXT_PROFILE")
+          APP_PREFIX=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationIdentifierPrefix:0' "$APP_PROFILE")
+          EXT_PREFIX=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationIdentifierPrefix:0' "$EXT_PROFILE")
+          [[ "$APP_TEAM" == "$EXT_TEAM" ]]
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$APP_PROFILE")" == "$APP_PREFIX.$APP_BUNDLE_ID" ]]
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$EXT_PROFILE")" == "$EXT_PREFIX.$EXTENSION_BUNDLE_ID" ]]
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$APP_PROFILE")" == "false" ]]
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$EXT_PROFILE")" == "false" ]]
+          for profile in "$APP_PROFILE" "$EXT_PROFILE"; do
+            /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices:0' "$profile" >/dev/null
+            /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.security.application-groups' "$profile" | grep -Fq "$APP_GROUP"
+          done
+
+          APP_PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$APP_PROFILE")
+          EXT_PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$EXT_PROFILE")
+          APP_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$APP_PROFILE")
+          EXT_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$EXT_PROFILE")
+          cp "$RUNNER_TEMP/viseth-app.mobileprovision" "$PROFILE_DIR/$APP_PROFILE_UUID.mobileprovision"
+          cp "$RUNNER_TEMP/viseth-extension.mobileprovision" "$PROFILE_DIR/$EXT_PROFILE_UUID.mobileprovision"
+
+          python3 - "$RUNNER_TEMP/Viseth-ExportOptions.plist" "$APP_TEAM" \
+            "$APP_BUNDLE_ID" "$APP_PROFILE_NAME" \
+            "$EXTENSION_BUNDLE_ID" "$EXT_PROFILE_NAME" <<'PY'
+          import plistlib
+          import sys
+
+          destination, team, app_id, app_profile, extension_id, extension_profile = sys.argv[1:]
+          options = {
+              "destination": "export",
+              "method": "release-testing",
+              "signingStyle": "manual",
+              "teamID": team,
+              "provisioningProfiles": {
+                  app_id: app_profile,
+                  extension_id: extension_profile,
+              },
+          }
+          with open(destination, "wb") as output:
+              plistlib.dump(options, output, fmt=plistlib.FMT_XML)
+          PY
+          plutil -lint "$RUNNER_TEMP/Viseth-ExportOptions.plist"
+          {
+            echo "available=true"
+            echo "team_id=$APP_TEAM"
+            echo "app_profile_name=$APP_PROFILE_NAME"
+            echo "extension_profile_name=$EXT_PROFILE_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Configure iOS Share Extension
+        env:
+          BUNDLE_ID: ${{ steps.project.outputs.bundle_id }}
+          APP_GROUP: ${{ steps.project.outputs.app_group }}
+          IOS_SIGNING_ENABLED: ${{ steps.signing.outputs.available }}
+          TEAM_ID: ${{ steps.signing.outputs.team_id }}
+          IOS_APP_PROFILE_NAME: ${{ steps.signing.outputs.app_profile_name }}
+          IOS_EXTENSION_PROFILE_NAME: ${{ steps.signing.outputs.extension_profile_name }}
+        run: ruby ios/add_share_extension.rb
+
+      - name: Build signed Ad Hoc IPA
+        id: signed_build
+        if: steps.signing.outputs.available == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          APP_PATH="build/ios/iphoneos/Runner.app"
-          IPA_DIR="build/ios/ipa"
-          STAGING_DIR="$RUNNER_TEMP/unsigned-ipa"
+          flutter build ipa --release --build-number "$GITHUB_RUN_NUMBER" \
+            --export-options-plist="$RUNNER_TEMP/Viseth-ExportOptions.plist" -v 2>&1 | tee build.log
+          SOURCE_IPA="$(find build/ios/ipa -maxdepth 1 -name '*.ipa' -print -quit)"
+          test -n "$SOURCE_IPA"
+          mv "$SOURCE_IPA" build/ios/ipa/Viseth-ADHOC.ipa
+          echo "ipa=$GITHUB_WORKSPACE/build/ios/ipa/Viseth-ADHOC.ipa" >> "$GITHUB_OUTPUT"
 
-          test -d "$APP_PATH" || { echo "::error::Runner.app was not generated at $APP_PATH"; exit 1; }
+      - name: Build unsigned iOS app
+        id: unsigned_build
+        if: steps.signing.outputs.available != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build ios --release --no-codesign --build-number "$GITHUB_RUN_NUMBER" -v 2>&1 | tee build.log
+          APP_PATH="build/ios/iphoneos/Runner.app"
+          test -d "$APP_PATH"
+          IPA_DIR="build/ios/ipa"
+          STAGING_DIR="$RUNNER_TEMP/viseth-unsigned-ipa"
           rm -rf "$IPA_DIR" "$STAGING_DIR"
           mkdir -p "$IPA_DIR" "$STAGING_DIR/Payload"
           cp -R "$APP_PATH" "$STAGING_DIR/Payload/Runner.app"
           (cd "$STAGING_DIR" && /usr/bin/zip -qry "$GITHUB_WORKSPACE/$IPA_DIR/Viseth-UNSIGNED.ipa" Payload)
+          echo "ipa=$GITHUB_WORKSPACE/build/ios/ipa/Viseth-UNSIGNED.ipa" >> "$GITHUB_OUTPUT"
 
-          test -s "$IPA_DIR/Viseth-UNSIGNED.ipa"
-          /usr/bin/unzip -tq "$IPA_DIR/Viseth-UNSIGNED.ipa"
-          /usr/bin/unzip -Z1 "$IPA_DIR/Viseth-UNSIGNED.ipa" | grep -Fxq 'Payload/Runner.app/Info.plist'
+      - name: Validate packaged IPA and installation metadata
+        id: validate
+        shell: bash
+        env:
+          SIGNED_BUILD: ${{ steps.signing.outputs.available }}
+          SIGNED_IPA: ${{ steps.signed_build.outputs.ipa }}
+          UNSIGNED_IPA: ${{ steps.unsigned_build.outputs.ipa }}
+          EXPECTED_BUNDLE_ID: ${{ steps.project.outputs.bundle_id }}
+          EXPECTED_EXTENSION_BUNDLE_ID: ${{ steps.project.outputs.extension_bundle_id }}
+          EXPECTED_APP_GROUP: ${{ steps.project.outputs.app_group }}
+          EXPECTED_TEAM_ID: ${{ steps.signing.outputs.team_id }}
+        run: |
+          set -euo pipefail
+          if [[ "$SIGNED_BUILD" == "true" ]]; then
+            IPA_PATH="$SIGNED_IPA"
+            BUILD_KIND="Ad Hoc signed"
+          else
+            IPA_PATH="$UNSIGNED_IPA"
+            BUILD_KIND="unsigned"
+          fi
+          test -s "$IPA_PATH"
+          /usr/bin/unzip -tq "$IPA_PATH"
 
-      - name: Upload unsigned IPA artifact
+          CHECK_DIR="$RUNNER_TEMP/viseth-ipa-check"
+          rm -rf "$CHECK_DIR"
+          mkdir -p "$CHECK_DIR"
+          /usr/bin/unzip -q "$IPA_PATH" -d "$CHECK_DIR"
+          APP_PATH="$CHECK_DIR/Payload/Runner.app"
+          EXTENSION_PATH="$APP_PATH/PlugIns/ShareExtension.appex"
+          test -d "$APP_PATH"
+          test -d "$EXTENSION_PATH"
+          test -f "$APP_PATH/Info.plist"
+          test -f "$APP_PATH/Assets.car"
+          test -f "$APP_PATH/Frameworks/Flutter.framework/Flutter"
+          test -f "$APP_PATH/Frameworks/App.framework/App"
+          test -f "$EXTENSION_PATH/Info.plist"
+
+          APP_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")
+          APP_EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")
+          APP_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")
+          APP_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")
+          APP_MINIMUM_OS=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP_PATH/Info.plist")
+          EXTENSION_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$EXTENSION_PATH/Info.plist")
+          EXTENSION_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$EXTENSION_PATH/Info.plist")
+          [[ "$APP_BUNDLE_ID" == "$EXPECTED_BUNDLE_ID" ]]
+          [[ "$EXTENSION_BUNDLE_ID" == "$EXPECTED_EXTENSION_BUNDLE_ID" ]]
+          [[ "$EXTENSION_BUILD" == "$APP_BUILD" ]]
+          [[ "$APP_BUILD" == "$GITHUB_RUN_NUMBER" ]]
+          [[ "$APP_MINIMUM_OS" == "15.5" ]]
+          test -x "$APP_PATH/$APP_EXECUTABLE"
+          APP_ARCHS=$(/usr/bin/lipo -archs "$APP_PATH/$APP_EXECUTABLE")
+          [[ " $APP_ARCHS " == *" arm64 "* ]]
+
+          /usr/bin/xcrun assetutil --info "$APP_PATH/Assets.car" > "$RUNNER_TEMP/viseth-assets.json"
+          python3 - "$RUNNER_TEMP/viseth-assets.json" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          records = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          icon_records = [record for record in records if "appicon" in json.dumps(record).lower()]
+          assert icon_records, "No AppIcon rendition was found in compiled Assets.car"
+          dark_records = [record for record in icon_records if "dark" in json.dumps(record).lower()]
+          assert dark_records, "No dark AppIcon rendition was found in compiled Assets.car"
+          print(f"Assets.car contains {len(icon_records)} AppIcon rendition record(s), including dark appearance.")
+          PY
+
+          if [[ "$SIGNED_BUILD" == "true" ]]; then
+            codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+            codesign --verify --strict --verbose=2 "$EXTENSION_PATH"
+            APP_SIGNING_TEAM=$(codesign -dv --verbose=4 "$APP_PATH" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+            EXTENSION_SIGNING_TEAM=$(codesign -dv --verbose=4 "$EXTENSION_PATH" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+            [[ "$APP_SIGNING_TEAM" == "$EXPECTED_TEAM_ID" ]]
+            [[ "$EXTENSION_SIGNING_TEAM" == "$EXPECTED_TEAM_ID" ]]
+            codesign -d --entitlements :- "$APP_PATH" 2>/dev/null > "$RUNNER_TEMP/viseth-app-signed-entitlements.plist"
+            codesign -d --entitlements :- "$EXTENSION_PATH" 2>/dev/null > "$RUNNER_TEMP/viseth-extension-signed-entitlements.plist"
+            /usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups:0' "$RUNNER_TEMP/viseth-app-signed-entitlements.plist" | grep -Fxq "$EXPECTED_APP_GROUP"
+            /usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups:0' "$RUNNER_TEMP/viseth-extension-signed-entitlements.plist" | grep -Fxq "$EXPECTED_APP_GROUP"
+            test -f "$APP_PATH/embedded.mobileprovision"
+            test -f "$EXTENSION_PATH/embedded.mobileprovision"
+            security cms -D -i "$APP_PATH/embedded.mobileprovision" > "$RUNNER_TEMP/viseth-embedded-app-profile.plist"
+            security cms -D -i "$EXTENSION_PATH/embedded.mobileprovision" > "$RUNNER_TEMP/viseth-embedded-extension-profile.plist"
+            for profile in "$RUNNER_TEMP/viseth-embedded-app-profile.plist" "$RUNNER_TEMP/viseth-embedded-extension-profile.plist"; do
+              [[ "$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$profile")" == "$EXPECTED_TEAM_ID" ]]
+              /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices:0' "$profile" >/dev/null
+              /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.security.application-groups' "$profile" | grep -Fq "$EXPECTED_APP_GROUP"
+            done
+            [[ "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/viseth-embedded-app-profile.plist")" == *".$EXPECTED_BUNDLE_ID" ]]
+            [[ "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/viseth-embedded-extension-profile.plist")" == *".$EXPECTED_EXTENSION_BUNDLE_ID" ]]
+            echo "status=Ad Hoc signed" >> "$GITHUB_OUTPUT"
+            {
+              echo "### iOS IPA validation"
+              echo "- Result: **Ad Hoc signed**"
+              echo "- Bundle ID: `$APP_BUNDLE_ID`"
+              echo "- Share Extension: `$EXTENSION_BUNDLE_ID`"
+              echo "- Version: `$APP_VERSION ($APP_BUILD)`"
+              echo "- Architectures: `$APP_ARCHS`"
+              echo "- Signature and embedded provisioning profiles: verified"
+              echo "- Installation: allowed only on devices included in both Ad Hoc profiles; confirm the iPhone UDID is registered."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            if [[ -e "$APP_PATH/_CodeSignature" || -e "$APP_PATH/embedded.mobileprovision" ]]; then
+              echo "::error::The unsigned IPA unexpectedly contains signing material."
+              exit 1
+            fi
+            echo "status=unsigned" >> "$GITHUB_OUTPUT"
+            echo "::warning::IPA validation passed, but this IPA is unsigned and is not installable until Scarlet or another tool signs it."
+            {
+              echo "### iOS IPA validation"
+              echo "- Result: **unsigned**"
+              echo "- Bundle ID: `$APP_BUNDLE_ID`"
+              echo "- Share Extension: `$EXTENSION_BUNDLE_ID`"
+              echo "- Version: `$APP_VERSION ($APP_BUILD)`"
+              echo "- Architectures: `$APP_ARCHS`"
+              echo "- Package, app executable, Flutter frameworks, Share Extension, and compiled icons: verified"
+              echo "- **This IPA is not installable as-is. Re-sign it with Scarlet or provide the Ad Hoc signing secrets to GitHub Actions.**"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload Ad Hoc signed IPA
+        if: steps.signing.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Viseth-ADHOC
+          path: ${{ steps.signed_build.outputs.ipa }}
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Upload unsigned IPA
+        if: steps.signing.outputs.available != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Viseth-UNSIGNED
-          path: build/ios/ipa/Viseth-UNSIGNED.ipa
+          path: ${{ steps.unsigned_build.outputs.ipa }}
           if-no-files-found: error
           compression-level: 0
+
+      - name: Remove temporary signing material
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          APP_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/viseth-app-profile.plist" 2>/dev/null)
+          EXT_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/viseth-extension-profile.plist" 2>/dev/null)
+          security delete-keychain "$RUNNER_TEMP/viseth-signing.keychain-db" >/dev/null 2>&1
+          rm -f "$RUNNER_TEMP/viseth-distribution.p12" \
+            "$RUNNER_TEMP/viseth-app.mobileprovision" \
+            "$RUNNER_TEMP/viseth-extension.mobileprovision" \
+            "$RUNNER_TEMP/viseth-app-profile.plist" \
+            "$RUNNER_TEMP/viseth-extension-profile.plist" \
+              "$RUNNER_TEMP/viseth-app-signed-entitlements.plist" \
+              "$RUNNER_TEMP/viseth-extension-signed-entitlements.plist" \
+            "$RUNNER_TEMP/Viseth-ExportOptions.plist"
+          [[ -z "$APP_PROFILE_UUID" ]] || rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$APP_PROFILE_UUID.mobileprovision"
+          [[ -z "$EXT_PROFILE_UUID" ]] || rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$EXT_PROFILE_UUID.mobileprovision"
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: warn
