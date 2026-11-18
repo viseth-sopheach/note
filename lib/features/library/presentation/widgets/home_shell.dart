@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/brand_logo.dart';
 import '../../../../app/glass/glass_icon_button.dart';
 import '../../../../app/glass/glass_menu.dart';
 import '../../../../app/glass/glass_surface.dart';
@@ -183,17 +184,7 @@ class _Brand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final logo = Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        gradient: const LinearGradient(
-          colors: [HomeColors.accent, HomeColors.accent2],
-        ),
-      ),
-      child: const Icon(Icons.edit_note, color: Colors.white, size: 22),
-    );
+    final logo = const BrandLogo(size: 36);
     if (compact) return Center(child: logo);
     return Row(
       children: [

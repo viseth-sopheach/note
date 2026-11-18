@@ -93,11 +93,13 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/icon/icon.png"
-  adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/icon/icon.png"
+  image_path: "assets/icon/export/icon_light.png"
   remove_alpha_ios: true
+  image_path_ios_dark_transparent: "assets/icon/export/icon_dark.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/icon/export/icon_light.png"
+  adaptive_icon_monochrome: "assets/icon/export/icon_dark.png"
   windows:
     generate: true
-    image_path: "assets/icon/icon.png"
+    image_path: "assets/icon/export/icon_light.png"
     icon_size: 256
