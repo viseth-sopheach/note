@@ -1,4 +1,4 @@
-name: Build iOS IPA (ESign)
+name: Build iOS IPA
 
 on:
   workflow_dispatch:
@@ -44,75 +44,187 @@ jobs:
       - name: Install Flutter dependencies
         run: flutter pub get
 
+      - name: Prepare signing when credentials are complete
+        id: signing
+        env:
+          P12_BASE64: ${{ secrets.P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          APP_PROFILE_BASE64: ${{ secrets.APP_PROFILE_BASE64 }}
+          EXT_PROFILE_BASE64: ${{ secrets.EXT_PROFILE_BASE64 }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          set -u
+          if [[ -z "$P12_BASE64" || -z "$P12_PASSWORD" || -z "$APP_PROFILE_BASE64" || -z "$EXT_PROFILE_BASE64" || -z "$TEAM_ID" ]]; then
+            echo "Signing credentials are missing or incomplete; building an unsigned IPA."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! (
+            set -euo pipefail
+            KEYCHAIN="$RUNNER_TEMP/ios-signing.keychain-db"
+            KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+            PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+            mkdir -p "$PROFILE_DIR"
+            echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/distribution.p12"
+            echo "$APP_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/app.mobileprovision"
+            echo "$EXT_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/extension.mobileprovision"
+
+            security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN"
+            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+            security import "$RUNNER_TEMP/distribution.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+            security list-keychains -d user -s "$KEYCHAIN"
+
+            security cms -D -i "$RUNNER_TEMP/app.mobileprovision" > "$RUNNER_TEMP/app-profile.plist"
+            security cms -D -i "$RUNNER_TEMP/extension.mobileprovision" > "$RUNNER_TEMP/extension-profile.plist"
+            APP_IDENTIFIER=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/app-profile.plist")
+            EXT_IDENTIFIER=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/extension-profile.plist")
+            [[ "$APP_IDENTIFIER" == *".$APP_BUNDLE_ID" ]]
+            [[ "$EXT_IDENTIFIER" == *".$EXTENSION_BUNDLE_ID" ]]
+            [[ "$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$RUNNER_TEMP/app-profile.plist")" == "$TEAM_ID" ]]
+            [[ "$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$RUNNER_TEMP/extension-profile.plist")" == "$TEAM_ID" ]]
+            for profile in "$RUNNER_TEMP/app-profile.plist" "$RUNNER_TEMP/extension-profile.plist"; do
+              /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.security.application-groups' "$profile" | grep -Fq "$APP_GROUP"
+            done
+            APP_PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/app-profile.plist")
+            EXT_PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/extension-profile.plist")
+            cp "$RUNNER_TEMP/app.mobileprovision" "$PROFILE_DIR/$APP_PROFILE_NAME.mobileprovision"
+            cp "$RUNNER_TEMP/extension.mobileprovision" "$PROFILE_DIR/$EXT_PROFILE_NAME.mobileprovision"
+            cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>destination</key><string>export</string>
+            <key>method</key><string>release-testing</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>provisioningProfiles</key><dict>
+              <key>$APP_BUNDLE_ID</key><string>$APP_PROFILE_NAME</string>
+              <key>$EXTENSION_BUNDLE_ID</key><string>$EXT_PROFILE_NAME</string>
+            </dict>
+          </dict></plist>
+          PLIST
+            {
+              echo "available=true"
+              echo "team_id=$TEAM_ID"
+              echo "app_profile_name=$APP_PROFILE_NAME"
+              echo "extension_profile_name=$EXT_PROFILE_NAME"
+            } >> "$GITHUB_OUTPUT"
+          ); then
+            echo "Signing assets are invalid or inconsistent; building an unsigned IPA instead."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Complete Ad Hoc signing assets are ready."
+          fi
+
       - name: Configure iOS project and Share Extension
         env:
           BUNDLE_ID: ${{ env.APP_BUNDLE_ID }}
           APP_GROUP: ${{ env.APP_GROUP }}
+          IOS_SIGNING_ENABLED: ${{ steps.signing.outputs.available }}
+          TEAM_ID: ${{ steps.signing.outputs.team_id }}
+          IOS_APP_PROFILE_NAME: ${{ steps.signing.outputs.app_profile_name }}
+          IOS_EXTENSION_PROFILE_NAME: ${{ steps.signing.outputs.extension_profile_name }}
         run: |
           gem install xcodeproj --no-document
           ruby -c ios/add_share_extension.rb
           ruby ios/add_share_extension.rb
 
-      - name: Build unsigned iOS app
+      - name: Build Ad Hoc IPA
+        id: signed_build
+        if: steps.signing.outputs.available == 'true'
+        continue-on-error: true
         run: |
           set -euo pipefail
-          flutter build ios --release --no-codesign \
-            --build-number "$GITHUB_RUN_NUMBER" -v 2>&1 | tee build.log
+          flutter build ipa --release --build-number "$GITHUB_RUN_NUMBER" \
+            --export-options-plist="$RUNNER_TEMP/ExportOptions.plist" -v 2>&1 | tee build.log
+          IPA_PATH="$(find build/ios/ipa -maxdepth 1 -name '*.ipa' -print -quit)"
+          test -n "$IPA_PATH"
+          mkdir -p build/ios/ipa
+          mv "$IPA_PATH" build/ios/ipa/Viseth-AdHoc.ipa
+          mkdir -p "$RUNNER_TEMP/ipa-check"
+          unzip -q build/ios/ipa/Viseth-AdHoc.ipa -d "$RUNNER_TEMP/ipa-check"
+          APP_PATH="$RUNNER_TEMP/ipa-check/Payload/Runner.app"
+          EXT_PATH="$APP_PATH/PlugIns/ShareExtension.appex"
+          test -d "$APP_PATH" && test -d "$EXT_PATH"
+          test -f "$APP_PATH/embedded.mobileprovision" && test -f "$EXT_PATH/embedded.mobileprovision"
+          codesign --verify --deep --strict "$APP_PATH"
+          codesign --verify --strict "$EXT_PATH"
 
-      - name: Package unsigned IPA for ESign
+      - name: Build unsigned IPA fallback
+        if: steps.signing.outputs.available != 'true' || steps.signed_build.outcome == 'failure'
         run: |
           set -euo pipefail
+          rm -rf build/ios/ipa "$RUNNER_TEMP/unsigned-ipa"
+          flutter build ios --release --no-codesign --build-number "$GITHUB_RUN_NUMBER" -v 2>&1 | tee build.log
           APP_PATH="build/ios/iphoneos/Runner.app"
-          test -d "$APP_PATH" || { echo "::error::Runner.app not found"; exit 1; }
+          EXT_PATH="$APP_PATH/PlugIns/ShareExtension.appex"
+          test -d "$APP_PATH"
+          test -d "$EXT_PATH"
+          mkdir -p build/ios/ipa "$RUNNER_TEMP/unsigned-ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/unsigned-ipa/Payload/Runner.app"
+          (cd "$RUNNER_TEMP/unsigned-ipa" && /usr/bin/zip -qry "$GITHUB_WORKSPACE/build/ios/ipa/Viseth-UNSIGNED.ipa" Payload)
+          test -s build/ios/ipa/Viseth-UNSIGNED.ipa
+          echo "Created unsigned IPA; it is not installable on a registered iPhone until signed."
 
-          rm -rf "$RUNNER_TEMP/ipa" build/ios/ipa
-          mkdir -p "$RUNNER_TEMP/ipa/Payload" build/ios/ipa
-          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/Runner.app"
-
-          # ESign signs everything itself: drop stale signatures and metadata.
-          find "$RUNNER_TEMP/ipa" -name ".DS_Store" -delete
-          find "$RUNNER_TEMP/ipa" -name "_CodeSignature" -type d -prune -exec rm -rf {} +
-          find "$RUNNER_TEMP/ipa" -name "embedded.mobileprovision" -delete
-
-          (cd "$RUNNER_TEMP/ipa" && /usr/bin/zip -qry "$GITHUB_WORKSPACE/build/ios/ipa/Viseth.ipa" Payload)
-          test -s build/ios/ipa/Viseth.ipa
-          unzip -l build/ios/ipa/Viseth.ipa | head -n 20
-
-      - name: Validate IPA
+      - name: Validate app and Share Extension version metadata
         run: |
           set -euo pipefail
-          CHECK="$RUNNER_TEMP/check"
-          rm -rf "$CHECK" && mkdir -p "$CHECK"
-          unzip -q build/ios/ipa/Viseth.ipa -d "$CHECK"
-          APP="$CHECK/Payload/Runner.app"
-          EXT="$APP/PlugIns/ShareExtension.appex"
-
-          [[ -d "$APP" ]] || { echo "::error::Runner.app missing"; exit 1; }
-          plutil -lint "$APP/Info.plist"
-
-          APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
-          [[ "$APP_ID" == "$APP_BUNDLE_ID" ]] || { echo "::error::Bundle ID is $APP_ID"; exit 1; }
-
-          APP_EXE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")
-          [[ -x "$APP/$APP_EXE" ]] || { echo "::error::Executable $APP_EXE missing"; exit 1; }
-
-          if [[ -d "$EXT" ]]; then
-            plutil -lint "$EXT/Info.plist"
-            EXT_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$EXT/Info.plist")
-            [[ "$EXT_ID" == "$EXTENSION_BUNDLE_ID" ]] || { echo "::error::Extension ID is $EXT_ID"; exit 1; }
-            EXT_EXE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$EXT/Info.plist")
-            [[ -x "$EXT/$EXT_EXE" ]] || { echo "::error::Extension executable missing"; exit 1; }
-            echo "Share Extension verified."
-          else
-            echo "::warning::ShareExtension.appex not found in the IPA."
+          IPA_PATH="$(find build/ios/ipa -maxdepth 1 -name '*.ipa' -print -quit)"
+          if [[ -z "$IPA_PATH" ]]; then
+            echo "::error::No IPA was generated; cannot validate bundle version metadata."
+            exit 1
           fi
-          echo "IPA validated: $APP_ID"
+
+          CHECK_DIR="$RUNNER_TEMP/ipa-version-check"
+          rm -rf "$CHECK_DIR"
+          mkdir -p "$CHECK_DIR"
+          unzip -q "$IPA_PATH" -d "$CHECK_DIR"
+          APP_PLIST="$CHECK_DIR/Payload/Runner.app/Info.plist"
+          EXTENSION_PLIST="$CHECK_DIR/Payload/Runner.app/PlugIns/ShareExtension.appex/Info.plist"
+
+          read_version() {
+            local plist_path="$1"
+            local key="$2"
+            local label="$3"
+            local value
+            if [[ ! -f "$plist_path" ]]; then
+              echo "::error::$label Info.plist is missing from the IPA: $plist_path"
+              return 1
+            fi
+            if ! value=$(/usr/libexec/PlistBuddy -c "Print :$key" "$plist_path" 2>/dev/null); then
+              echo "::error::$label is missing $key in the IPA."
+              return 1
+            fi
+            if [[ -z "$value" || "$value" == *'$('* ]]; then
+              echo "::error::$label has an empty or unresolved $key value: '$value'"
+              return 1
+            fi
+            printf '%s' "$value"
+          }
+
+          APP_BUILD_VERSION="$(read_version "$APP_PLIST" CFBundleVersion Runner)"
+          EXTENSION_BUILD_VERSION="$(read_version "$EXTENSION_PLIST" CFBundleVersion ShareExtension)"
+          APP_MARKETING_VERSION="$(read_version "$APP_PLIST" CFBundleShortVersionString Runner)"
+          EXTENSION_MARKETING_VERSION="$(read_version "$EXTENSION_PLIST" CFBundleShortVersionString ShareExtension)"
+
+          if [[ "$APP_BUILD_VERSION" != "$EXTENSION_BUILD_VERSION" ]]; then
+            echo "::error::Runner CFBundleVersion ($APP_BUILD_VERSION) does not match ShareExtension CFBundleVersion ($EXTENSION_BUILD_VERSION)."
+            exit 1
+          fi
+          if [[ "$APP_MARKETING_VERSION" != "$EXTENSION_MARKETING_VERSION" ]]; then
+            echo "::error::Runner CFBundleShortVersionString ($APP_MARKETING_VERSION) does not match ShareExtension CFBundleShortVersionString ($EXTENSION_MARKETING_VERSION)."
+            exit 1
+          fi
+          echo "Validated IPA version metadata: $APP_MARKETING_VERSION ($APP_BUILD_VERSION) in Runner and ShareExtension."
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Viseth-ESign-ipa
-          path: build/ios/ipa/Viseth.ipa
+          name: viseth-ios-ipa
+          path: build/ios/ipa/*.ipa
           if-no-files-found: error
           compression-level: 0
 
