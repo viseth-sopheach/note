@@ -40,9 +40,26 @@ jobs:
         run: flutter pub get
 
       - name: Configure iOS share extension
+        shell: bash
         run: |
+          set -euo pipefail
           gem install xcodeproj --no-document
           ruby -c ios/add_share_extension.rb
+
+          # Read the Runner bundle ID from the checked-out Xcode project so
+          # the script always configures the app and extension consistently.
+          BUNDLE_ID="$(ruby -rxcodeproj -e '
+            project = Xcodeproj::Project.open("ios/Runner.xcodeproj")
+            runner = project.targets.find { |target| target.name == "Runner" } or abort "Runner target not found"
+            identifiers = runner.build_configurations.map do |configuration|
+              configuration.build_settings.fetch("PRODUCT_BUNDLE_IDENTIFIER", "").strip
+            end.uniq
+            abort "Runner PRODUCT_BUNDLE_IDENTIFIER must be a single, literal bundle ID across configurations" unless
+              identifiers.length == 1 && identifiers.first.match?(/\A[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+\z/)
+            puts identifiers.first
+          ')"
+          export BUNDLE_ID
+          echo "Configuring Runner bundle ID: $BUNDLE_ID"
           ruby ios/add_share_extension.rb
 
       - name: Build unsigned iOS app

@@ -91,6 +91,8 @@ ext.build_configurations.each do |c|
   s['SWIFT_VERSION'] = '5.0'
   s['IPHONEOS_DEPLOYMENT_TARGET'] = deployment
   s['TARGETED_DEVICE_FAMILY'] = '1,2'
+  s['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
+  s['SKIP_INSTALL'] = 'YES'
   s['LD_RUNPATH_SEARCH_PATHS'] = '$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks'
 end
 
