@@ -78,6 +78,12 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  # google_mlkit_commons 1.0.3 ships its iOS implementation as Swift Package,
+  # not a CocoaPods podspec. Keep Flutter's SwiftPM integration enabled for all
+  # local and CI builds while Flutter uses CocoaPods for plugins that need it.
+  config:
+    enable-swift-package-manager: true
+
   assets:
     - assets/icon/
 
