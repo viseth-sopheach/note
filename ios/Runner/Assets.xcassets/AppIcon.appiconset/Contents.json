@@ -3,121 +3,121 @@
     {
       "size": "20x20",
       "idiom": "iphone",
-      "filename": "Icon-App-20x20@2x.png",
+      "filename": "Viseth-Light-40x40.png",
       "scale": "2x"
     },
     {
       "size": "20x20",
       "idiom": "iphone",
-      "filename": "Icon-App-20x20@3x.png",
+      "filename": "Viseth-Light-60x60.png",
       "scale": "3x"
     },
     {
       "size": "29x29",
       "idiom": "iphone",
-      "filename": "Icon-App-29x29@1x.png",
+      "filename": "Viseth-Light-29x29.png",
       "scale": "1x"
     },
     {
       "size": "29x29",
       "idiom": "iphone",
-      "filename": "Icon-App-29x29@2x.png",
+      "filename": "Viseth-Light-58x58.png",
       "scale": "2x"
     },
     {
       "size": "29x29",
       "idiom": "iphone",
-      "filename": "Icon-App-29x29@3x.png",
+      "filename": "Viseth-Light-87x87.png",
       "scale": "3x"
     },
     {
       "size": "40x40",
       "idiom": "iphone",
-      "filename": "Icon-App-40x40@2x.png",
+      "filename": "Viseth-Light-80x80.png",
       "scale": "2x"
     },
     {
       "size": "40x40",
       "idiom": "iphone",
-      "filename": "Icon-App-40x40@3x.png",
+      "filename": "Viseth-Light-120x120.png",
       "scale": "3x"
     },
     {
       "size": "60x60",
       "idiom": "iphone",
-      "filename": "Icon-App-60x60@2x.png",
+      "filename": "Viseth-Light-120x120.png",
       "scale": "2x"
     },
     {
       "size": "60x60",
       "idiom": "iphone",
-      "filename": "Icon-App-60x60@3x.png",
+      "filename": "Viseth-Light-180x180.png",
       "scale": "3x"
     },
     {
       "size": "20x20",
       "idiom": "ipad",
-      "filename": "Icon-App-20x20@1x.png",
+      "filename": "Viseth-Light-20x20.png",
       "scale": "1x"
     },
     {
       "size": "20x20",
       "idiom": "ipad",
-      "filename": "Icon-App-20x20@2x.png",
+      "filename": "Viseth-Light-40x40.png",
       "scale": "2x"
     },
     {
       "size": "29x29",
       "idiom": "ipad",
-      "filename": "Icon-App-29x29@1x.png",
+      "filename": "Viseth-Light-29x29.png",
       "scale": "1x"
     },
     {
       "size": "29x29",
       "idiom": "ipad",
-      "filename": "Icon-App-29x29@2x.png",
+      "filename": "Viseth-Light-58x58.png",
       "scale": "2x"
     },
     {
       "size": "40x40",
       "idiom": "ipad",
-      "filename": "Icon-App-40x40@1x.png",
+      "filename": "Viseth-Light-40x40.png",
       "scale": "1x"
     },
     {
       "size": "40x40",
       "idiom": "ipad",
-      "filename": "Icon-App-40x40@2x.png",
+      "filename": "Viseth-Light-80x80.png",
       "scale": "2x"
     },
     {
       "size": "76x76",
       "idiom": "ipad",
-      "filename": "Icon-App-76x76@1x.png",
+      "filename": "Viseth-Light-76x76.png",
       "scale": "1x"
     },
     {
       "size": "76x76",
       "idiom": "ipad",
-      "filename": "Icon-App-76x76@2x.png",
+      "filename": "Viseth-Light-152x152.png",
       "scale": "2x"
     },
     {
       "size": "83.5x83.5",
       "idiom": "ipad",
-      "filename": "Icon-App-83.5x83.5@2x.png",
+      "filename": "Viseth-Light-167x167.png",
       "scale": "2x"
     },
     {
       "size": "1024x1024",
       "idiom": "ios-marketing",
-      "filename": "Icon-App-1024x1024@1x.png",
+      "filename": "Viseth-Light-1024x1024.png",
       "scale": "1x"
     },
     {
       "size": "20x20",
       "idiom": "iphone",
-      "filename": "Icon-App-20x20@2x-dark.png",
+      "filename": "Viseth-Dark-40x40.png",
       "scale": "2x",
       "appearances": [
         {
@@ -129,7 +129,7 @@
     {
       "size": "20x20",
       "idiom": "iphone",
-      "filename": "Icon-App-20x20@3x-dark.png",
+      "filename": "Viseth-Dark-60x60.png",
       "scale": "3x",
       "appearances": [
         {
@@ -141,7 +141,7 @@
     {
       "size": "29x29",
       "idiom": "iphone",
-      "filename": "Icon-App-29x29@1x-dark.png",
+      "filename": "Viseth-Dark-29x29.png",
       "scale": "1x",
       "appearances": [
         {
@@ -153,7 +153,7 @@
     {
       "size": "29x29",
       "idiom": "iphone",
-      "filename": "Icon-App-29x29@2x-dark.png",
+      "filename": "Viseth-Dark-58x58.png",
       "scale": "2x",
       "appearances": [
         {
@@ -165,7 +165,7 @@
     {
       "size": "29x29",
       "idiom": "iphone",
-      "filename": "Icon-App-29x29@3x-dark.png",
+      "filename": "Viseth-Dark-87x87.png",
       "scale": "3x",
       "appearances": [
         {
@@ -177,7 +177,7 @@
     {
       "size": "40x40",
       "idiom": "iphone",
-      "filename": "Icon-App-40x40@2x-dark.png",
+      "filename": "Viseth-Dark-80x80.png",
       "scale": "2x",
       "appearances": [
         {
@@ -189,7 +189,7 @@
     {
       "size": "40x40",
       "idiom": "iphone",
-      "filename": "Icon-App-40x40@3x-dark.png",
+      "filename": "Viseth-Dark-120x120.png",
       "scale": "3x",
       "appearances": [
         {
@@ -201,7 +201,7 @@
     {
       "size": "60x60",
       "idiom": "iphone",
-      "filename": "Icon-App-60x60@2x-dark.png",
+      "filename": "Viseth-Dark-120x120.png",
       "scale": "2x",
       "appearances": [
         {
@@ -213,7 +213,7 @@
     {
       "size": "60x60",
       "idiom": "iphone",
-      "filename": "Icon-App-60x60@3x-dark.png",
+      "filename": "Viseth-Dark-180x180.png",
       "scale": "3x",
       "appearances": [
         {
@@ -225,7 +225,7 @@
     {
       "size": "20x20",
       "idiom": "ipad",
-      "filename": "Icon-App-20x20@1x-dark.png",
+      "filename": "Viseth-Dark-20x20.png",
       "scale": "1x",
       "appearances": [
         {
@@ -237,7 +237,7 @@
     {
       "size": "20x20",
       "idiom": "ipad",
-      "filename": "Icon-App-20x20@2x-dark.png",
+      "filename": "Viseth-Dark-40x40.png",
       "scale": "2x",
       "appearances": [
         {
@@ -249,7 +249,7 @@
     {
       "size": "29x29",
       "idiom": "ipad",
-      "filename": "Icon-App-29x29@1x-dark.png",
+      "filename": "Viseth-Dark-29x29.png",
       "scale": "1x",
       "appearances": [
         {
@@ -261,7 +261,7 @@
     {
       "size": "29x29",
       "idiom": "ipad",
-      "filename": "Icon-App-29x29@2x-dark.png",
+      "filename": "Viseth-Dark-58x58.png",
       "scale": "2x",
       "appearances": [
         {
@@ -273,7 +273,7 @@
     {
       "size": "40x40",
       "idiom": "ipad",
-      "filename": "Icon-App-40x40@1x-dark.png",
+      "filename": "Viseth-Dark-40x40.png",
       "scale": "1x",
       "appearances": [
         {
@@ -285,7 +285,7 @@
     {
       "size": "40x40",
       "idiom": "ipad",
-      "filename": "Icon-App-40x40@2x-dark.png",
+      "filename": "Viseth-Dark-80x80.png",
       "scale": "2x",
       "appearances": [
         {
@@ -297,7 +297,7 @@
     {
       "size": "76x76",
       "idiom": "ipad",
-      "filename": "Icon-App-76x76@1x-dark.png",
+      "filename": "Viseth-Dark-76x76.png",
       "scale": "1x",
       "appearances": [
         {
@@ -309,7 +309,7 @@
     {
       "size": "76x76",
       "idiom": "ipad",
-      "filename": "Icon-App-76x76@2x-dark.png",
+      "filename": "Viseth-Dark-152x152.png",
       "scale": "2x",
       "appearances": [
         {
@@ -321,7 +321,7 @@
     {
       "size": "83.5x83.5",
       "idiom": "ipad",
-      "filename": "Icon-App-83.5x83.5@2x-dark.png",
+      "filename": "Viseth-Dark-167x167.png",
       "scale": "2x",
       "appearances": [
         {
@@ -333,7 +333,7 @@
     {
       "size": "1024x1024",
       "idiom": "ios-marketing",
-      "filename": "Icon-App-1024x1024@1x-dark.png",
+      "filename": "Viseth-Dark-1024x1024.png",
       "scale": "1x",
       "appearances": [
         {
